@@ -3,16 +3,18 @@ package audio_test
 import (
 	"testing"
 
-	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/audio"
 	"github.com/stretchr/testify/assert"
+	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/audio"
 )
 
 func TestResampler_Ratio(t *testing.T) {
-	resampler, err := audio.NewResampler()
+	targetRate := 16000
+	targetChannels := 1
+	resampler, err := audio.NewResampler(targetRate, targetChannels)
 	assert.NoError(t, err)
 
 	inputSamples := audio.DefaultSampleRate * audio.PLCDurationMs / 1000
-	inputSize := inputSamples * audio.DefaultChannels * 2
+	inputSize := inputSamples * targetChannels * 2
 
 	inputData := make([]byte, inputSize)
 
@@ -20,15 +22,15 @@ func TestResampler_Ratio(t *testing.T) {
 
 	assert.NoError(t, err)
 
-	expectedSamples := audio.TargetSampleRate * audio.PLCDurationMs / 1000
-	expectedSize := expectedSamples * audio.DefaultChannels * 2
+	expectedSamples := targetRate * audio.PLCDurationMs / 1000
+	expectedSize := expectedSamples * targetChannels * 2
 
 	// 리샘플링 필터의 'Group Delay'로 인해 초반 몇 샘플이 버퍼링되어 덜 나올 수 있습니다.
 	tolerance := float64(expectedSize) * 0.1
 
 	assert.InDelta(t, expectedSize, len(outputData), tolerance,
 		"Resampling output size mismatch (within tolerance). Input: %dHz, Target: %dHz",
-		audio.DefaultSampleRate, audio.TargetSampleRate)
+		audio.DefaultSampleRate, targetRate)
 
 	assert.NotEmpty(t, outputData)
 }

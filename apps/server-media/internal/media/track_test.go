@@ -4,15 +4,23 @@ import (
 	"testing"
 	"time"
 
-	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/audio"
-	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/media"
 	"github.com/stretchr/testify/assert"
+	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/audio"
+	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/config"
+	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/media"
 )
 
 // TestRegularTrack_Pipeline verifies the full audio processing flow.
 // Opus (Input) -> Decoder -> Resampler -> Buffer -> PCM 16k (Output)
 func TestRegularTrack_Pipeline(t *testing.T) {
-	track, err := media.NewRegularTrack()
+	// Mock Config
+	cfg := &config.Config{
+		AudioSampleRate: 16000,
+		AudioChannels:   1,
+		PCMBufferSize:   50,
+	}
+
+	track, err := media.NewRegularTrack(cfg)
 	assert.NoError(t, err)
 
 	go func() {
@@ -30,10 +38,10 @@ func TestRegularTrack_Pipeline(t *testing.T) {
 
 		assert.NotEmpty(t, pcm, "Output PCM should not be empty")
 
-		expectedSamples := audio.TargetSampleRate * audio.PLCDurationMs / 1000
-		expectedSize := expectedSamples * audio.DefaultChannels * 2
+		expectedSamples := cfg.AudioSampleRate * audio.PLCDurationMs / 1000
+		expectedSize := expectedSamples * cfg.AudioChannels * 2
 
 		assert.InDelta(t, expectedSize, len(pcm), float64(expectedSize)*0.2,
-			"Output PCM size should match 16kHz spec")
+			"Output PCM size should match configured spec")
 	}
 }

@@ -39,7 +39,7 @@ func main() {
 
 	// Initialize the gRPC sender as the output destination.
 	// Pass ctx for stream management.
-	grpcSender, err := upstream.NewGRPCSender(ctx, cfg.AIServerAddr)
+	grpcSender, err := upstream.NewGRPCSender(ctx, cfg)
 	if err != nil {
 		// Log a warning and proceed if the AI server is unavailable during testing.
 		slog.Warn("Failed to connect to AI server", "error", err)
@@ -56,7 +56,7 @@ func main() {
 	}
 
 	// Initialize the media track for audio decoding and resampling.
-	track, err := media.NewRegularTrack()
+	track, err := media.NewRegularTrack(cfg)
 	if err != nil {
 		slog.Error("Failed to create track", "error", err)
 		os.Exit(1)

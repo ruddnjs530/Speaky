@@ -9,7 +9,7 @@ import (
 
 	pb "mediaserver/proto"
 
-	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/audio"
+	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/config"
 	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/media"
 )
 
@@ -21,15 +21,17 @@ type AudioSender interface {
 
 // GRPCSender implements AudioSender using the VoiceService gRPC stream.
 type GRPCSender struct {
-	conn   *grpc.ClientConn
-	stream pb.VoiceService_ConvertStreamClient
+	conn       *grpc.ClientConn
+	stream     pb.VoiceService_ConvertStreamClient
+	sampleRate int32
+	channels   int32
 }
 
 // NewGRPCSender creates a connection to the AI Server and initializes the stream.
-func NewGRPCSender(ctx context.Context, address string) (*GRPCSender, error) {
+func NewGRPCSender(ctx context.Context, cfg *config.Config) (*GRPCSender, error) {
 	// Establish a gRPC connection
 	// TODO: Update credentials for production security (e.g., use TLS/SSL).
-	conn, err := grpc.NewClient(address,
+	conn, err := grpc.NewClient(cfg.AIServerAddr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
@@ -48,8 +50,10 @@ func NewGRPCSender(ctx context.Context, address string) (*GRPCSender, error) {
 	}
 
 	return &GRPCSender{
-		conn:   conn,
-		stream: stream,
+		conn:       conn,
+		stream:     stream,
+		sampleRate: int32(cfg.AudioSampleRate),
+		channels:   int32(cfg.AudioChannels),
 	}, nil
 }
 
@@ -57,8 +61,8 @@ func NewGRPCSender(ctx context.Context, address string) (*GRPCSender, error) {
 func (s *GRPCSender) Send(data []byte) error {
 	req := &pb.AudioChunk{
 		Pcm:        data,
-		SampleRate: int32(audio.TargetSampleRate), // 16000
-		Channels:   int32(audio.DefaultChannels),  // 1
+		SampleRate: s.sampleRate,
+		Channels:   s.channels,
 	}
 
 	return s.stream.Send(req)
@@ -88,10 +92,6 @@ func StartPipelinePump(ctx context.Context, track media.Track, sender AudioSende
 			}
 
 			// Send to gRPC stream
-			// Note: The Sender interface expects crude bytes, the wrapping (protobuf)
-			// keeps happening inside sending logic if needed, but previously main.go
-			// was seemingly doing it or client.go.
-			// Let's stick to the Interface `Send(data []byte)`.
 			if err := sender.Send(pcmData); err != nil {
 				return
 			}

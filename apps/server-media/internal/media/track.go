@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/audio"
+	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/config"
 )
 
 // Track represents a single audio stream processing pipeline.
@@ -32,15 +33,15 @@ type RegularTrack struct {
 }
 
 // NewRegularTrack creates a new instance of RegularTrack.
-func NewRegularTrack() (*RegularTrack, error) {
+func NewRegularTrack(cfg *config.Config) (*RegularTrack, error) {
 	// Initialize Decoder
-	dec, err := audio.NewOpusDecoder(audio.DefaultSampleRate, audio.DefaultChannels)
+	dec, err := audio.NewOpusDecoder(audio.DefaultSampleRate, cfg.AudioChannels)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create decoder: %w", err)
 	}
 
 	// Initialize Resampler
-	res, err := audio.NewResampler()
+	res, err := audio.NewResampler(cfg.AudioSampleRate, cfg.AudioChannels)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create resampler: %w", err)
 	}
@@ -48,7 +49,7 @@ func NewRegularTrack() (*RegularTrack, error) {
 	return &RegularTrack{
 		decoder:   dec,
 		resampler: res,
-		pcmChan:   make(chan []byte, PCMBufferSize),
+		pcmChan:   make(chan []byte, cfg.PCMBufferSize),
 	}, nil
 }
 

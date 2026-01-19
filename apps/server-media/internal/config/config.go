@@ -17,6 +17,11 @@ type Config struct {
 	WebRTCMinPort uint16
 	WebRTCMaxPort uint16
 
+	// Audio Configuration
+	AudioSampleRate int // Target Sample Rate (e.g. 16000)
+	AudioChannels   int // Target Channels (e.g. 1)
+	PCMBufferSize   int // PCM Channel Buffer Size (e.g. 50)
+
 	// WebRTC ICE Servers
 	STUNServer     string
 	TURNServer     string
@@ -27,16 +32,19 @@ type Config struct {
 // Load reads configuration from environment variables with default fallback.
 func Load() *Config {
 	return &Config{
-		Env:            getEnv("GO_ENV", "local"),
-		LogLevel:       getEnv("LOG_LEVEL", "INFO"),
-		Port:           getEnv("PORT", "8080"),
-		AIServerAddr:   getEnv("AI_SERVER_ADDR", "localhost:50051"),
-		WebRTCMinPort:  getEnvAsUint16("WEBRTC_MIN_PORT", 50000),
-		WebRTCMaxPort:  getEnvAsUint16("WEBRTC_MAX_PORT", 50010),
-		STUNServer:     getEnv("STUN_SERVER", "stun:stun.l.google.com:19302"),
-		TURNServer:     getEnv("TURN_SERVER", ""),
-		TURNUsername:   getEnv("TURN_USERNAME", ""),
-		TURNCredential: getEnv("TURN_CREDENTIAL", ""),
+		Env:             getEnv("GO_ENV", "local"),
+		LogLevel:        getEnv("LOG_LEVEL", "INFO"),
+		Port:            getEnv("PORT", "8080"),
+		AIServerAddr:    getEnv("AI_SERVER_ADDR", "localhost:50051"),
+		AudioSampleRate: getEnvAsInt("AUDIO_SAMPLE_RATE", 16000),
+		AudioChannels:   getEnvAsInt("AUDIO_CHANNELS", 1),
+		PCMBufferSize:   getEnvAsInt("PCM_BUFFER_SIZE", 50),
+		WebRTCMinPort:   getEnvAsUint16("WEBRTC_MIN_PORT", 50000),
+		WebRTCMaxPort:   getEnvAsUint16("WEBRTC_MAX_PORT", 50010),
+		STUNServer:      getEnv("STUN_SERVER", "stun:stun.l.google.com:19302"),
+		TURNServer:      getEnv("TURN_SERVER", ""),
+		TURNUsername:    getEnv("TURN_USERNAME", ""),
+		TURNCredential:  getEnv("TURN_CREDENTIAL", ""),
 	}
 }
 
@@ -48,6 +56,15 @@ func (c *Config) Validate() error {
 	if c.AIServerAddr == "" {
 		return fmt.Errorf("AIServerAddr cannot be empty")
 	}
+	if c.AudioSampleRate <= 0 {
+		return fmt.Errorf("AudioSampleRate must be positive")
+	}
+	if c.AudioChannels <= 0 {
+		return fmt.Errorf("AudioChannels must be positive")
+	}
+	if c.PCMBufferSize <= 0 {
+		return fmt.Errorf("PCMBufferSize must be positive")
+	}
 	return nil
 }
 
@@ -55,6 +72,16 @@ func (c *Config) Validate() error {
 func getEnv(key, fallback string) string {
 	if value, exists := os.LookupEnv(key); exists {
 		return value
+	}
+	return fallback
+}
+
+// getEnvAsInt retrieves environment variable as int or returns default value.
+func getEnvAsInt(key string, fallback int) int {
+	if valueStr, exists := os.LookupEnv(key); exists {
+		if value, err := strconv.Atoi(valueStr); err == nil {
+			return value
+		}
 	}
 	return fallback
 }

@@ -5,12 +5,6 @@ const (
 	// DefaultSampleRate : 48kHz
 	DefaultSampleRate = 48000
 
-	// TargetSampleRate : 16kHz
-	TargetSampleRate = 16000
-
-	// DefaultChannels : Mono
-	DefaultChannels = 1
-
 	// PLCDurationMs : 패킷 손실 시 대체할 프레임 길이 (20ms)
 	PLCDurationMs = 20
 
