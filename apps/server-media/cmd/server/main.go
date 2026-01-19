@@ -1,10 +1,10 @@
 package main
 
 import (
-	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/media"
@@ -13,29 +13,33 @@ import (
 )
 
 func main() {
+	// 1. Initialize Logger (slog)
+	initLogger()
+
 	// Configuration for the target AI server address.
 	aiServerAddr := os.Getenv("AI_SERVER_ADDR")
 	if aiServerAddr == "" {
 		aiServerAddr = "localhost:50051"
 	}
 
-	log.Println("Starting Media Server...")
+	slog.Info("Starting Media Server...", "ai_server_addr", aiServerAddr)
 
 	// Initialize the gRPC sender as the output destination.
 	grpcSender, err := upstream.NewGRPCSender(aiServerAddr)
 	if err != nil {
 		// Log a warning and proceed if the AI server is unavailable during testing.
-		log.Printf("Warning: Failed to connect to AI server: %v", err)
-		log.Println("Continuing for testing, but streaming will be disabled.")
+		slog.Warn("Failed to connect to AI server", "error", err)
+		slog.Info("Continuing for testing, but streaming will be disabled.")
 	} else {
 		defer grpcSender.Close()
-		log.Println("Connected to AI Server")
+		slog.Info("Connected to AI Server")
 	}
 
 	// Initialize the media track for audio decoding and resampling.
 	track, err := media.NewRegularTrack()
 	if err != nil {
-		log.Fatalf("Failed to create track: %v", err)
+		slog.Error("Failed to create track", "error", err)
+		os.Exit(1)
 	}
 
 	// Initialize the WebRTC receiver for incoming audio streams.
@@ -47,7 +51,7 @@ func main() {
 	receiver.OnAudioPacket(func(packet []byte) {
 		// Log errors but continue to maintain real-time performance.
 		if err := track.WriteOpus(packet); err != nil {
-			log.Printf("Track write error: %v", err)
+			slog.Error("Track write error", "error", err)
 		}
 	})
 
@@ -57,16 +61,52 @@ func main() {
 		go upstream.StartPipelinePump(track, grpcSender)
 	}
 
-	log.Println("Audio Pipeline Assembled: [WebRTC Input] -> [Track Process] -> [gRPC Output]")
+	slog.Info("Audio Pipeline Assembled", "pipeline", "[WebRTC Input] -> [Track Process] -> [gRPC Output]")
 
 	// Wait for termination signals.
 	// A signaling server should be implemented here to handle SDP negotiation.
-	log.Println("Server is ready. Waiting for signals...")
+	slog.Info("Server is ready. Waiting for signals...")
 
 	// Block until an interrupt or termination signal is received.
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-	<-sigs
+	sig := <-sigs
 
-	fmt.Println("\nShutting down server...")
+	slog.Info("Shutting down server...", "signal", sig)
+}
+
+func initLogger() {
+	// Parse LOG_LEVEL
+	logLevelStr := os.Getenv("LOG_LEVEL")
+	var level slog.Level
+	switch strings.ToUpper(logLevelStr) {
+	case "DEBUG":
+		level = slog.LevelDebug
+	case "WARN":
+		level = slog.LevelWarn
+	case "ERROR":
+		level = slog.LevelError
+	default:
+		level = slog.LevelInfo // Default
+	}
+
+	// Helper to create options
+	opts := &slog.HandlerOptions{
+		Level: level,
+	}
+
+	// Determine Handler based on GO_ENV
+	goEnv := os.Getenv("GO_ENV")
+	var handler slog.Handler
+
+	if strings.ToLower(goEnv) == "prod" {
+		handler = slog.NewJSONHandler(os.Stdout, opts)
+	} else {
+		// Default to local/text for readability
+		handler = slog.NewTextHandler(os.Stdout, opts)
+	}
+
+	// Set Default Logger
+	logger := slog.New(handler)
+	slog.SetDefault(logger)
 }

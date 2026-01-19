@@ -3,6 +3,7 @@ package webrtc
 import (
 	"fmt"
 	"io"
+	"log/slog"
 
 	"github.com/pion/webrtc/v4"
 )
@@ -88,7 +89,7 @@ func (r *PionReceiver) readTrackLoop(track *webrtc.TrackRemote) {
 			if err == io.EOF {
 				return // Connection closed
 			}
-			fmt.Printf("Error reading track: %v\n", err)
+			slog.Error("Error reading track", "error", err)
 			return
 		}
 
