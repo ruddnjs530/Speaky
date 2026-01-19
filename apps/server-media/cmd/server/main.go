@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/pion/webrtc/v4"
 	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/config"
@@ -25,6 +27,10 @@ func main() {
 	// 2. Initialize Logger (slog)
 	initLogger(cfg)
 
+	// 3. Create Root Context for Graceful Shutdown
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	slog.Info("Starting Media Server...",
 		"env", cfg.Env,
 		"ai_server", cfg.AIServerAddr,
@@ -32,13 +38,20 @@ func main() {
 	)
 
 	// Initialize the gRPC sender as the output destination.
-	grpcSender, err := upstream.NewGRPCSender(cfg.AIServerAddr)
+	// Pass ctx for stream management.
+	grpcSender, err := upstream.NewGRPCSender(ctx, cfg.AIServerAddr)
 	if err != nil {
 		// Log a warning and proceed if the AI server is unavailable during testing.
 		slog.Warn("Failed to connect to AI server", "error", err)
 		slog.Info("Continuing for testing, but streaming will be disabled.")
 	} else {
-		defer grpcSender.Close()
+		// Ensure gRPC connection is closed on shutdown
+		defer func() {
+			slog.Info("Closing gRPC sender...")
+			if err := grpcSender.Close(); err != nil {
+				slog.Error("Failed to close gRPC sender", "error", err)
+			}
+		}()
 		slog.Info("Connected to AI Server")
 	}
 
@@ -74,21 +87,31 @@ func main() {
 	// Bind the processing track to the gRPC output.
 	// The pump runs in a separate goroutine to push data to the AI server.
 	if grpcSender != nil {
-		go upstream.StartPipelinePump(track, grpcSender)
+		go upstream.StartPipelinePump(ctx, track, grpcSender)
 	}
 
 	slog.Info("Audio Pipeline Assembled", "pipeline", "[WebRTC Input] -> [Track Process] -> [gRPC Output]")
-
-	// Wait for termination signals.
-	// A signaling server should be implemented here to handle SDP negotiation.
 	slog.Info("Server is ready. Waiting for signals...")
 
-	// Block until an interrupt or termination signal is received.
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-	sig := <-sigs
+	// Block until context is cancelled (signal received)
+	<-ctx.Done()
 
-	slog.Info("Shutting down server...", "signal", sig)
+	slog.Info("Shutdown signal received. Cleaning up...")
+
+	// Shutdown Grace Period
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Close Receiver (WebRTC)
+	if err := receiver.Close(); err != nil {
+		slog.Error("Failed to close receiver", "error", err)
+	} else {
+		slog.Info("WebRTC Receiver closed")
+	}
+
+	// Wait for shutdown timeout or finish
+	<-shutdownCtx.Done()
+	slog.Info("Server exited.")
 }
 
 func initLogger(cfg *config.Config) {

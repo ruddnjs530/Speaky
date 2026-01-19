@@ -10,6 +10,7 @@ import (
 	pb "mediaserver/proto"
 
 	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/audio"
+	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/media"
 )
 
 // AudioSender defines the capability to send audio data to an external service.
@@ -25,7 +26,7 @@ type GRPCSender struct {
 }
 
 // NewGRPCSender creates a connection to the AI Server and initializes the stream.
-func NewGRPCSender(address string) (*GRPCSender, error) {
+func NewGRPCSender(ctx context.Context, address string) (*GRPCSender, error) {
 	// Establish a gRPC connection
 	// TODO: Update credentials for production security (e.g., use TLS/SSL).
 	conn, err := grpc.NewClient(address,
@@ -40,7 +41,7 @@ func NewGRPCSender(address string) (*GRPCSender, error) {
 
 	// Open a bidirectional stream for audio conversion.
 	// TODO: Consider using a context with timeout or cancellation for robust stream management.
-	stream, err := client.ConvertStream(context.Background())
+	stream, err := client.ConvertStream(ctx)
 	if err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("failed to create stream: %w", err)
@@ -71,4 +72,29 @@ func (s *GRPCSender) Close() error {
 	}
 	// TCP 연결 종료
 	return s.conn.Close()
+}
+
+// StartPipelinePump reads PCM data from the track and sends it to the gRPC stream.
+func StartPipelinePump(ctx context.Context, track media.Track, sender AudioSender) {
+	pcmChan := track.GetPCMChannel()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return // Stop working when context is cancelled
+		case pcmData, ok := <-pcmChan:
+			if !ok {
+				return // Channel closed
+			}
+
+			// Send to gRPC stream
+			// Note: The Sender interface expects crude bytes, the wrapping (protobuf)
+			// keeps happening inside sending logic if needed, but previously main.go
+			// was seemingly doing it or client.go.
+			// Let's stick to the Interface `Send(data []byte)`.
+			if err := sender.Send(pcmData); err != nil {
+				return
+			}
+		}
+	}
 }

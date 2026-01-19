@@ -15,6 +15,10 @@ type Track interface {
 	// ReadPCM returns the next chunk of processed audio.
 	// Blocks until data is available or the track is closed.
 	ReadPCM() ([]byte, error)
+
+	// GetPCMChannel returns the read-only channel for PCM data.
+	// Useful for select/case with context cancellation.
+	GetPCMChannel() <-chan []byte
 }
 
 // RegularTrack implements the Track interface.
@@ -74,4 +78,9 @@ func (t *RegularTrack) ReadPCM() ([]byte, error) {
 	// Blocks until data is available in the channel.
 	data := <-t.pcmChan
 	return data, nil
+}
+
+// GetPCMChannel returns the read-only channel for receiving PCM data.
+func (t *RegularTrack) GetPCMChannel() <-chan []byte {
+	return t.pcmChan
 }
