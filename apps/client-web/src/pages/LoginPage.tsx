@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import LoginForm from "../features/auth/ui/LoginForm";
+import LoginForm from "../features/auth/api/LoginForm";
 
 export default function LoginPage() {
   const navigate = useNavigate();
