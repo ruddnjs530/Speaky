@@ -1,0 +1,54 @@
+.levelRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid #eee;
+    border-radius: 10px;
+}
+
+.levelRow.is-disabled {
+    opacity: 0.65;
+}
+
+.levelRow__title {
+    font-weight: 700;
+}
+
+.levelRow__barOuter {
+    margin-top: 10px;
+    height: 10px;
+    border-radius: 999px;
+    background: #eee;
+    overflow: hidden;
+}
+
+.levelRow__barInner {
+    height: 100%;
+    background: #333;
+}
+
+.levelRow__desc {
+    margin-top: 6px;
+    color: #666;
+    font-size: 13px;
+}
+
+.levelRow__actions {
+    display: flex;
+    gap: 8px;
+}
+
+.levelRow__btn {
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid #ddd;
+    background: #fff;
+    cursor: pointer;
+}
+
+.levelRow__btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}

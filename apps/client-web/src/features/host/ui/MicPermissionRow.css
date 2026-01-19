@@ -1,0 +1,32 @@
+.micRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid #eee;
+    border-radius: 10px;
+}
+
+.micRow__title {
+    font-weight: 700;
+}
+
+.micRow__desc {
+    margin-top: 4px;
+    color: #666;
+    font-size: 13px;
+}
+
+.micRow__btn {
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid #ddd;
+    background: #fff;
+    cursor: pointer;
+}
+
+.micRow__btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}

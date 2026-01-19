@@ -1,0 +1,43 @@
+# Root .dockerignore
+.git
+.gitignore
+.vscode
+.idea
+.DS_Store
+
+# Node
+node_modules
+npm-debug.log
+yarn-error.log
+
+# Go
+bin/
+tmp/
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Java/Gradle
+.gradle
+build/
+
+# Docker
+docker-compose.yml
+Dockerfile
+.dockerignore
+
+# Misc
+.env
+*.md
+docs/
+scripts/
+lefthook.yml

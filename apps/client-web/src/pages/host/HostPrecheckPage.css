@@ -1,0 +1,36 @@
+/* HostPrecheckPage.css */
+
+.precheck-page {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 24px;
+}
+
+.precheck-page__title {
+    margin: 0 0 6px;
+}
+
+.precheck-page__subtitle {
+    margin: 0;
+    color: #666;
+}
+
+.precheck-grid {
+    margin-top: 20px;
+    display: grid;
+    grid-template-columns: 420px minmax(0, 1fr);
+    gap: 24px;
+    align-items: start;
+}
+
+.precheck-col {
+    display: grid;
+    gap: 16px;
+}
+
+/* 반응형: 좁아지면 1열로 */
+@media (max-width: 900px) {
+    .precheck-grid {
+        grid-template-columns: 1fr;
+    }
+}

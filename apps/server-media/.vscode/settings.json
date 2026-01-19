@@ -1,0 +1,48 @@
+{
+    "go.inferGopath": false,
+    "go.useLanguageServer": true,
+    "go.lintOnSave": "off",
+
+    "gopls": {
+        "ui.diagnostic.staticcheck": true,
+        "formatting.gofumpt": true,
+        "ui.semanticTokens": true,
+
+        "analyses": {
+            "shadow": true,
+            "unusedparams": true,
+            "unusedwrite": true
+        },
+
+        "directoryFilters": [
+            "-../../packages",
+            "-../../scripts",
+            "-../../apps/server-ai",
+            "-../../apps/server-sc"
+        ]
+    },
+
+    "files.trimTrailingWhitespace": true,
+    "files.insertFinalNewline": true,
+
+    "files.exclude": {
+        "**/.git": true,
+        "**/.DS_Store": true,
+        "**/vendor": true
+    },
+
+    "terminal.integrated.defaultProfile.linux": "zsh",
+    "terminal.integrated.defaultProfile.osx": "zsh",
+
+    "[go]": {
+        "editor.defaultFormatter": "golang.go",
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "source.organizeImports": "explicit"
+        },
+
+        "editor.tabSize": 4,
+        "editor.insertSpaces": false,
+        "editor.detectIndentation": false
+    }
+}

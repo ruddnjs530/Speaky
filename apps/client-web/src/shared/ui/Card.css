@@ -1,0 +1,37 @@
+.card {
+    border: 1px solid #ddd;
+    border-radius: 12px;
+    padding: 16px;
+    background: #fff;
+}
+
+.card__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.card__headerText {
+    min-width: 0;
+}
+
+.card__title {
+    margin: 0;
+    font-size: 16px;
+}
+
+.card__subtitle {
+    margin: 6px 0 0;
+    color: #666;
+    font-size: 13px;
+    line-height: 1.35;
+}
+
+.card__right {
+    flex: 0 0 auto;
+}
+
+.card__body {
+    margin-top: 12px;
+}

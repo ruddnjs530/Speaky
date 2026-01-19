@@ -1,0 +1,53 @@
+# Global / OS / IDE
+.DS_Store
+.vscode/
+!apps/server-media/.vscode/
+.idea/
+*.swp
+*.log
+
+# Environment Variables
+.env
+.env.local
+.env.*
+!.env.example
+
+# Node.js / Web (Global & apps/client-web)
+node_modules/
+dist/
+.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Python (apps/server-ai, packages/proto)
+__pycache__/
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+*.pyc
+
+# Go (apps/server-media)
+# Binaries
+apps/server-media/bin/
+# Vendor
+apps/server-media/vendor/
+# Test binaries
+*.test
+*.exe
+
+# Java / Gradle (apps/server-sc)
+.gradle/
+build/
+out/
+*.class
+*.jar
+*.war
+.settings/
+.classpath
+.project
+
+# Proto generated files
+packages/proto/generated/

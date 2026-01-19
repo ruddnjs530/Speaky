@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package voice.v1;
+
+option go_package = "mediaserver/proto;protopb";
+
+service VoiceService {
+  rpc GetStatus (StatusRequest) returns (StatusResponse);
+
+  rpc ConvertStream (stream AudioChunk) returns (stream AudioChunk);
+}
+
+message StatusRequest {}
+
+message StatusResponse {
+  string status = 1;
+}
+
+message AudioChunk {
+  bytes pcm = 1;
+  int32 sample_rate = 2;
+  int32 channels = 3;
+}

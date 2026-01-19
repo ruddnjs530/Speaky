@@ -1,0 +1,24 @@
+pre-commit:
+  parallel: true
+  commands:
+    # Go specific checks
+    go-format:
+      glob: "*.go"
+      run: go tool gofumpt -w {staged_files}
+      stage_fixed: true
+    go-lint:
+      glob: "*.go"
+      run: go tool revive -config apps/server-media/revive.toml {staged_files}
+    go-vet:
+      glob: "*.go"
+      run: cd apps/server-media && go vet ./...
+
+    # Python specific checks (Placeholder for future)
+    # python-lint:
+    #   glob: "*.py"
+    #   run: ...
+
+    # JS/TS specific checks (Placeholder for future)
+    # js-lint:
+    #   glob: "*.{js,ts,jsx,tsx}"
+    #   run: ...

@@ -1,0 +1,65 @@
+.voicePanel {
+    min-height: 420px; /* 우측 패널이 크게 보이도록 */
+}
+
+.voicePanel__grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 220px;
+    gap: 12px;
+    align-items: start;
+}
+
+.voicePanel__label {
+    font-weight: 700;
+    margin-bottom: 8px;
+}
+
+.voicePanel__selectedBox {
+    border: 1px solid #eee;
+    border-radius: 10px;
+    padding: 14px;
+    background: #fafafa;
+    font-weight: 700;
+}
+
+.voicePanel__hint {
+    margin: 10px 0 0;
+    color: #666;
+    font-size: 13px;
+    line-height: 1.35;
+}
+
+.voicePanel__list {
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    overflow: hidden;
+    display: grid;
+}
+
+.voicePanel__item {
+    padding: 12px 12px;
+    text-align: left;
+    border: none;
+    border-bottom: 1px solid #eee;
+    background: #fff;
+    cursor: pointer;
+}
+
+.voicePanel__item:last-child {
+    border-bottom: none;
+}
+
+.voicePanel__item.is-active {
+    background: #f2f2f2;
+    font-weight: 700;
+}
+
+@media (max-width: 900px) {
+    .voicePanel__grid {
+        grid-template-columns: 1fr;
+    }
+
+    .voicePanel__list {
+        width: 100%;
+    }
+}

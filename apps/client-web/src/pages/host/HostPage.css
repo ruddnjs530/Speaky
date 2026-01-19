@@ -1,0 +1,38 @@
+.hostPage {
+  min-height: calc(100vh - 48px);
+  display: flex;
+  justify-content: center;
+  padding: 24px;
+}
+
+.hostPage__content {
+  width: 100%;
+  max-width: 760px;
+  display: grid;
+  gap: 16px;
+}
+
+.hostPage__title {
+  margin: 0;
+  text-align: center;
+}
+
+.hostPage__actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.hostPage__status {
+  margin-top: 10px;
+  color: #666;
+  text-align: center;
+}
+
+.hostPage__error {
+  margin-top: 8px;
+  color: crimson;
+  text-align: center;
+}

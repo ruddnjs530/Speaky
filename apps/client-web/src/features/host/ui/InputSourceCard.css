@@ -1,0 +1,24 @@
+.inputSource__buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.inputSource__btn {
+    padding: 10px 12px;
+    border-radius: 10px;
+    border: 1px solid #ddd;
+    background: #fff;
+    cursor: pointer;
+    font-weight: 500;
+}
+
+.inputSource__btn.is-active {
+    background: #f2f2f2;
+    font-weight: 700;
+}
+
+.inputSource__selected {
+    margin: 10px 0 0;
+    color: #666;
+    font-size: 13px;
+}

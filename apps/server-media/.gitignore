@@ -1,0 +1,30 @@
+# Binaries (Linux/Mac)
+# Note: apps/server-media/bin/ is ignored by root .gitignore
+
+# Test binary
+*.test
+
+# Code coverage profiles
+*.out
+coverage.*
+*.coverprofile
+profile.cov
+
+# OS Specific
+.DS_Store
+Thumbs.db
+
+# Dependency directories
+vendor/
+
+# Go workspace
+go.work
+go.work.sum
+
+# env file
+.env
+.env.local
+.env.*.local
+
+# Air Temp directory
+tmp/

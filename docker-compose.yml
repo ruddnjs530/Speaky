@@ -1,0 +1,57 @@
+services:
+  # 1. React Client
+  client:
+    build:
+      context: .
+      dockerfile: apps/client-web/Dockerfile
+      target: dev
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./apps/client-web:/app
+      - /app/node_modules
+    stdin_open: true # React Hot Reload
+    tty: true
+    environment:
+      - VITE_API_URL=http://localhost:8080 # Browser accesses API directly
+    depends_on:
+      - server-media
+
+  # 2. Go Media Server
+  server-media:
+    build:
+      context: .
+      dockerfile: apps/server-media/Dockerfile
+      target: dev
+    ports:
+      - "8080:8080" # REST/gRPC
+      - "50000-50010:50000-50010/udp" # WebRTC
+    volumes:
+      - ./apps/server-media:/app
+      - ./packages/proto:/packages/proto # Shared Proto
+      - /app/tmp # Go tmp build artifacts
+    environment:
+      - GRPC_PORT=8080
+      - AI_SERVER_ADDR=server-ai:50051
+    depends_on:
+      - server-ai
+
+  # 3. Python AI Server
+  server-ai:
+    build:
+      context: .
+      dockerfile: apps/server-ai/Dockerfile
+      target: dev
+    ports:
+      - "50051:50051"
+    volumes:
+      - ./apps/server-ai:/app
+      - ./packages/proto:/packages/proto
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONPATH=/app:/packages/proto/generated/python
+
+  # 4. Spring Signaling Server (Pending)
+  server-sc:
+    image: eclipse-temurin:17-jdk-alpine
+    command: echo "Spring setup pending..."
