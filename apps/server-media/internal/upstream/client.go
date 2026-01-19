@@ -10,7 +10,7 @@ import (
 	pb "mediaserver/proto"
 
 	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/config"
-	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/media"
+	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/pipeline"
 )
 
 // AudioSender defines the capability to send audio data to an external service.
@@ -79,7 +79,7 @@ func (s *GRPCSender) Close() error {
 }
 
 // StartPipelinePump reads PCM data from the track and sends it to the gRPC stream.
-func StartPipelinePump(ctx context.Context, track media.Track, sender AudioSender) {
+func StartPipelinePump(ctx context.Context, track pipeline.Transcoder, sender AudioSender) {
 	pcmChan := track.GetPCMChannel()
 
 	for {

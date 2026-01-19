@@ -12,7 +12,7 @@ import (
 
 	"github.com/pion/webrtc/v4"
 	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/config"
-	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/media"
+	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/pipeline"
 	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/upstream"
 	mediaWebrtc "lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/webrtc"
 )
@@ -56,7 +56,7 @@ func main() {
 	}
 
 	// Initialize the media track for audio decoding and resampling.
-	track, err := media.NewRegularTrack(cfg)
+	track, err := pipeline.NewOpusToPCMTranscoder(cfg)
 	if err != nil {
 		slog.Error("Failed to create track", "error", err)
 		os.Exit(1)

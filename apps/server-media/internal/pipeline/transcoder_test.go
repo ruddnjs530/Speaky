@@ -1,4 +1,4 @@
-package media_test
+package pipeline_test
 
 import (
 	"testing"
@@ -7,12 +7,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/audio"
 	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/config"
-	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/media"
+	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/pipeline"
 )
 
-// TestRegularTrack_Pipeline verifies the full audio processing flow.
+// TestOpusToPCMTranscoder_Pipeline verifies the full audio processing flow.
 // Opus (Input) -> Decoder -> Resampler -> Buffer -> PCM 16k (Output)
-func TestRegularTrack_Pipeline(t *testing.T) {
+func TestOpusToPCMTranscoder_Pipeline(t *testing.T) {
 	// Mock Config
 	cfg := &config.Config{
 		AudioSampleRate: 16000,
@@ -20,7 +20,7 @@ func TestRegularTrack_Pipeline(t *testing.T) {
 		PCMBufferSize:   50,
 	}
 
-	track, err := media.NewRegularTrack(cfg)
+	track, err := pipeline.NewOpusToPCMTranscoder(cfg)
 	assert.NoError(t, err)
 
 	go func() {
