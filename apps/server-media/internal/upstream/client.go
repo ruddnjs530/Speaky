@@ -3,6 +3,7 @@ package upstream
 import (
 	"context"
 	"fmt"
+	"io"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -80,21 +81,19 @@ func (s *GRPCSender) Close() error {
 
 // StartPipelinePump reads PCM data from the track and sends it to the gRPC stream.
 func StartPipelinePump(ctx context.Context, track pipeline.Transcoder, sender AudioSender) {
-	pcmChan := track.GetPCMChannel()
-
 	for {
-		select {
-		case <-ctx.Done():
-			return // Stop working when context is cancelled
-		case pcmData, ok := <-pcmChan:
-			if !ok {
-				return // Channel closed
+		pcmData, err := track.ReadPCM(ctx)
+		if err != nil {
+			if err == io.EOF || err == context.Canceled {
+				return // Channel closed or context cancelled
 			}
+			// Log error via external logger if available, for now just return/stop
+			return
+		}
 
-			// Send to gRPC stream
-			if err := sender.Send(pcmData); err != nil {
-				return
-			}
+		// Send to gRPC stream
+		if err := sender.Send(pcmData); err != nil {
+			return
 		}
 	}
 }

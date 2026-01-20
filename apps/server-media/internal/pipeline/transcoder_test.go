@@ -1,6 +1,7 @@
 package pipeline_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -33,7 +34,7 @@ func TestOpusToPCMTranscoder_Pipeline(t *testing.T) {
 	}()
 
 	for range 50 {
-		pcm, err := track.ReadPCM()
+		pcm, err := track.ReadPCM(context.Background())
 		assert.NoError(t, err)
 
 		assert.NotEmpty(t, pcm, "Output PCM should not be empty")

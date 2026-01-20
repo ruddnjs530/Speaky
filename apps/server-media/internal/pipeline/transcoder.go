@@ -1,7 +1,9 @@
 package pipeline
 
 import (
+	"context"
 	"fmt"
+	"io"
 
 	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/audio"
 	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/config"
@@ -15,11 +17,8 @@ type Transcoder interface {
 
 	// ReadPCM returns the next chunk of processed audio.
 	// Blocks until data is available or the track is closed.
-	ReadPCM() ([]byte, error)
-
-	// GetPCMChannel returns the read-only channel for PCM data.
-	// Useful for select/case with context cancellation.
-	GetPCMChannel() <-chan []byte
+	// Returns io.EOF if the channel is closed.
+	ReadPCM(ctx context.Context) ([]byte, error)
 }
 
 // OpusToPCMTranscoder implements the Transcoder interface.
@@ -75,13 +74,16 @@ func (t *OpusToPCMTranscoder) WriteOpus(packet []byte) error {
 }
 
 // ReadPCM retrieves the next processed audio chunk from the buffer.
-func (t *OpusToPCMTranscoder) ReadPCM() ([]byte, error) {
-	// Blocks until data is available in the channel.
-	data := <-t.pcmChan
-	return data, nil
+func (t *OpusToPCMTranscoder) ReadPCM(ctx context.Context) ([]byte, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case data, ok := <-t.pcmChan:
+		if !ok {
+			return nil, io.EOF
+		}
+		return data, nil
+	}
 }
 
-// GetPCMChannel returns the read-only channel for receiving PCM data.
-func (t *OpusToPCMTranscoder) GetPCMChannel() <-chan []byte {
-	return t.pcmChan
-}
+
