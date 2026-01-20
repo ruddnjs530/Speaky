@@ -2,15 +2,15 @@ package control
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	pb "mediaserver/proto"
+
 	"github.com/pion/webrtc/v4"
 	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/media"
-	pb "mediaserver/proto"
 )
 
 // Handler implements the ControlServiceServer interface.
@@ -88,9 +88,9 @@ func (h *Handler) SubmitIceCandidate(ctx context.Context, req *pb.SubmitIceCandi
 	// But in proto3 scalar fields default to 0. We assume the client provides correct data.
 	// We cast int32 to uint16 safely.
 	var sdpMLineIndex *uint16
-	if req.SdpMLineIndex >= 0 { 
-		 val := uint16(req.SdpMLineIndex)
-		 sdpMLineIndex = &val
+	if req.SdpMLineIndex >= 0 {
+		val := uint16(req.SdpMLineIndex)
+		sdpMLineIndex = &val
 	}
 
 	candidateInit := webrtc.ICECandidateInit{

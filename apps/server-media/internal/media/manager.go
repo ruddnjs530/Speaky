@@ -25,7 +25,7 @@ func NewRoomManager(cfg *config.Config) (*RoomManager, error) {
 	if err := settingEngine.SetEphemeralUDPPortRange(cfg.WebRTCMinPort, cfg.WebRTCMaxPort); err != nil {
 		return nil, fmt.Errorf("failed to set UDP port range: %w", err)
 	}
-	
+
 	// Prepare the API object
 	// Note: We might need Interceptors here in the future.
 	api := webrtc.NewAPI(webrtc.WithSettingEngine(settingEngine))
@@ -58,7 +58,7 @@ func (m *RoomManager) GetRoom(roomID string) (*Room, error) {
 
 	room, exists := m.rooms[roomID]
 	if !exists {
-		return nil, fmt.Errorf("room not found: %s", roomID)
+		return nil, fmt.Errorf("%w: %s", ErrRoomNotFound, roomID)
 	}
 	return room, nil
 }
@@ -70,7 +70,7 @@ func (m *RoomManager) DeleteRoom(roomID string) error {
 
 	room, exists := m.rooms[roomID]
 	if !exists {
-		return fmt.Errorf("room not found: %s", roomID)
+		return fmt.Errorf("%w: %s", ErrRoomNotFound, roomID)
 	}
 
 	// Clean up room resources (cancels context, closes participants)
@@ -89,4 +89,11 @@ func (m *RoomManager) CloseAll() {
 		room.Close()
 		delete(m.rooms, id)
 	}
+}
+
+// RoomCount returns the number of active rooms.
+func (m *RoomManager) RoomCount() int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return len(m.rooms)
 }

@@ -30,6 +30,12 @@ type Room struct {
 	cancelFunc context.CancelFunc
 }
 
+// Context returns the room's context.
+// Exposed primarily for testing resource cleanup.
+func (r *Room) Context() context.Context {
+	return r.ctx
+}
+
 // NewRoom creates a new Room with an isolated context.
 func NewRoom(id string, cfg *config.Config, api *webrtc.API) *Room {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -126,9 +132,9 @@ func (r *Room) Join(userID string, sdpOffer string) (string, error) {
 	//     }
 	// }()
 
-	slog.Info("Participant Joined", 
-		"room_id", r.ID, 
-		"user_id", userID, 
+	slog.Info("Participant Joined",
+		"room_id", r.ID,
+		"user_id", userID,
 		"components", "Receiver+Transcoder+Sender",
 	)
 

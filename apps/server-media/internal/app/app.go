@@ -10,10 +10,11 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
+	pb "mediaserver/proto"
+
 	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/config"
 	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/control"
 	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/media"
-	pb "mediaserver/proto"
 )
 
 // App manages the lifecycle of the media server application.
@@ -44,7 +45,7 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	// 3. Register Control Service
 	controlHandler := control.NewHandler(manager)
 	pb.RegisterControlServiceServer(grpcServer, controlHandler)
-	
+
 	// Enable reflection for grpcurl debugging
 	reflection.Register(grpcServer)
 	slog.Info("ControlService registered")
@@ -55,9 +56,9 @@ func New(ctx context.Context, cfg *config.Config) (*App, error) {
 // Run starts the application and blocks until the context is cancelled.
 func (a *App) Run(ctx context.Context) error {
 	// 1. Listen on gRPC Port
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", a.cfg.Port))
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", a.cfg.Port))
 	if err != nil {
-		return fmt.Errorf("failed to listen on port %d: %w", a.cfg.Port, err)
+		return fmt.Errorf("failed to listen on port %s: %w", a.cfg.Port, err)
 	}
 
 	// 2. Start gRPC Server in a goroutine
