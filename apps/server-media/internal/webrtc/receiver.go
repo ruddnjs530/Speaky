@@ -13,6 +13,7 @@ import (
 type Receiver interface {
 	Connect(offerSDP string) (answerSDP string, err error)
 	OnAudioPacket(callback func(packet []byte))
+	AddICECandidate(candidate webrtc.ICECandidateInit) error
 	Close() error
 }
 
@@ -130,6 +131,15 @@ func (r *PionReceiver) readTrackLoop(track *webrtc.TrackRemote) {
 // OnAudioPacket registers the callback function for incoming audio packets.
 func (r *PionReceiver) OnAudioPacket(callback func(packet []byte)) {
 	r.onPacketHandler = callback
+}
+
+// AddICECandidate adds a new ICE candidate to the peer connection.
+// This supports Trickle ICE where candidates are exchanged incrementally.
+func (r *PionReceiver) AddICECandidate(candidate webrtc.ICECandidateInit) error {
+	if r.pc == nil {
+		return fmt.Errorf("peer connection not initialized")
+	}
+	return r.pc.AddICECandidate(candidate)
 }
 
 // Close terminates the peer connection.

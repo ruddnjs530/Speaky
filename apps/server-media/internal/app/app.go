@@ -3,80 +3,83 @@ package app
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
+	"net"
 	"time"
 
-	"github.com/pion/webrtc/v4"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
+
 	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/config"
-	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/pipeline"
-	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/upstream"
-	mediaWebrtc "lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/webrtc"
+	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/control"
+	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/media"
+	pb "mediaserver/proto"
 )
 
 // App manages the lifecycle of the media server application.
 type App struct {
-	cfg        *config.Config
-	grpcSender *upstream.GRPCSender
-	transcoder pipeline.Transcoder
-	receiver   mediaWebrtc.Receiver
+	cfg         *config.Config
+	roomManager *media.RoomManager
+	grpcServer  *grpc.Server
 }
 
 // New creates a new App instance and initializes dependencies.
 func New(ctx context.Context, cfg *config.Config) (*App, error) {
 	app := &App{cfg: cfg}
 
-	// 1. Initialize gRPC Sender
-	// Pass ctx for stream management (though ideally context is per-request/stream, not app-global for connection)
-	sender, err := upstream.NewGRPCSender(ctx, cfg)
+	// 1. Initialize RoomManager (Singleton)
+	// This will also initialize the shared WebRTC API.
+	manager, err := media.NewRoomManager(cfg)
 	if err != nil {
-		slog.Warn("Failed to connect to AI server", "error", err)
-		slog.Info("Continuing without upstream connection (streaming disabled)")
-	} else {
-		app.grpcSender = sender
-		slog.Info("Connected to AI Server")
+		return nil, fmt.Errorf("failed to create room manager: %w", err)
 	}
+	app.roomManager = manager
+	slog.Info("RoomManager initialized")
 
-	// 2. Initialize Media Pipeline (Transcoder)
-	track, err := pipeline.NewOpusToPCMTranscoder(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create transcoder: %w", err)
-	}
-	app.transcoder = track
+	// 2. Initialize gRPC Server
+	// TODO: Add credentials for production.
+	grpcServer := grpc.NewServer()
+	app.grpcServer = grpcServer
 
-	// 3. Initialize WebRTC Receiver
-	settingEngine := webrtc.SettingEngine{}
-	if err := settingEngine.SetEphemeralUDPPortRange(cfg.WebRTCMinPort, cfg.WebRTCMaxPort); err != nil {
-		return nil, fmt.Errorf("failed to set UDP port range: %w", err)
-	}
-	api := webrtc.NewAPI(webrtc.WithSettingEngine(settingEngine))
-	app.receiver = mediaWebrtc.NewReceiver(api, cfg)
+	// 3. Register Control Service
+	controlHandler := control.NewHandler(manager)
+	pb.RegisterControlServiceServer(grpcServer, controlHandler)
+	
+	// Enable reflection for grpcurl debugging
+	reflection.Register(grpcServer)
+	slog.Info("ControlService registered")
 
 	return app, nil
 }
 
 // Run starts the application and blocks until the context is cancelled.
 func (a *App) Run(ctx context.Context) error {
-	// 1. Wire Components
-	// Bind WebRTC input to Transcoder
-	a.receiver.OnAudioPacket(func(packet []byte) {
-		if err := a.transcoder.WriteOpus(packet); err != nil {
-			slog.Error("Track write error", "error", err)
-		}
-	})
-
-	// 2. Start Pump (Transcoder -> gRPC)
-	if a.grpcSender != nil {
-		go a.startPipelinePump(ctx)
+	// 1. Listen on gRPC Port
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", a.cfg.Port))
+	if err != nil {
+		return fmt.Errorf("failed to listen on port %d: %w", a.cfg.Port, err)
 	}
 
-	slog.Info("Audio Pipeline Assembled", "pipeline", "[WebRTC Input] -> [Track Process] -> [gRPC Output]")
+	// 2. Start gRPC Server in a goroutine
+	errChan := make(chan error, 1)
+	go func() {
+		slog.Info("Starting gRPC Server", "port", a.cfg.Port)
+		if err := a.grpcServer.Serve(lis); err != nil {
+			errChan <- err
+		}
+	}()
+
 	slog.Info("Server is ready. Waiting for signals...")
 
-	// 3. Wait for Shutdown
-	<-ctx.Done()
-
-	return a.shutdown()
+	// 3. Wait for Shutdown Signal or Server Error
+	select {
+	case <-ctx.Done():
+		// Graceful shutdown triggered by signal or parent context
+		return a.shutdown()
+	case err := <-errChan:
+		// Server crashed
+		return fmt.Errorf("grpc server error: %w", err)
+	}
 }
 
 // shutdown performs graceful cleanup.
@@ -84,47 +87,30 @@ func (a *App) shutdown() error {
 	slog.Info("Shutdown signal received. Cleaning up...")
 
 	// Create a timeout for cleanup
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	// Note: We don't pass this ctx to GracefulStop because it doesn't take one,
+	// but strictly speaking we should enforce a timeout.
+	// grpcServer.GracefulStop() blocks until pending RPCs finish.
+	done := make(chan struct{})
+	go func() {
+		a.grpcServer.GracefulStop()
+		close(done)
+	}()
 
-	// Close WebRTC Receiver
-	if err := a.receiver.Close(); err != nil {
-		slog.Error("Failed to close receiver", "error", err)
-	} else {
-		slog.Info("WebRTC Receiver closed")
+	select {
+	case <-done:
+		slog.Info("gRPC Server stopped gracefully")
+	case <-time.After(5 * time.Second):
+		slog.Warn("Shutdown timed out, forcing stop")
+		a.grpcServer.Stop()
 	}
 
-	// Close gRPC Sender
-	if a.grpcSender != nil {
-		if err := a.grpcSender.Close(); err != nil {
-			slog.Error("Failed to close gRPC sender", "error", err)
-		} else {
-			slog.Info("gRPC Sender closed")
-		}
+	// Clean up Rooms (and their participants)
+	// Iterate through all rooms and close them.
+	if a.roomManager != nil {
+		a.roomManager.CloseAll()
+		slog.Info("All rooms closed")
 	}
 
-	// Wait for context cancellation or timeout
-	<-ctx.Done()
 	slog.Info("Server exited.")
 	return nil
-}
-
-// startPipelinePump reads PCM data from the track and sends it to the gRPC stream.
-// Moved from internal/upstream to decouple packages.
-func (a *App) startPipelinePump(ctx context.Context) {
-	for {
-		pcmData, err := a.transcoder.ReadPCM(ctx)
-		if err != nil {
-			if err == io.EOF || err == context.Canceled {
-				return // Channel closed or context cancelled
-			}
-			// Log error via external logger if available, for now just return/stop
-			return
-		}
-
-		// Send to gRPC stream
-		if err := a.grpcSender.Send(pcmData); err != nil {
-			return
-		}
-	}
 }

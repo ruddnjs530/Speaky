@@ -134,3 +134,35 @@ func (r *Room) Join(userID string, sdpOffer string) (string, error) {
 
 	return sdpAnswer, nil
 }
+
+// AddICECandidate delegates the candidate addition to the participant's receiver.
+func (r *Room) AddICECandidate(userID string, candidate webrtc.ICECandidateInit) error {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	participant, exists := r.participants[userID]
+	if !exists {
+		return fmt.Errorf("participant not found: %s", userID)
+	}
+
+	// Delegate to Receiver
+	return participant.Receiver.AddICECandidate(candidate)
+}
+
+// Leave handles the user leaving the room.
+func (r *Room) Leave(userID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	participant, exists := r.participants[userID]
+	if !exists {
+		return fmt.Errorf("participant not found: %s", userID)
+	}
+
+	// Cleanup resources
+	participant.Close()
+	delete(r.participants, userID)
+
+	slog.Info("Participant Left", "room_id", r.ID, "user_id", userID)
+	return nil
+}

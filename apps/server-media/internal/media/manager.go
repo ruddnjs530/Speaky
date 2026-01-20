@@ -79,3 +79,14 @@ func (m *RoomManager) DeleteRoom(roomID string) error {
 	delete(m.rooms, roomID)
 	return nil
 }
+
+// CloseAll closes all active rooms and releases resources.
+func (m *RoomManager) CloseAll() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for id, room := range m.rooms {
+		room.Close()
+		delete(m.rooms, id)
+	}
+}
