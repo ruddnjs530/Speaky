@@ -9,13 +9,11 @@ type RoomStatusResponse =
   | Record<string, unknown>;
 
 function normalizeRoomPhase(data: RoomStatusResponse): RoomPhase {
-  // phase 
   if (typeof (data as any).phase === 'string') {
     const p = (data as any).phase;
     if (p === 'waiting' || p === 'live' || p === 'ended') return p;
   }
 
-  // status 문자열 
   if (typeof (data as any).status === 'string') {
     const s = (data as any).status.toLowerCase();
     if (s.includes('wait')) return 'waiting';
@@ -23,20 +21,40 @@ function normalizeRoomPhase(data: RoomStatusResponse): RoomPhase {
     if (s.includes('end') || s.includes('close')) return 'ended';
   }
 
-  // boolean 플래그 
   if ((data as any).ended === true) return 'ended';
   if ((data as any).live === true || (data as any).isLive === true) return 'live';
 
-  // 애매해서 waiting
   return 'waiting';
 }
 
 export async function fetchRoomPhase(roomId: string): Promise<RoomPhase> {
-  // endpoint는 백엔드가 나중에 정할 곳
-  // 임시로 "/api/rooms/:roomId/status"라고 가정해둠
   const res = await fetch(`/api/rooms/${roomId}/status`);
   if (!res.ok) return 'error';
 
   const data = (await res.json()) as RoomStatusResponse;
   return normalizeRoomPhase(data);
+}
+
+export type SignalingBootstrap = {
+  channelId: string;
+  sessionId: string;
+  wsUrl: string;
+  signalingToken: string;
+};
+
+export async function startLive(channelId: string): Promise<SignalingBootstrap> {
+  const res = await fetch(`/api/channels/${channelId}/sessions`, { method: 'POST' });
+  if (!res.ok) throw new Error('방송 시작 실패');
+  return (await res.json()) as SignalingBootstrap;
+}
+
+export async function joinViewer(channelId: string, sessionId: string): Promise<SignalingBootstrap> {
+  const res = await fetch(`/api/channels/${channelId}/sessions/${sessionId}/viewers`, { method: 'POST' });
+  if (!res.ok) throw new Error('시청 입장 실패');
+  return (await res.json()) as SignalingBootstrap;
+}
+
+export async function endLive(channelId: string, sessionId: string): Promise<void> {
+  const res = await fetch(`/api/channels/${channelId}/sessions/${sessionId}/end`, { method: 'POST' });
+  if (!res.ok) throw new Error('방송 종료 실패');
 }
