@@ -1,7 +1,8 @@
-import { useAppState } from "../../state/useAppState.ts";
+import {useAppDispatch, useAppStateValue} from "../../state/useAppState.ts";
 
 export function ReadyPanel() {
-    const { state, dispatch } = useAppState();
+    const state = useAppStateValue();
+    const dispatch = useAppDispatch();
 
     return (
         <div style={{ padding: 16 }}>

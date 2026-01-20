@@ -1,7 +1,9 @@
-import { useAppState } from "../../state/useAppState.ts";
+import {useAppDispatch, useAppStateValue} from "../../state/useAppState.ts";
 
 export function ErrorPanel() {
-    const { state, dispatch } = useAppState();
+    const state = useAppStateValue();
+    const dispatch = useAppDispatch();
+
     const err = state.context.lastError;
 
     return (
