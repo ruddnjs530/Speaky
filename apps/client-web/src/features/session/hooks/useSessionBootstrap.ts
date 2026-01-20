@@ -1,17 +1,56 @@
 import { sessionApi } from "../api/sessionApi";
 import { getOrCreateClientId } from "../utils/clientId";
 import type { Role } from "../state/appState.types";
-import { useAppState } from "../state/useAppState.ts";
+import { useAppDispatch, useAppStateValue } from "../state/useAppState";
+import type { SysErrorCode, AppError } from "../state/appState.types";
 
 function toRole(input: Role): Role {
-    // 서버가 HOST/GUEST로 내려준다고 가정
     return input;
 }
 
+function isRecord(x: unknown): x is Record<string, unknown> {
+    return typeof x === "object" && x !== null;
+}
+
+function normalizeError(e: unknown, fallbackMessage: string): AppError {
+    let code: SysErrorCode = "REST_ERROR";
+    let message = fallbackMessage;
+
+    if (isRecord(e)) {
+        if (typeof e.code === "string" && (
+            e.code === "UNAUTHORIZED" ||
+            e.code === "INVALID_CLIENT_ID" ||
+            e.code === "INVALID_STATE" ||
+            e.code === "SESSION_NOT_ACTIVE" ||
+            e.code === "DUPLICATE_HOST" ||
+            e.code === "MEDIA_UNAVAILABLE" ||
+            e.code === "RATE_LIMITED" ||
+            e.code === "REST_ERROR" ||
+            e.code === "UNKNOWN"
+        )) {
+            code = e.code;
+        }
+
+        if (typeof e.message === "string") {
+            message = e.message;
+        }
+    }
+
+    return { code, message };
+}
+
 export function useSessionBootstrap() {
-    const { dispatch } = useAppState();
+    const dispatch = useAppDispatch();
+    const state = useAppStateValue();
+
+    // ✅ 중복 호출 방지 가드
+    // - Idle이 아닐 때(이미 진행/완료 상태) bootstrap을 다시 시작하지 않음
+    // - 단, Error 상태에서는 재시도 허용(원하면 유지)
+    const isBusy = state.kind !== "Idle" && state.kind !== "Error";
 
     async function start(channelId: string) {
+        if (isBusy) return;
+
         dispatch({ type: "BOOTSTRAP_START" });
 
         try {
@@ -27,18 +66,17 @@ export function useSessionBootstrap() {
                     clientId: getOrCreateClientId(),
                 },
             });
-        } catch (e: any) {
+        } catch (e: unknown) {
             dispatch({
                 type: "BOOTSTRAP_FAIL",
-                error: {
-                    code: (e?.code as any) ?? "REST_ERROR",
-                    message: e?.message ? String(e.message) : "REST bootstrap failed",
-                },
+                error: normalizeError(e, "REST bootstrap failed"),
             });
         }
     }
 
     async function join(channelId: string) {
+        if (isBusy) return;
+
         dispatch({ type: "BOOTSTRAP_START" });
 
         try {
@@ -54,13 +92,10 @@ export function useSessionBootstrap() {
                     clientId: getOrCreateClientId(),
                 },
             });
-        } catch (e: any) {
+        } catch (e: unknown) {
             dispatch({
                 type: "BOOTSTRAP_FAIL",
-                error: {
-                    code: (e?.code as any) ?? "REST_ERROR",
-                    message: e?.message ? String(e.message) : "REST join failed",
-                },
+                error: normalizeError(e, "REST join failed"),
             });
         }
     }

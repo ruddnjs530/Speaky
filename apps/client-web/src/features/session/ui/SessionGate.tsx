@@ -1,11 +1,11 @@
-import { useAppState } from "../state/useAppState.ts";
+import { useAppStateValue } from "../state/useAppState";
 import { IdlePanel } from "./panels/IdlePanel";
 import { LoadingPanel } from "./panels/LoadingPanel";
 import { ReadyPanel } from "./panels/ReadyPanel";
 import { ErrorPanel } from "./panels/ErrorPanel";
 
 export function SessionGate() {
-    const { state } = useAppState();
+    const state  = useAppStateValue();
 
     switch (state.kind) {
         case "Idle":
