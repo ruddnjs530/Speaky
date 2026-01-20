@@ -1,21 +1,36 @@
-type OfferArgs = {
-  role: 'host' | 'viewer';
-  roomId?: string;
+import { createEnvelope, type Role } from '../../../shared/lib/signaling/envelope';
+import type { SignalingClient } from '../../../shared/lib/signaling/SignalingClient';
+
+export type SignalArgs = {
+  channelId: string;
+  sessionId: string;
+  role: Role;
 };
 
-export async function sendOfferToServer(
+function opts({ channelId, sessionId, role }: SignalArgs) {
+  return { channelId, sessionId, from: { role } };
+}
+
+export function sendOfferWS(
+  client: SignalingClient,
   offer: RTCSessionDescriptionInit,
-  { role, roomId }: OfferArgs
-): Promise<RTCSessionDescriptionInit> {
-  const qs = new URLSearchParams({ role });
-  if (roomId) qs.set('roomId', roomId);
+  args: SignalArgs
+) {
+  client.send(createEnvelope('SIG_SDP_OFFER', opts(args), { sdp: offer }));
+}
 
-  const res = await fetch(`/api/webrtc/offer?${qs.toString()}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(offer),
-  });
+export function sendAnswerWS(
+  client: SignalingClient,
+  answer: RTCSessionDescriptionInit,
+  args: SignalArgs
+) {
+  client.send(createEnvelope('SIG_SDP_ANSWER', opts(args), { sdp: answer }));
+}
 
-  if (!res.ok) throw new Error('offer 전송 실패');
-  return (await res.json()) as RTCSessionDescriptionInit;
+export function sendIceWS(
+  client: SignalingClient,
+  candidate: RTCIceCandidateInit,
+  args: SignalArgs
+) {
+  client.send(createEnvelope('SIG_ICE', opts(args), { candidate }));
 }
