@@ -1,72 +1,80 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
-
-	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/media"
-	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/upstream"
-	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/webrtc"
+	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/app"
+	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/config"
 )
 
 func main() {
-	// Configuration for the target AI server address.
-	aiServerAddr := os.Getenv("AI_SERVER_ADDR")
-	if aiServerAddr == "" {
-		aiServerAddr = "localhost:50051"
+	// 1. Load Configuration
+	cfg := config.Load()
+	if err := cfg.Validate(); err != nil {
+		panic(fmt.Sprintf("Invalid configuration: %v", err))
 	}
 
-	log.Println("Starting Media Server...")
+	// 2. Initialize Logger (slog)
+	initLogger(cfg)
 
-	// Initialize the gRPC sender as the output destination.
-	grpcSender, err := upstream.NewGRPCSender(aiServerAddr)
+	// 3. Create Root Context for Graceful Shutdown
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	slog.Info("Starting Media Server...",
+		"env", cfg.Env,
+		"ai_server", cfg.AIServerAddr,
+		"log_level", cfg.LogLevel,
+	)
+
+	// 4. Initialize and Run Application
+	application, err := app.New(ctx, cfg)
 	if err != nil {
-		// Log a warning and proceed if the AI server is unavailable during testing.
-		log.Printf("Warning: Failed to connect to AI server: %v", err)
-		log.Println("Continuing for testing, but streaming will be disabled.")
+		slog.Error("Failed to initialize application", "error", err)
+		os.Exit(1)
+	}
+
+	if err := application.Run(ctx); err != nil {
+		slog.Error("Application exited with error", "error", err)
+		os.Exit(1)
+	}
+}
+
+func initLogger(cfg *config.Config) {
+	// Parse LOG_LEVEL
+	var level slog.Level
+	switch strings.ToUpper(cfg.LogLevel) {
+	case "DEBUG":
+		level = slog.LevelDebug
+	case "WARN":
+		level = slog.LevelWarn
+	case "ERROR":
+		level = slog.LevelError
+	default:
+		level = slog.LevelInfo // Default
+	}
+
+	// Helper to create options
+	opts := &slog.HandlerOptions{
+		Level: level,
+	}
+
+	// Determine Handler based on GO_ENV
+	var handler slog.Handler
+
+	if strings.ToLower(cfg.Env) == "prod" {
+		handler = slog.NewJSONHandler(os.Stdout, opts)
 	} else {
-		defer grpcSender.Close()
-		log.Println("Connected to AI Server")
+		// Default to local/text for readability
+		handler = slog.NewTextHandler(os.Stdout, opts)
 	}
 
-	// Initialize the media track for audio decoding and resampling.
-	track, err := media.NewRegularTrack()
-	if err != nil {
-		log.Fatalf("Failed to create track: %v", err)
-	}
-
-	// Initialize the WebRTC receiver for incoming audio streams.
-	receiver := webrtc.NewReceiver()
-
-	// Connect the media pipeline components.
-
-	// Bind WebRTC input to the processing track.
-	receiver.OnAudioPacket(func(packet []byte) {
-		// Log errors but continue to maintain real-time performance.
-		if err := track.WriteOpus(packet); err != nil {
-			log.Printf("Track write error: %v", err)
-		}
-	})
-
-	// Bind the processing track to the gRPC output.
-	// The pump runs in a separate goroutine to push data to the AI server.
-	if grpcSender != nil {
-		go upstream.StartPipelinePump(track, grpcSender)
-	}
-
-	log.Println("Audio Pipeline Assembled: [WebRTC Input] -> [Track Process] -> [gRPC Output]")
-
-	// Wait for termination signals.
-	// A signaling server should be implemented here to handle SDP negotiation.
-	log.Println("Server is ready. Waiting for signals...")
-
-	// Block until an interrupt or termination signal is received.
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-	<-sigs
-
-	fmt.Println("\nShutting down server...")
+	// Set Default Logger
+	logger := slog.New(handler)
+	slog.SetDefault(logger)
 }

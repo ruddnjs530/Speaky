@@ -9,7 +9,7 @@ import (
 
 	pb "mediaserver/proto"
 
-	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/audio"
+	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/config"
 )
 
 // AudioSender defines the capability to send audio data to an external service.
@@ -20,15 +20,17 @@ type AudioSender interface {
 
 // GRPCSender implements AudioSender using the VoiceService gRPC stream.
 type GRPCSender struct {
-	conn   *grpc.ClientConn
-	stream pb.VoiceService_ConvertStreamClient
+	conn       *grpc.ClientConn
+	stream     pb.VoiceService_ConvertStreamClient
+	sampleRate int32
+	channels   int32
 }
 
 // NewGRPCSender creates a connection to the AI Server and initializes the stream.
-func NewGRPCSender(address string) (*GRPCSender, error) {
+func NewGRPCSender(ctx context.Context, cfg *config.Config) (*GRPCSender, error) {
 	// Establish a gRPC connection
 	// TODO: Update credentials for production security (e.g., use TLS/SSL).
-	conn, err := grpc.NewClient(address,
+	conn, err := grpc.NewClient(cfg.AIServerAddr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
@@ -40,15 +42,17 @@ func NewGRPCSender(address string) (*GRPCSender, error) {
 
 	// Open a bidirectional stream for audio conversion.
 	// TODO: Consider using a context with timeout or cancellation for robust stream management.
-	stream, err := client.ConvertStream(context.Background())
+	stream, err := client.ConvertStream(ctx)
 	if err != nil {
 		conn.Close()
 		return nil, fmt.Errorf("failed to create stream: %w", err)
 	}
 
 	return &GRPCSender{
-		conn:   conn,
-		stream: stream,
+		conn:       conn,
+		stream:     stream,
+		sampleRate: int32(cfg.AudioSampleRate),
+		channels:   int32(cfg.AudioChannels),
 	}, nil
 }
 
@@ -56,8 +60,8 @@ func NewGRPCSender(address string) (*GRPCSender, error) {
 func (s *GRPCSender) Send(data []byte) error {
 	req := &pb.AudioChunk{
 		Pcm:        data,
-		SampleRate: int32(audio.TargetSampleRate), // 16000
-		Channels:   int32(audio.DefaultChannels),  // 1
+		SampleRate: s.sampleRate,
+		Channels:   s.channels,
 	}
 
 	return s.stream.Send(req)
@@ -72,3 +76,5 @@ func (s *GRPCSender) Close() error {
 	// TCP 연결 종료
 	return s.conn.Close()
 }
+
+

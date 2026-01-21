@@ -22,7 +22,7 @@ type SoxrResampler struct {
 }
 
 // NewResampler creates a new instance of SoxrResampler.
-func NewResampler() (*SoxrResampler, error) {
+func NewResampler(targetSampleRate, targetChannels int) (*SoxrResampler, error) {
 	// Create a buffer to hold the resampled output.
 	outBuf := new(bytes.Buffer)
 
@@ -30,8 +30,8 @@ func NewResampler() (*SoxrResampler, error) {
 	res, err := resample.New(
 		outBuf,                     // Destination for resampled data
 		float64(DefaultSampleRate), // Input Rate
-		float64(TargetSampleRate),  // Output Rate
-		DefaultChannels,            // Channels
+		float64(targetSampleRate),  // Output Rate
+		targetChannels,             // Channels
 		resample.I16,               // Format: 16-bit Little Endian
 		resample.Quick,             // Quality
 	)

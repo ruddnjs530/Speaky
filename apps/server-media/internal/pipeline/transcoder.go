@@ -1,25 +1,29 @@
-package media
+package pipeline
 
 import (
+	"context"
 	"fmt"
+	"io"
 
 	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/audio"
+	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/config"
 )
 
-// Track represents a single audio stream processing pipeline.
-type Track interface {
+// Transcoder represents a single audio stream processing pipeline.
+type Transcoder interface {
 	// WriteOpus accepts an Opus packet, decodes it, resamples it, and buffers the result for reading.
 	// Typically called by the WebRTC receiver's callback.
 	WriteOpus(packet []byte) error
 
 	// ReadPCM returns the next chunk of processed audio.
 	// Blocks until data is available or the track is closed.
-	ReadPCM() ([]byte, error)
+	// Returns io.EOF if the channel is closed.
+	ReadPCM(ctx context.Context) ([]byte, error)
 }
 
-// RegularTrack implements the Track interface.
+// OpusToPCMTranscoder implements the Transcoder interface.
 // It pipelines decoding and resampling using a buffered channel.
-type RegularTrack struct {
+type OpusToPCMTranscoder struct {
 	decoder   audio.Decoder
 	resampler audio.Resampler
 
@@ -27,29 +31,29 @@ type RegularTrack struct {
 	pcmChan chan []byte
 }
 
-// NewRegularTrack creates a new instance of RegularTrack.
-func NewRegularTrack() (*RegularTrack, error) {
+// NewOpusToPCMTranscoder creates a new instance of OpusToPCMTranscoder.
+func NewOpusToPCMTranscoder(cfg *config.Config) (*OpusToPCMTranscoder, error) {
 	// Initialize Decoder
-	dec, err := audio.NewOpusDecoder(audio.DefaultSampleRate, audio.DefaultChannels)
+	dec, err := audio.NewOpusDecoder(audio.DefaultSampleRate, cfg.AudioChannels)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create decoder: %w", err)
 	}
 
 	// Initialize Resampler
-	res, err := audio.NewResampler()
+	res, err := audio.NewResampler(cfg.AudioSampleRate, cfg.AudioChannels)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create resampler: %w", err)
 	}
 
-	return &RegularTrack{
+	return &OpusToPCMTranscoder{
 		decoder:   dec,
 		resampler: res,
-		pcmChan:   make(chan []byte, PCMBufferSize),
+		pcmChan:   make(chan []byte, cfg.PCMBufferSize),
 	}, nil
 }
 
 // WriteOpus processes the incoming packet and sends it to the channel.
-func (t *RegularTrack) WriteOpus(packet []byte) error {
+func (t *OpusToPCMTranscoder) WriteOpus(packet []byte) error {
 	// Decode (Opus -> PCM)
 	decodedPCM, err := t.decoder.Decode(packet)
 	if err != nil {
@@ -70,8 +74,16 @@ func (t *RegularTrack) WriteOpus(packet []byte) error {
 }
 
 // ReadPCM retrieves the next processed audio chunk from the buffer.
-func (t *RegularTrack) ReadPCM() ([]byte, error) {
-	// Blocks until data is available in the channel.
-	data := <-t.pcmChan
-	return data, nil
+func (t *OpusToPCMTranscoder) ReadPCM(ctx context.Context) ([]byte, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case data, ok := <-t.pcmChan:
+		if !ok {
+			return nil, io.EOF
+		}
+		return data, nil
+	}
 }
+
+
