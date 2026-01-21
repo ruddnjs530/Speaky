@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4"
 	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/config"
 	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/pipeline"
@@ -88,7 +89,7 @@ func (r *Room) Join(userID string, sdpOffer string) (string, error) {
 		return "", fmt.Errorf("failed to create upstream sender: %w", err)
 	}
 
-	// 3. Assemble Participant
+	// 4. Assemble Participant
 	participant := &Participant{
 		ID:         userID,
 		Receiver:   receiver,
@@ -97,7 +98,11 @@ func (r *Room) Join(userID string, sdpOffer string) (string, error) {
 		CancelFunc: pCancel,
 	}
 
-	// 4. Perform SDP Exchange (Connect)
+	// 5. Connect Pipeline (Handler Registration)
+	// CRITICAL: Must register handlers BEFORE calling Connect to avoid dropping initial packets.
+	r.wirePipeline(pCtx, participant)
+
+	// 6. Perform SDP Exchange (Connect)
 	// This will block until ICE gathering is complete (unless Trickle ICE logic is added later).
 	sdpAnswer, err := receiver.Connect(sdpOffer)
 	if err != nil {
@@ -107,8 +112,10 @@ func (r *Room) Join(userID string, sdpOffer string) (string, error) {
 		return "", fmt.Errorf("failed to connect receiver: %w", err)
 	}
 
-	// 5. Register Participant
+	// 7. Register Participant
 	// Check if user already exists (Re-join Logic)
+	// Note: Ideally we check this earlier, but checking here holding lock is also fine.
+	// If we want to prevent double-init, check at step 0. Assuming simple replacement here.
 	if oldP, exists := r.participants[userID]; exists {
 		slog.Warn("User re-joining, closing old session", "room_id", r.ID, "user_id", userID)
 		// Explicitly Close resources first
@@ -118,19 +125,6 @@ func (r *Room) Join(userID string, sdpOffer string) (string, error) {
 	}
 
 	r.participants[userID] = participant
-
-	// TODO: Connect Pipeline (Day 3 Task)
-	// We need to wire the Receiver's output to the Transcoder, and Transcoder's output to the Sender.
-	// Example:
-	// receiver.OnAudioPacket(func(data []byte) {
-	//     transcoder.WriteOpus(data)
-	// })
-	// go func() {
-	//     for {
-	//         pcm, _ := transcoder.ReadPCM(pCtx)
-	//         sender.Send(pcm)
-	//     }
-	// }()
 
 	slog.Info("Participant Joined",
 		"room_id", r.ID,
@@ -171,4 +165,71 @@ func (r *Room) Leave(userID string) error {
 
 	slog.Info("Participant Left", "room_id", r.ID, "user_id", userID)
 	return nil
+}
+
+// wirePipeline connects the Receiver, Transcoder, and Sender.
+// This logic is extracted for testability (unexported to allow white-box testing).
+func (r *Room) wirePipeline(ctx context.Context, p *Participant) {
+	// A. Wire Audio
+	p.Receiver.OnAudioPacket(func(packet *rtp.Packet) {
+		// INGESTION: Audio RTP Packet -> Transcoder
+		// Note on Memory Safety: Pion recycles buffers. If WriteOpus is async or buffers internals,
+		// we might need packet.Payload.Clone(). Currently assuming WriteOpus consumes immediately.
+		if err := p.Transcoder.WriteOpus(packet.Payload); err != nil {
+			slog.Warn("Failed to write opus", "err", err, "user_id", p.ID)
+		}
+	})
+
+	// B. Wire Video (Stub for Day 4)
+	p.Receiver.OnVideoPacket(func(packet *rtp.Packet) {
+		// Log video packet metrics primarily for debugging
+		// slog.Debug("Video Packet", "seq", packet.SequenceNumber, "ts", packet.Timestamp)
+	})
+
+	// C. Start Audio Pump (Transcoder -> Sender)
+	go r.pumpAudio(ctx, p)
+}
+
+// pumpAudio continuously reads PCM from Transcoder and sends to Sender.
+// Unexported for white-box testing.
+func (r *Room) pumpAudio(ctx context.Context, p *Participant) {
+	slog.Debug("Starting Audio Pump", "user_id", p.ID)
+	defer slog.Debug("Stopping Audio Pump", "user_id", p.ID)
+
+	consecutiveErrors := 0
+	const maxConsecutiveErrors = 100
+
+	for {
+		// 1. Check Cancellation
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		// 2. Read PCM (Blocking with Context)
+		pcm, err := p.Transcoder.ReadPCM(ctx)
+		if err != nil {
+			if ctx.Err() != nil {
+				return // Context cancelled
+			}
+			slog.Error("Transcoder ReadPCM error", "err", err, "user_id", p.ID)
+			// Decide: Continue or Break? Break prevents tight loop on error.
+			return
+		}
+
+		// 3. Send to Upstream
+		if err := p.Sender.Send(pcm); err != nil {
+			consecutiveErrors++
+			if consecutiveErrors <= 5 { // Throttle logs
+				slog.Error("Upstream Send error", "err", err, "user_id", p.ID)
+			}
+			if consecutiveErrors >= maxConsecutiveErrors {
+				slog.Error("Upstream Send failed too many times, Aborting Pump", "user_id", p.ID)
+				return // Circuit Breaker
+			}
+		} else {
+			consecutiveErrors = 0 // Reset on success
+		}
+	}
 }

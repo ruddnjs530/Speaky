@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"strings"
 
+	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4"
 	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/config"
 )
@@ -12,17 +14,19 @@ import (
 // Receiver defines the behavior of a WebRTC audio receiver.
 type Receiver interface {
 	Connect(offerSDP string) (answerSDP string, err error)
-	OnAudioPacket(callback func(packet []byte))
+	OnAudioPacket(callback func(packet *rtp.Packet))
+	OnVideoPacket(callback func(packet *rtp.Packet))
 	AddICECandidate(candidate webrtc.ICECandidateInit) error
 	Close() error
 }
 
 // PionReceiver implements Receiver using the Pion WebRTC library.
 type PionReceiver struct {
-	pc              *webrtc.PeerConnection
-	onPacketHandler func([]byte)
-	api             *webrtc.API
-	cfg             *config.Config
+	pc             *webrtc.PeerConnection
+	onAudioHandler func(*rtp.Packet)
+	onVideoHandler func(*rtp.Packet)
+	api            *webrtc.API
+	cfg            *config.Config
 }
 
 // NewReceiver creates a new instance of PionReceiver.
@@ -64,12 +68,19 @@ func (r *PionReceiver) Connect(offerSDP string) (string, error) {
 	// Register a handler for incoming tracks.
 	// Triggered when the client starts sending media.
 	r.pc.OnTrack(func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
-		// Ignore non-audio tracks.
-		if track.Kind() != webrtc.RTPCodecTypeAudio {
-			return
+		slog.Debug("Track received", "kind", track.Kind(), "mime", track.Codec().MimeType)
+
+		// MimeType Splitting (Audio vs Video)
+		kind := track.Kind()
+		mime := strings.ToLower(track.Codec().MimeType)
+
+		if kind == webrtc.RTPCodecTypeAudio && strings.Contains(mime, "opus") {
+			go r.readTrackLoop(track, true)
+		} else if kind == webrtc.RTPCodecTypeVideo && (strings.Contains(mime, "vp8") || strings.Contains(mime, "h264")) {
+			go r.readTrackLoop(track, false)
+		} else {
+			slog.Warn("Ignoring unknown track type", "mime", mime)
 		}
-		// Start reading packets in a separate goroutine.
-		go r.readTrackLoop(track)
 	})
 
 	// Set the Remote Description (Client's Offer).
@@ -104,33 +115,39 @@ func (r *PionReceiver) Connect(offerSDP string) (string, error) {
 }
 
 // readTrackLoop continuously reads RTP packets from the track.
-func (r *PionReceiver) readTrackLoop(track *webrtc.TrackRemote) {
-	buf := make([]byte, ReadBufferSize)
-
+func (r *PionReceiver) readTrackLoop(track *webrtc.TrackRemote, isAudio bool) {
 	for {
-		// Read data from the track (blocks until data arrives).
-		n, _, err := track.Read(buf)
+		// Read RTP packet directly to preserve header info (Sequence, Timestamp)
+		packet, _, err := track.ReadRTP()
 		if err != nil {
 			if err == io.EOF {
 				return // Connection closed
 			}
-			slog.Error("Error reading track", "error", err)
+			slog.Error("Error reading track RTP", "error", err)
 			return
 		}
 
-		// Invoke the registered callback with the audio data.
-		if r.onPacketHandler != nil {
-			// Copy data to prevent race conditions as buffer is reused.
-			packetCopy := make([]byte, n)
-			copy(packetCopy, buf[:n])
-			r.onPacketHandler(packetCopy)
+		// Dispatch to appropriate handler
+		if isAudio {
+			if r.onAudioHandler != nil {
+				r.onAudioHandler(packet)
+			}
+		} else {
+			if r.onVideoHandler != nil {
+				r.onVideoHandler(packet)
+			}
 		}
 	}
 }
 
 // OnAudioPacket registers the callback function for incoming audio packets.
-func (r *PionReceiver) OnAudioPacket(callback func(packet []byte)) {
-	r.onPacketHandler = callback
+func (r *PionReceiver) OnAudioPacket(callback func(packet *rtp.Packet)) {
+	r.onAudioHandler = callback
+}
+
+// OnVideoPacket registers the callback function for incoming video packets.
+func (r *PionReceiver) OnVideoPacket(callback func(packet *rtp.Packet)) {
+	r.onVideoHandler = callback
 }
 
 // AddICECandidate adds a new ICE candidate to the peer connection.
