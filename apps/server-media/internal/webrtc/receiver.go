@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4"
 	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/config"
@@ -17,7 +18,84 @@ type Receiver interface {
 	OnAudioPacket(callback func(packet *rtp.Packet))
 	OnVideoPacket(callback func(packet *rtp.Packet))
 	AddICECandidate(candidate webrtc.ICECandidateInit) error
+	SendPLI(ssrc uint32) error
 	Close() error
+}
+
+// ... (PionReceiver struct - no changes needed) ...
+
+// SendPLI sends a Picture Loss Indication packet to the remote peer.
+func (r *PionReceiver) SendPLI(ssrc uint32) error {
+	if r.pc == nil {
+		return fmt.Errorf("peer connection not initialized")
+	}
+
+	pli := &rtcp.PictureLossIndication{MediaSSRC: ssrc}
+	if err := r.pc.WriteRTCP([]rtcp.Packet{pli}); err != nil {
+		return fmt.Errorf("failed to send PLI: %w", err)
+	}
+
+	// slog.Debug("Sent PLI", "ssrc", ssrc)
+	return nil
+}
+
+// readTrackLoop continuously reads RTP packets from the track.
+func (r *PionReceiver) readTrackLoop(track *webrtc.TrackRemote, isAudio bool) {
+	ssrc := uint32(track.SSRC())
+	
+	// Send initial PLI for Video to ensure we get a Keyframe ASAP
+	if !isAudio {
+		go func() {
+			// Small delay to ensure connection is fully established
+			// In production, might need retry or smarter trigger
+			if err := r.SendPLI(ssrc); err != nil {
+				slog.Warn("Failed to send initial PLI", "err", err)
+			} else {
+				slog.Info("Sent Initial PLI", "ssrc", ssrc)
+			}
+		}()
+	}
+
+	var lastSeq uint16
+	isFirst := true
+
+	for {
+		// Read RTP packet directly to preserve header info (Sequence, Timestamp)
+		packet, _, err := track.ReadRTP()
+		if err != nil {
+			if err == io.EOF {
+				return // Connection closed
+			}
+			slog.Error("Error reading track RTP", "error", err)
+			return
+		}
+
+		// Simple Gap Detection for Video
+		// Note: This matches simple gaps. Real jitter buffer is more complex.
+		if !isAudio {
+			if !isFirst {
+				if packet.SequenceNumber != lastSeq+1 {
+					slog.Warn("Packet Gap Detected", "last", lastSeq, "curr", packet.SequenceNumber, "ssrc", ssrc)
+					// Trigger PLI on gap
+					// Throttle this in production to avoid flooding
+					go r.SendPLI(ssrc)
+				}
+			}
+			lastSeq = packet.SequenceNumber
+			isFirst = false
+		}
+
+		// Dispatch to appropriate handler
+		if isAudio {
+			if r.onAudioHandler != nil {
+				r.onAudioHandler(packet)
+			}
+		} else {
+			if r.onVideoHandler != nil {
+				r.onVideoHandler(packet)
+			}
+		}
+	}
 }
 
 // PionReceiver implements Receiver using the Pion WebRTC library.
@@ -114,31 +192,7 @@ func (r *PionReceiver) Connect(offerSDP string) (string, error) {
 	return r.pc.LocalDescription().SDP, nil
 }
 
-// readTrackLoop continuously reads RTP packets from the track.
-func (r *PionReceiver) readTrackLoop(track *webrtc.TrackRemote, isAudio bool) {
-	for {
-		// Read RTP packet directly to preserve header info (Sequence, Timestamp)
-		packet, _, err := track.ReadRTP()
-		if err != nil {
-			if err == io.EOF {
-				return // Connection closed
-			}
-			slog.Error("Error reading track RTP", "error", err)
-			return
-		}
 
-		// Dispatch to appropriate handler
-		if isAudio {
-			if r.onAudioHandler != nil {
-				r.onAudioHandler(packet)
-			}
-		} else {
-			if r.onVideoHandler != nil {
-				r.onVideoHandler(packet)
-			}
-		}
-	}
-}
 
 // OnAudioPacket registers the callback function for incoming audio packets.
 func (r *PionReceiver) OnAudioPacket(callback func(packet *rtp.Packet)) {

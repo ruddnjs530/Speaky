@@ -17,6 +17,7 @@ type Participant struct {
 	Receiver   mediaWebrtc.Receiver
 	Transcoder pipeline.Transcoder
 	Sender     upstream.AudioSender
+	VideoQueue *pipeline.VideoQueue
 
 	// Lifecycle Management
 	// CancelFunc shuts down all goroutines (Pump, Receiver Loop) for this participant.

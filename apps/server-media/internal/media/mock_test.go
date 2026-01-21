@@ -18,6 +18,7 @@ type MockReceiver struct {
 	OnVideoPacketFunc func(*rtp.Packet)
 	ConnectFunc       func(string) (string, error)
 	AddCandidateFunc  func(webrtc.ICECandidateInit) error
+	SendPLIFunc       func(uint32) error
 	CloseFunc         func() error
 }
 
@@ -43,6 +44,13 @@ func (m *MockReceiver) OnVideoPacket(callback func(*rtp.Packet)) {
 func (m *MockReceiver) AddICECandidate(candidate webrtc.ICECandidateInit) error {
 	if m.AddCandidateFunc != nil {
 		return m.AddCandidateFunc(candidate)
+	}
+	return nil
+}
+
+func (m *MockReceiver) SendPLI(ssrc uint32) error {
+	if m.SendPLIFunc != nil {
+		return m.SendPLIFunc(ssrc)
 	}
 	return nil
 }

@@ -95,6 +95,7 @@ func (r *Room) Join(userID string, sdpOffer string) (string, error) {
 		Receiver:   receiver,
 		Transcoder: transcoder,
 		Sender:     sender,
+		VideoQueue: pipeline.NewVideoQueue(),
 		CancelFunc: pCancel,
 	}
 
@@ -179,10 +180,9 @@ func (r *Room) wirePipeline(ctx context.Context, p *Participant) {
 		}
 	})
 
-	// B. Wire Video (Stub for Day 4)
+	// B. Wire Video (Buffer for Sync)
 	p.Receiver.OnVideoPacket(func(packet *rtp.Packet) {
-		// Log video packet metrics primarily for debugging
-		// slog.Debug("Video Packet", "seq", packet.SequenceNumber, "ts", packet.Timestamp)
+		p.VideoQueue.Push(packet)
 	})
 
 	// C. Start Audio Pump (Transcoder -> Sender)
