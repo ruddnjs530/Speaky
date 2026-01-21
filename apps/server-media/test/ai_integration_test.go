@@ -60,16 +60,22 @@ func TestAICommunication(t *testing.T) {
 					// We expect 2 bytes and 48000 sample rate based on what we send below
 					assert.Equal(t, 2, len(in.Pcm))
 					assert.Equal(t, int32(48000), in.SampleRate)
+					
+					// [New] Verify Timestamp Echo
+					assert.True(t, in.Timestamp > 0, "Timestamp should be non-zero")
+					assert.Equal(t, uint32(0), in.Timestamp%1000, "Timestamp should be multiple of 1000")
 				}
 			}
 		}()
 
 		// Sender
-		for i := 0; i < 3; i++ {
+		for i := 1; i <= 3; i++ { // Start from 1 to have non-zero timestamp
+			ts := uint32(i * 1000)
 			req := &pb.AudioChunk{
 				Pcm:        []byte{byte(i), byte(i + 1)},
 				SampleRate: 48000,
 				Channels:   2,
+				Timestamp:  ts,
 			}
 			err := stream.Send(req)
 			assert.NoError(t, err)

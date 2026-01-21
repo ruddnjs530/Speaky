@@ -49,17 +49,17 @@ func TestRoom_Join_WiresPipeline(t *testing.T) {
 	packet := &rtp.Packet{Payload: dummyPayload}
 	
 	// Capturing WriteOpus call
-	var capturedPayload []byte
-	mockTranscoder.WriteOpusFunc = func(p []byte) error {
-		capturedPayload = p
+	var capturedPacket *rtp.Packet
+	mockTranscoder.WriteOpusFunc = func(p *rtp.Packet) error {
+		capturedPacket = p
 		return nil
 	}
-	
+
 	// Trigger Callback
 	mockReceiver.OnAudioPacketFunc(packet)
-	
+
 	// Assert Transcoder received payload
-	assert.Equal(t, dummyPayload, capturedPayload, "Transcoder should receive payload from Receiver")
+	assert.Equal(t, packet, capturedPacket, "Transcoder should receive packet from Receiver")
 }
 
 // TestRoom_Close_StopsPipeline verifies that the pump goroutine stops when Room is closed.

@@ -173,9 +173,8 @@ func (r *Room) wirePipeline(ctx context.Context, p *Participant) {
 	// A. Wire Audio
 	p.Receiver.OnAudioPacket(func(packet *rtp.Packet) {
 		// INGESTION: Audio RTP Packet -> Transcoder
-		// Note on Memory Safety: Pion recycles buffers. If WriteOpus is async or buffers internals,
-		// we might need packet.Payload.Clone(). Currently assuming WriteOpus consumes immediately.
-		if err := p.Transcoder.WriteOpus(packet.Payload); err != nil {
+		// Day 3.5 Refactoring: Transcoder now accepts *rtp.Packet directly.
+		if err := p.Transcoder.WriteOpus(packet); err != nil {
 			slog.Warn("Failed to write opus", "err", err, "user_id", p.ID)
 		}
 	})
@@ -208,7 +207,7 @@ func (r *Room) pumpAudio(ctx context.Context, p *Participant) {
 		}
 
 		// 2. Read PCM (Blocking with Context)
-		pcm, err := p.Transcoder.ReadPCM(ctx)
+		frame, err := p.Transcoder.ReadPCM(ctx)
 		if err != nil {
 			if ctx.Err() != nil {
 				return // Context cancelled
@@ -219,7 +218,7 @@ func (r *Room) pumpAudio(ctx context.Context, p *Participant) {
 		}
 
 		// 3. Send to Upstream
-		if err := p.Sender.Send(pcm); err != nil {
+		if err := p.Sender.Send(frame); err != nil {
 			consecutiveErrors++
 			if consecutiveErrors <= 5 { // Throttle logs
 				slog.Error("Upstream Send error", "err", err, "user_id", p.ID)

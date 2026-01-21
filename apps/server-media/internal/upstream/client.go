@@ -10,11 +10,12 @@ import (
 	pb "mediaserver/proto"
 
 	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/config"
+	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/pipeline"
 )
 
 // AudioSender defines the capability to send audio data to an external service.
 type AudioSender interface {
-	Send(data []byte) error
+	Send(frame *pipeline.AudioFrame) error
 	Close() error
 }
 
@@ -57,11 +58,12 @@ func NewGRPCSender(ctx context.Context, cfg *config.Config) (*GRPCSender, error)
 }
 
 // Send constructs an AudioChunk and sends it via the gRPC stream.
-func (s *GRPCSender) Send(data []byte) error {
+func (s *GRPCSender) Send(frame *pipeline.AudioFrame) error {
 	req := &pb.AudioChunk{
-		Pcm:        data,
+		Pcm:        frame.Data,
 		SampleRate: s.sampleRate,
 		Channels:   s.channels,
+		Timestamp:  frame.Timestamp,
 	}
 
 	return s.stream.Send(req)

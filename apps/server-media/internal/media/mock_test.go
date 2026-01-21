@@ -8,6 +8,7 @@ import (
 
 	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4"
+	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/pipeline"
 )
 
 // MockReceiver implements webrtc.Receiver interface for testing.
@@ -56,21 +57,21 @@ func (m *MockReceiver) Close() error {
 // MockTranscoder implements pipeline.Transcoder interface for testing.
 type MockTranscoder struct {
 	mu           sync.Mutex
-	WriteOpusFunc func([]byte) error
-	ReadPCMFunc   func(context.Context) ([]byte, error)
+	WriteOpusFunc func(*rtp.Packet) error
+	ReadPCMFunc   func(context.Context) (*pipeline.AudioFrame, error)
 	CloseFunc     func() error
 
 	// Channel to simulate data flow or blocking
-	PcmOutputChan chan []byte
+	PcmOutputChan chan *pipeline.AudioFrame
 }
 
 func NewMockTranscoder() *MockTranscoder {
 	return &MockTranscoder{
-		PcmOutputChan: make(chan []byte, 10),
+		PcmOutputChan: make(chan *pipeline.AudioFrame, 10),
 	}
 }
 
-func (m *MockTranscoder) WriteOpus(packet []byte) error {
+func (m *MockTranscoder) WriteOpus(packet *rtp.Packet) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.WriteOpusFunc != nil {
@@ -80,7 +81,7 @@ func (m *MockTranscoder) WriteOpus(packet []byte) error {
 	return nil
 }
 
-func (m *MockTranscoder) ReadPCM(ctx context.Context) ([]byte, error) {
+func (m *MockTranscoder) ReadPCM(ctx context.Context) (*pipeline.AudioFrame, error) {
 	m.mu.Lock()
 	if m.ReadPCMFunc != nil {
 		m.mu.Unlock()
@@ -108,18 +109,18 @@ func (m *MockTranscoder) Close() error {
 // MockSender implements upstream.AudioSender interface for testing.
 type MockSender struct {
 	mu       sync.Mutex
-	SendFunc func([]byte) error
+	SendFunc func(*pipeline.AudioFrame) error
 	CloseFunc func() error
 	
-	SentData [][]byte
+	SentData []*pipeline.AudioFrame
 }
 
-func (m *MockSender) Send(data []byte) error {
+func (m *MockSender) Send(frame *pipeline.AudioFrame) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.SentData = append(m.SentData, data)
+	m.SentData = append(m.SentData, frame)
 	if m.SendFunc != nil {
-		return m.SendFunc(data)
+		return m.SendFunc(frame)
 	}
 	return nil
 }
