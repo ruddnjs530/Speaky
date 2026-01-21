@@ -75,15 +75,46 @@ function assertBootstrapResponse(res: unknown): asserts res is {
     }
 }
 
+// ...생략 (기존 import/유틸 그대로)
+
 export function useSessionBootstrap() {
     const dispatch = useAppDispatch();
     const state = useAppStateValue();
 
-    // ✅ 중복 호출 방지 가드
-    // - Idle이 아닐 때(이미 진행/완료 상태) bootstrap을 다시 시작하지 않음
-    // - 단, Error 상태에서는 재시도 허용(원하면 유지)
     function canStartBootstrap(kind: string) {
         return kind === "Idle" || kind === "Error";
+    }
+
+    /** ✅ 신규: 호스트는 channelId 없이 시작 (서버가 토큰으로 채널 결정) */
+    async function startHost() {
+        if (!canStartBootstrap(state.kind)) return;
+
+        dispatch({ type: "BOOTSTRAP_START" });
+
+        try {
+            // ✅ 여기 API가 필요합니다: channelId 없이 host start
+            // 예: POST /api/live/host/start 같은 엔드포인트
+            const res = await sessionApi.startHostLive();
+
+            assertBootstrapResponse(res);
+
+            dispatch({
+                type: "BOOTSTRAP_SUCCESS",
+                payload: {
+                    channelId: res.channelId,
+                    sessionId: res.sessionId,
+                    role: toRole(res.role),
+                    wsUrl: res.wsUrl,
+                    signalingToken: res.token,
+                    clientId: getOrCreateClientId(),
+                },
+            });
+        } catch (e: unknown) {
+            dispatch({
+                type: "BOOTSTRAP_FAIL",
+                error: normalizeError(e, "REST bootstrap failed"),
+            });
+        }
     }
 
     async function start(channelId: string) {
@@ -93,8 +124,6 @@ export function useSessionBootstrap() {
 
         try {
             const res = await sessionApi.startLive(channelId);
-
-            // ✅ 추가: dispatch 전에 응답 검증
             assertBootstrapResponse(res);
 
             dispatch({
@@ -123,8 +152,6 @@ export function useSessionBootstrap() {
 
         try {
             const res = await sessionApi.joinLive(channelId);
-
-            // ✅ 추가: dispatch 전에 응답 검증
             assertBootstrapResponse(res);
 
             dispatch({
@@ -146,5 +173,6 @@ export function useSessionBootstrap() {
         }
     }
 
-    return { start, join };
+    return { startHost, start, join };
 }
+

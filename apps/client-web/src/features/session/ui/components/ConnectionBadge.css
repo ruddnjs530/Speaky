@@ -1,0 +1,14 @@
+.connection-badge {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.connection-badge__title {
+    font-weight: 700;
+}
+
+.connection-badge__subtitle {
+    font-size: 13px;
+    opacity: 0.85;
+}
