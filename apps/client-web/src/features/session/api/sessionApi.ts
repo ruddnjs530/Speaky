@@ -1,4 +1,5 @@
 import type { ApiErrorResponse, StartOrJoinResponse } from "./sessionApi.types";
+import { authHeaders } from "./authHeaders";
 
 async function parseError(res: Response): Promise<{ code: string; message: string }> {
     try {
@@ -12,25 +13,38 @@ async function parseError(res: Response): Promise<{ code: string; message: strin
     }
 }
 
-/**
- * 실제 엔드포인트는 팀 백엔드 스펙에 맞춰 교체하세요.
- * Day1에서는 "응답 타입 정리 + 상태머신 연결"이 목적입니다.
- */
 export const sessionApi = {
     async startLive(channelId: string): Promise<StartOrJoinResponse> {
-        const res = await fetch(`/api/channels/${encodeURIComponent(channelId)}/live/start`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-        });
+        const res = await fetch(
+            `/api/channels/${encodeURIComponent(channelId)}/live/start`,
+            {
+                method: "POST",
+                headers: authHeaders(),
+            }
+        );
 
         if (!res.ok) throw await parseError(res);
         return (await res.json()) as StartOrJoinResponse;
     },
 
     async joinLive(channelId: string): Promise<StartOrJoinResponse> {
-        const res = await fetch(`/api/channels/${encodeURIComponent(channelId)}/live/join`, {
+        const res = await fetch(
+            `/api/channels/${encodeURIComponent(channelId)}/live/join`,
+            {
+                method: "POST",
+                headers: authHeaders(),
+            }
+        );
+
+        if (!res.ok) throw await parseError(res);
+        return (await res.json()) as StartOrJoinResponse;
+    },
+
+    /** ✅ 호스트 전용: channelId 없이 시작 */
+    async startHostLive(): Promise<StartOrJoinResponse> {
+        const res = await fetch(`/api/live/host/start`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: authHeaders(),
         });
 
         if (!res.ok) throw await parseError(res);
