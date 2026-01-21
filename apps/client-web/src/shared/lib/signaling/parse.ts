@@ -10,7 +10,6 @@ function isRole(v: unknown): v is Role {
   return v === 'HOST' || v === 'GUEST' || v === 'SC';
 }
 
-// 들어온 raw(JSON string)을 Envelope로 파싱, 검증. 실패하면 null
 export function parseEnvelope(raw: unknown, logPrefix = '[WS]'): Envelope | null {
   if (typeof raw !== 'string') {
     console.warn(logPrefix, 'drop: non-string message', raw);
@@ -30,7 +29,6 @@ export function parseEnvelope(raw: unknown, logPrefix = '[WS]'): Envelope | null
     return null;
   }
 
-  // 필수: v/type/requestId/ts/channelId/sessionId/from.role/from.clientId
   if (data.v !== 1) {
     console.warn(logPrefix, 'drop: invalid v', data.v);
     return null;

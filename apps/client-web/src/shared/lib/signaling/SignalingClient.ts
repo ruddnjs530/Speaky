@@ -1,4 +1,5 @@
-import type { Envelope } from './envelope';
+import type { Envelope, Role } from './envelope';
+import { createEnvelope } from './envelope';
 import { parseEnvelope } from './parse';
 
 type Handlers = {
@@ -6,6 +7,14 @@ type Handlers = {
   onClose?: (ev: CloseEvent) => void;
   onError?: (ev: Event) => void;
   onMessage?: (msg: Envelope) => void;
+};
+
+type SendOpts = {
+  channelId: string;
+  sessionId: string;
+  from: { role: Role; clientId?: string };
+  requestId?: string;
+  ts?: number;
 };
 
 export class SignalingClient {
@@ -45,6 +54,12 @@ export class SignalingClient {
       throw new Error('WebSocket이 연결되어 있지 않습니다.');
     }
     this.ws.send(JSON.stringify(envelope));
+  }
+
+  sendMessage<T>(type: string, opts: SendOpts, payload?: T): Envelope<T> {
+    const env = createEnvelope<T>(type, opts, payload);
+    this.send(env as Envelope);
+    return env;
   }
 
   close(code?: number, reason?: string) {
