@@ -1,40 +1,42 @@
+import type { ReactNode } from "react";
 import { useAppStateValue } from "../state/useAppState";
 import { IdlePanel } from "./panels/IdlePanel";
 import { LoadingPanel } from "./panels/LoadingPanel";
 import { ReadyPanel } from "./panels/ReadyPanel";
 import { ErrorPanel } from "./panels/ErrorPanel";
 
-export function SessionGate() {
-    const state  = useAppStateValue();
+import "./SessionGate.css";
 
-    switch (state.kind) {
-        case "Idle":
-            return <IdlePanel />;
+export function SessionGate({ children }: { children: ReactNode }) {
+    const state = useAppStateValue();
 
-        case "SessionReady":
-            return <ReadyPanel />;
+    const showIdle = state.kind === "Idle";
+    const showReady = state.kind === "SessionReady";
+    const showLoading =
+        state.kind === "WsConnecting" ||
+        state.kind === "Attached" ||
+        state.kind === "PcConnecting" ||
+        state.kind === "Reconnecting";
+    const showError = state.kind === "Error";
 
-        case "WsConnecting":
-            return <LoadingPanel text="WsConnecting" />;
+    const shouldShowOverlay = showIdle || showReady || showLoading || showError;
 
-        case "Attached":
-            return <LoadingPanel text="Attached" />;
+    return (
+        <>
+            {/* 실제 페이지는 항상 렌더링 */}
+            {children}
 
-        case "PcConnecting":
-            return <LoadingPanel text="PcConnecting" />;
-
-        case "Connected":
-            return <LoadingPanel text="Connected" />;
-
-        case "Reconnecting":
-            return <LoadingPanel text="Reconnecting" />;
-
-        case "Error":
-            return <ErrorPanel />;
-
-        default: {
-            const _exhaustive: never = state;
-            return _exhaustive;
-        }
-    }
+            {/* 상태 안내 오버레이 */}
+            {shouldShowOverlay && (
+                <div className="sessionGateOverlay">
+                    <div className="sessionGatePanel">
+                        {showIdle && <IdlePanel />}
+                        {showReady && <ReadyPanel />}
+                        {showLoading && <LoadingPanel />}
+                        {showError && <ErrorPanel />}
+                    </div>
+                </div>
+            )}
+        </>
+    );
 }
