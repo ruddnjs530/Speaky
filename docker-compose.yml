@@ -55,6 +55,7 @@ services:
       - PYTHONPATH=/app:/packages/proto/generated/python
       - RVC_WEBUI_ROOT=/rvc-code
       - RVC_ASSETS_ROOT=/rvc-assets
+      - MODELS_CONFIG_PATH=/app/src/config/models.yaml
 
   # 4. Spring Signaling Server (Pending)
   server-sc:
