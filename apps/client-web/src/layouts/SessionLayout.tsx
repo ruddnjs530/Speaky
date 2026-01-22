@@ -1,10 +1,10 @@
 import { Outlet } from "react-router-dom";
-import { AppStateProvider } from "../features/session/state/AppStateProvider";
+import {SessionGate} from "../features/session/ui/SessionGate.tsx";
 
 export default function SessionLayout() {
     return (
-        <AppStateProvider>
+        <SessionGate>
             <Outlet />
-        </AppStateProvider>
+        </SessionGate>
     );
 }

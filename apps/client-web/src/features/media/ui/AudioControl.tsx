@@ -1,24 +1,22 @@
 import { useEffect, useState } from 'react';
-import type { RefObject } from 'react';
-
-type MediaEl = HTMLVideoElement | HTMLAudioElement;
 
 type Props = {
-    mediaRef: RefObject<MediaEl | null>;
+    mediaEl: HTMLMediaElement | null;
     className?: string;
 };
 
-export default function AudioControl({ mediaRef, className }: Props) {
+export default function AudioControl({ mediaEl, className }: Props) {
     const [volume, setVolume] = useState(1);
     const [muted, setMuted] = useState(false);
 
     useEffect(() => {
-        const el = mediaRef.current;
+        const el = mediaEl;
         if (!el) return;
 
+        // eslint-disable-next-line react-hooks/immutability
         el.volume = volume;
         el.muted = muted || volume === 0;
-    }, [volume, muted, mediaRef]);
+    }, [volume, muted, mediaEl]);
 
     const effectiveMuted = muted || volume === 0;
 

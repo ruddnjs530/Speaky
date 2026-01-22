@@ -34,3 +34,12 @@ export function sendIceWS(
 ) {
   client.send(createEnvelope('SIG_ICE', opts(args), { candidate }));
 }
+
+export function sendAttachWS(
+    client: SignalingClient,
+    args: SignalArgs,
+    payload: { resume?: boolean } = { resume: false }
+) {
+  client.send(createEnvelope('SYS_ATTACH', opts(args), payload));
+}
+

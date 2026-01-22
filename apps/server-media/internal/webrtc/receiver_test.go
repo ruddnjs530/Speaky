@@ -4,12 +4,18 @@ import (
 	"testing"
 
 	"github.com/pion/webrtc/v4"
-	internalWebrtc "lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/webrtc"
 	"github.com/stretchr/testify/assert"
+	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/config"
+	internalWebrtc "lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/webrtc"
 )
 
 func TestReceiver_Connect(t *testing.T) {
-	receiver := internalWebrtc.NewReceiver()
+	// Create required dependencies
+	api := webrtc.NewAPI()
+	cfg := &config.Config{
+		STUNServer: "stun:stun.l.google.com:19302",
+	}
+	receiver := internalWebrtc.NewReceiver(api, cfg)
 
 	config := webrtc.Configuration{}
 	clientPC, err := webrtc.NewPeerConnection(config)
@@ -35,7 +41,9 @@ func TestReceiver_Connect(t *testing.T) {
 }
 
 func TestReceiver_Connect_InvalidSDP(t *testing.T) {
-	receiver := internalWebrtc.NewReceiver()
+	api := webrtc.NewAPI()
+	cfg := &config.Config{}
+	receiver := internalWebrtc.NewReceiver(api, cfg)
 
 	invalidSDP := "This is an invalid SDP string."
 

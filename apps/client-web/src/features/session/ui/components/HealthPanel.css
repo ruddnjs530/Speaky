@@ -1,0 +1,45 @@
+.health-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.health-item {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.health-item__marker {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 48px;
+    height: 24px;
+    padding: 0 8px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+}
+
+.health-item__marker--unknown {
+    opacity: 0.7;
+}
+
+.health-item__body {
+    flex: 1;
+}
+
+.health-item__label {
+    font-weight: 700;
+}
+
+.health-item__desc {
+    margin-top: 4px;
+    font-size: 13px;
+    opacity: 0.85;
+}

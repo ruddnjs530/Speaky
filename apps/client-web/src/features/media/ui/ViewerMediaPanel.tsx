@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import StreamPreview from '../../screenShare/ui/StreamPreview';
 import AudioControl from './AudioControl';
@@ -12,118 +12,136 @@ type Props = {
   title?: string;
   muted?: boolean;
   onRetry?: () => void;
+  onReload?: () => void;
   phase?: RoomPhase;
 
-  // 부모(ViewerPage)에서 videoRef를 내려줄 수 있게
-  // ViewerPage가 useRef<HTMLVideoElement | null>(null) 이면 아래처럼 null 포함이 안정적
-  mediaRef?: React.RefObject<HTMLVideoElement | null>;
+
 };
 
+function getErrorName(e: unknown): string | undefined {
+  if (typeof e === 'object' && e !== null && 'name' in e) {
+    const v = (e as { name?: unknown }).name;
+    return typeof v === 'string' ? v : undefined;
+  }
+  return undefined;
+}
+
+function isAutoplayBlocked(e: unknown): boolean {
+  const name = getErrorName(e);
+  return name === 'NotAllowedError' || name === 'NotSupportedError';
+}
+
 export default function ViewerMediaPanel({
-  status,
-  stream,
-  title = '시청 화면(서버 출력)',
-  muted = false,
-  onRetry,
-  mediaRef,
-}: Props) {
-  // 내부 ref (부모가 안 주면 이거 사용)
-  const innerRef = useRef<HTMLVideoElement | null>(null);
-
-  // 실제로 사용할 ref는 부모 ref 우선
-  const videoRef = mediaRef ?? innerRef;
-
-  // autoplay 실패 시 유저 제스처 필요
+                                           status,
+                                           stream,
+                                           title = '시청 화면(서버 출력)',
+                                           muted = false,
+                                           onRetry,
+                                           onReload,
+                                         }: Props) {
+  const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
   const [needUserGesture, setNeedUserGesture] = useState(false);
   const [playMsg, setPlayMsg] = useState('');
 
-  // stream이 들어오면 autoplay 시도
-  useEffect(() => {
-    const v = videoRef.current;
-    if (!v) return;
+  const tryPlay = useCallback(async () => {
+    if (!videoEl) return;
+    if (!stream) return;
 
-    // stream이 없으면 오버레이 제거
+    try {
+      // eslint-disable-next-line react-hooks/immutability
+      videoEl.playsInline = true;
+      videoEl.muted = Boolean(muted);
+
+      await videoEl.play();
+
+      queueMicrotask(() => {
+        setNeedUserGesture(false);
+        setPlayMsg('');
+      });
+    } catch (e) {
+      const msg = isAutoplayBlocked(e)
+          ? '브라우저 정책으로 자동 재생이 차단되었습니다. 재생 버튼을 눌러주세요.'
+          : '재생에 실패했습니다. 다시 시도해주세요.';
+
+      queueMicrotask(() => {
+        setNeedUserGesture(true);
+        setPlayMsg(msg);
+      });
+    }
+  }, [videoEl, stream, muted]);
+
+  useEffect(() => {
+    if (!videoEl) return;
+
     if (!stream) {
-      setNeedUserGesture(false);
-      setPlayMsg('');
+      queueMicrotask(() => {
+        setNeedUserGesture(false);
+        setPlayMsg('');
+      });
       return;
     }
 
-    // StreamPreview가 srcObject 세팅을 하고 있을 가능성이 높지만,
-    // autoplay는 여기서 안전하게 한 번 더 시도
-    const tryPlay = async () => {
-      try {
-        await v.play();
-        setNeedUserGesture(false);
-        setPlayMsg('');
-      } catch {
-        setNeedUserGesture(true);
-        setPlayMsg('자동 재생이 차단되었어요. 재생 버튼을 눌러주세요.');
-      }
-    };
+    if (status !== 'connected') return;
 
     void tryPlay();
-  }, [stream, videoRef]);
 
-  const handleClickPlay = async () => {
-    const v = videoRef.current;
-    if (!v) return;
+    const onLoaded = () => void tryPlay();
+    videoEl.addEventListener('loadedmetadata', onLoaded);
+    return () => {
+      videoEl.removeEventListener('loadedmetadata', onLoaded);
+    };
+  }, [videoEl, stream, status, tryPlay]);
 
-    try {
-      await v.play();
-      setNeedUserGesture(false);
-      setPlayMsg('');
-    } catch {
-      setNeedUserGesture(true);
-      setPlayMsg('재생이 실패했어요. 브라우저 자동재생 설정을 확인해주세요.');
-    }
-  };
+  const handleClickPlay = useCallback(async () => {
+    // TODO(Day3-B): 클릭 재생 성공 후 muted 해제 정책 결정 필요.
+    // if (videoEl) videoEl.muted = false;
+    await tryPlay();
+  }, [tryPlay]);
 
   return (
-    <div style={{ display: 'grid', gap: 10 }}>
-      <ReconnectBanner status={status} onRetry={onRetry} />
+      <div style={{ display: 'grid', gap: 10 }}>
+        <ReconnectBanner status={status} onRetry={onRetry} onReload={onReload} />
 
-      {/* video를 실제로 렌더링하는 컴포넌트 */}
-      <div style={{ position: 'relative' }}>
-        <StreamPreview ref={videoRef} title={title} stream={stream} muted={muted} />
 
-        {/* autoplay fallback 오버레이 */}
-        {needUserGesture && (
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              display: 'grid',
-              placeItems: 'center',
-              gap: 12,
-              background: 'rgba(0,0,0,0.55)',
-              color: '#fff',
-              padding: 16,
-              textAlign: 'center',
-            }}
-          >
-            <div>{playMsg}</div>
-            <button
-              onClick={handleClickPlay}
-              style={{
-                padding: '10px 14px',
-                borderRadius: 8,
-                border: '1px solid rgba(255,255,255,0.5)',
-                background: 'rgba(255,255,255,0.12)',
-                color: '#fff',
-                cursor: 'pointer',
-              }}
-            >
-              재생하기
-            </button>
-          </div>
-        )}
+        <div style={{ position: 'relative' }}>
+          <StreamPreview ref={setVideoEl} title={title} stream={stream} muted={muted} />
+
+          {needUserGesture && (
+              <div
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    display: 'grid',
+                    placeItems: 'center',
+                    gap: 12,
+                    background: 'rgba(0,0,0,0.55)',
+                    color: '#fff',
+                    padding: 16,
+                    textAlign: 'center',
+                  }}
+              >
+                <div>{playMsg}</div>
+                <button
+                    onClick={handleClickPlay}
+                    style={{
+                      padding: '10px 14px',
+                      borderRadius: 8,
+                      border: '1px solid rgba(255,255,255,0.5)',
+                      background: 'rgba(255,255,255,0.12)',
+                      color: '#fff',
+                      cursor: 'pointer',
+                    }}
+                >
+                  재생하기
+                </button>
+              </div>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          {/* AudioControl을 엘리먼트 직접 받도록 수정 필요 */}
+          <AudioControl mediaEl={videoEl} />
+        </div>
       </div>
-
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        {/* 같은 videoRef를 AudioControl에도 전달 */}
-        <AudioControl mediaRef={videoRef} />
-      </div>
-    </div>
   );
 }

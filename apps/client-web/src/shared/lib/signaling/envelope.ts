@@ -7,12 +7,12 @@ export type Envelope<T = unknown> = {
   requestId: string;
   ts: number;
 
-  channelId: string;   
-  sessionId: string;   
+  channelId: string;
+  sessionId: string;
 
   from: {
     role: Role;
-    clientId: string;  
+    clientId: string;
   };
 
   payload?: T;
