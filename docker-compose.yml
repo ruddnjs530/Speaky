@@ -47,9 +47,14 @@ services:
     volumes:
       - ./apps/server-ai:/app
       - ./packages/proto:/packages/proto
+      - ${RVC_ASSETS_PATH}:/rvc-assets:ro
+      - ${RVC_CODE_INFER_PATH}:/rvc-code/infer:ro
+      - ${RVC_CODE_CONFIGS_PATH}:/rvc-code/configs:ro
     environment:
       - PYTHONUNBUFFERED=1
       - PYTHONPATH=/app:/packages/proto/generated/python
+      - RVC_WEBUI_ROOT=/rvc-code
+      - RVC_ASSETS_ROOT=/rvc-assets
 
   # 4. Spring Signaling Server (Pending)
   server-sc:
