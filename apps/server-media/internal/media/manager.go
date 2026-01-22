@@ -37,13 +37,22 @@ func NewRoomManager(cfg *config.Config) (*RoomManager, error) {
 	}, nil
 }
 
-// CreateRoom creates a new room and registers it.
+// CreateRoom creates a new room with a random UUID and registers it.
 func (m *RoomManager) CreateRoom(hostID string) (*Room, error) {
+	// Generate unique Room ID
+	roomID := uuid.New().String()
+	return m.CreateRoomWithID(roomID)
+}
+
+// CreateRoomWithID creates a new room with a specific ID and registers it.
+// This is useful for testing or deterministic room allocation.
+func (m *RoomManager) CreateRoomWithID(roomID string) (*Room, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Generate unique Room ID
-	roomID := uuid.New().String()
+	if _, exists := m.rooms[roomID]; exists {
+		return nil, fmt.Errorf("room already exists: %s", roomID)
+	}
 
 	room := NewRoom(roomID, m.cfg, m.api)
 	m.rooms[roomID] = room

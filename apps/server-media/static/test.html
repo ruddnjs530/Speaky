@@ -110,7 +110,7 @@
         <!-- Host Panel -->
         <div class="panel">
             <h2>🎤 Host (Broadcaster)</h2>
-            <input type="text" id="roomId" placeholder="Room ID" value="test-room">
+            <input type="text" id="roomId" placeholder="Room ID (Empty = Auto)" value="">
             <input type="text" id="hostId" placeholder="User ID" value="host-1"><br>
             <button id="startHost">Start Host</button>
             <button id="stopHost" disabled>Stop Host</button>
@@ -131,7 +131,7 @@
     </div>
 
     <script>
-        const API_URL = 'http://localhost:8080';
+        const API_URL = 'http://localhost:8081';
 
         let hostPC = null;
         let guestPC = null;
@@ -203,13 +203,20 @@
                     throw new Error(data.error);
                 }
 
+                // Update Room ID if we created one
+                if (data.room_id) {
+                    document.getElementById('roomId').value = data.room_id;
+                    updateStatus('hostStatus', `✅ Connected! Room: ${data.room_id}`);
+                } else {
+                    updateStatus('hostStatus', '✅ Connected! Streaming...');
+                }
+
                 // Set answer
                 await hostPC.setRemoteDescription({
                     type: 'answer',
                     sdp: data.sdp
                 });
 
-                updateStatus('hostStatus', '✅ Connected! Streaming...');
                 document.getElementById('startHost').disabled = true;
                 document.getElementById('stopHost').disabled = false;
 
