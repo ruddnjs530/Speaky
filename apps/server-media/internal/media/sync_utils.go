@@ -21,6 +21,10 @@ const (
 //
 // Formula: TargetVideoTS = BaseVideoTS + (AudioTS - BaseAudioTS) × 1.875
 //
+// Rollover Handling: Uses signed difference (int32) to correctly handle
+// uint32 wraparound per RFC 3550. This ensures correct behavior even when
+// timestamps wrap from 4,294,967,295 to 0.
+//
 // Parameters:
 //   - audioTS: Current Audio RTP timestamp (from AI response)
 //   - baseAudioTS: First Audio RTP timestamp received (baseline)
@@ -29,12 +33,13 @@ const (
 // Returns:
 //   - Correlated Video RTP timestamp to query from VideoQueue
 func GetCorrelatedVideoTS(audioTS, baseAudioTS, baseVideoTS uint32) uint32 {
-	// Calculate delta from baseline
-	audioDelta := audioTS - baseAudioTS
+	// Calculate delta using signed difference (handles rollover)
+	// uint32 subtraction wraps correctly, int32 cast interprets sign
+	audioDelta := int32(audioTS - baseAudioTS)
 
-	// Scale to video clock rate
-	videoDelta := uint32(float64(audioDelta) * ClockRateRatio)
+	// Scale to video clock rate (preserving sign)
+	videoDelta := int32(float64(audioDelta) * ClockRateRatio)
 
-	// Add to video baseline
-	return baseVideoTS + videoDelta
+	// Add to video baseline (uint32 addition wraps correctly)
+	return baseVideoTS + uint32(videoDelta)
 }

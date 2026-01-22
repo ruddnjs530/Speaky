@@ -77,3 +77,29 @@ func TestGetCorrelatedVideoTS_Ratio(t *testing.T) {
 	assert.Equal(t, 1.875, ClockRateRatio)
 	assert.Equal(t, float64(90000)/float64(48000), ClockRateRatio)
 }
+
+func TestGetCorrelatedVideoTS_Rollover(t *testing.T) {
+    // Scenario: Timestamp wraps around from max uint32 to 0
+    baseAudioTS := uint32(4294967000) 
+    baseVideoTS := uint32(2000000000) 
+    
+    // Audio wraps: 4294967000 -> (296 ticks) -> 0 -> (300 ticks) -> 300
+    // Total Audio Delta = 596 ticks
+    audioTS := uint32(300)
+    
+    // Expected Calculation (Manual Verification):
+    // Audio Delta = 596
+    // Video Delta = 596 * 1.875 = 1117.5 -> 1117 (int32 cast truncates)
+    // Expected Video TS = 2000000000 + 1117 = 2000001117
+    expected := uint32(2000001117)
+    
+    result := GetCorrelatedVideoTS(audioTS, baseAudioTS, baseVideoTS)
+    
+    // 1. 값의 정확성 검증 (로직 복사가 아닌 결과값 비교)
+    assert.Equal(t, expected, result, "Should calculate correct video TS across rollover")
+
+    // 2. 내부 로직(Delta) 검증을 위한 보조 확인
+    // (선택 사항: 만약 내부 delta도 확인하고 싶다면)
+    realDelta := int32(audioTS - baseAudioTS)
+    assert.Equal(t, int32(596), realDelta, "Sanity check: Audio delta should be 596")
+}

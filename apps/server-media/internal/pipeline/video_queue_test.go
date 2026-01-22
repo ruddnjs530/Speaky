@@ -153,20 +153,14 @@ func TestVideoQueue_Prune_Rollover(t *testing.T) {
 	vq.Push(&rtp.Packet{Header: rtp.Header{Timestamp: oldTS}})
 	vq.Push(&rtp.Packet{Header: rtp.Header{Timestamp: newTS}})
 
-	// Current Prune implementation uses simple comparison (ts < olderThan).
-	// This is acceptable for MVP with short sessions.
-	// For production: need RTP-aware comparison (diff > 2^31).
-	
-	// Test current behavior: Prune with threshold = 50
-	// oldTS (4.2B) > 50, so it won't be pruned with simple comparison.
-	// This is a KNOWN LIMITATION for MVP.
+	// Prune with threshold = 50
+	// oldTS is OLDER than 50 (signed diff = oldTS - 50 = huge negative)
+	// newTS is NEWER than 50 (signed diff = newTS - 50 = 50, positive)
 	vq.Prune(50)
 	
-	// Verify oldTS is NOT pruned (current simple implementation)
-	assert.NotNil(t, vq.Pop(oldTS), "Simple Prune doesn't handle rollover (MVP limitation)")
+	// Verify oldTS is pruned (rollover-aware comparison)
+	assert.Nil(t, vq.Pop(oldTS), "Old packet should be pruned (rollover handled)")
 	
 	// newTS should remain
-	assert.NotNil(t, vq.Pop(newTS))
-	
-	// TODO (Production): Implement RTP-aware Prune with rollover logic
+	assert.NotNil(t, vq.Pop(newTS), "Recent packet should remain")
 }
