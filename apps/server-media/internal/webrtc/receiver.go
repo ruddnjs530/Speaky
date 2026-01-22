@@ -42,7 +42,7 @@ func (r *PionReceiver) SendPLI(ssrc uint32) error {
 // readTrackLoop continuously reads RTP packets from the track.
 func (r *PionReceiver) readTrackLoop(track *webrtc.TrackRemote, isAudio bool) {
 	ssrc := uint32(track.SSRC())
-	
+
 	// Send initial PLI for Video to ensure we get a Keyframe ASAP
 	if !isAudio {
 		go func() {
@@ -118,8 +118,11 @@ func NewReceiver(api *webrtc.API, cfg *config.Config) *PionReceiver {
 // Connect performs the SDP handshake and sets up the audio track listener.
 func (r *PionReceiver) Connect(offerSDP string) (string, error) {
 	// Prepare ICE configuration with STUN/TURN servers from config.
-	iceServers := []webrtc.ICEServer{
-		{URLs: []string{r.cfg.STUNServer}},
+	var iceServers []webrtc.ICEServer
+	if r.cfg.STUNServer != "" {
+		iceServers = append(iceServers, webrtc.ICEServer{
+			URLs: []string{r.cfg.STUNServer},
+		})
 	}
 
 	if r.cfg.TURNServer != "" {
@@ -191,8 +194,6 @@ func (r *PionReceiver) Connect(offerSDP string) (string, error) {
 	// 4. Return the final SDP containing all candidates.
 	return r.pc.LocalDescription().SDP, nil
 }
-
-
 
 // OnAudioPacket registers the callback function for incoming audio packets.
 func (r *PionReceiver) OnAudioPacket(callback func(packet *rtp.Packet)) {

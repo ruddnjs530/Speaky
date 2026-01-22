@@ -77,10 +77,20 @@ func NewPionSender(pc *webrtc.PeerConnection) (*PionSender, error) {
 func (s *PionSender) WriteRTP(packet *rtp.Packet) error {
 	switch packet.PayloadType {
 	case 111: // Opus
+		// Force standard Opus PT
+		packet.PayloadType = 111
 		return s.audioTrack.WriteRTP(packet)
-	default: // Video (VP8 typically uses 96)
+	default: // Video (VP8)
+		// Force standard VP8 PT (96) - Fixes mismatch with dynamic ingress PTs
+		packet.PayloadType = 96
 		return s.videoTrack.WriteRTP(packet)
 	}
+}
+
+// GetPeerConnection returns the underlying PeerConnection.
+// This is used for Guest connections to the Egress PC.
+func (s *PionSender) GetPeerConnection() *webrtc.PeerConnection {
+	return s.pc
 }
 
 // Close releases resources held by the sender.

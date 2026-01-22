@@ -35,6 +35,7 @@ type OpusEncoder struct {
 	upsampler    audio.Resampler // Use interface
 	encoder      *opus.Encoder
 	currentTS    uint32 // Independent Egress RTP timestamp
+	currentSeq   uint16 // Independent Egress RTP sequence number
 	pcmBuffer    []int16
 	opusBuffer   []byte
 	stereoBuffer []byte // Pre-allocated buffer for mono→stereo conversion
@@ -60,14 +61,15 @@ func NewOpusEncoder(inputSampleRate, inputChannels int, initialTS uint32) (*Opus
 	}
 
 	// Calculate max stereo buffer size
-	// 16kHz * 20ms * 2 channels * 2 bytes/sample = 1280 bytes
-	// Add margin for safety
-	maxStereoSize := 2000
+	// 48kHz * 20ms * 2 channels * 2 bytes/sample = 3840 bytes
+	// Use 4096 for safety and alignment
+	maxStereoSize := 4096
 
 	return &OpusEncoder{
 		upsampler:    upsampler, // Interface type
 		encoder:      encoder,
 		currentTS:    initialTS,
+		currentSeq:   0,
 		pcmBuffer:    make([]int16, SamplesPerFrame*EgressChannels),
 		opusBuffer:   make([]byte, 4000), // Max Opus frame size
 		stereoBuffer: make([]byte, maxStereoSize),
@@ -149,14 +151,15 @@ func (e *OpusEncoder) Encode(frame *AudioFrame) (*rtp.Packet, error) {
 			Version:        2,
 			PayloadType:    111, // Opus payload type (standard)
 			Timestamp:      e.currentTS,
-			SequenceNumber: 0, // Will be set by RTP sender
-			SSRC:           0, // Will be set by RTP sender
+			SequenceNumber: e.currentSeq, // Manually incremented
+			SSRC:           0,            // Will be set by RTP sender
 		},
 		Payload: e.opusBuffer[:n],
 	}
 
 	// Step 6: Increment timestamp for next frame
 	e.currentTS += TimestampIncrement
+	e.currentSeq++
 
 	return packet, nil
 }
