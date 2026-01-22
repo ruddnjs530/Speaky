@@ -13,9 +13,11 @@ import (
 	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/pipeline"
 )
 
-// AudioSender defines the capability to send audio data to an external service.
+// AudioSender defines the capability to send audio data to an external service
+// and receive processed responses.
 type AudioSender interface {
 	Send(frame *pipeline.AudioFrame) error
+	Receive() (*pipeline.AudioFrame, error)
 	Close() error
 }
 
@@ -67,6 +69,19 @@ func (s *GRPCSender) Send(frame *pipeline.AudioFrame) error {
 	}
 
 	return s.stream.Send(req)
+}
+
+// Receive reads a processed AudioChunk from the AI server.
+func (s *GRPCSender) Receive() (*pipeline.AudioFrame, error) {
+	resp, err := s.stream.Recv()
+	if err != nil {
+		return nil, fmt.Errorf("failed to receive from stream: %w", err)
+	}
+
+	return &pipeline.AudioFrame{
+		Data:      resp.Pcm,
+		Timestamp: resp.Timestamp,
+	}, nil
 }
 
 // Close terminates the stream and the connection.
