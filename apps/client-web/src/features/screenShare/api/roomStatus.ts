@@ -9,6 +9,9 @@ type RoomStatusResponse =
   | Record<string, unknown>;
 
 function normalizeRoomPhase(data: RoomStatusResponse): RoomPhase {
+
+  // TODO(Day3-B): status 문자열 파싱(wait/live/end 포함)은 임시 방편입니다.
+  // 계약 확정 시 정확한 enum(phase) 또는 boolean 필드로만 판정하도록 변경하세요.
   if (typeof (data as any).phase === 'string') {
     const p = (data as any).phase;
     if (p === 'waiting' || p === 'live' || p === 'ended') return p;
@@ -28,6 +31,9 @@ function normalizeRoomPhase(data: RoomStatusResponse): RoomPhase {
 }
 
 export async function fetchRoomPhase(roomId: string): Promise<RoomPhase> {
+
+  // TODO(Day3-B): endpoint(/api/rooms/{roomId}/status) 및 실패 시 처리('error')는 임시입니다.
+  // 최종적으로는 SESSION_NOT_ACTIVE/ENDED를 명확한 코드로 받아 UI 분기를 고정해야 합니다.
   const res = await fetch(`/api/rooms/${roomId}/status`);
   if (!res.ok) return 'error';
 

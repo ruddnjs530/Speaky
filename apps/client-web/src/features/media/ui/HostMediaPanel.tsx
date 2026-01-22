@@ -1,8 +1,7 @@
-import { useRef } from 'react';
-
 import StreamPreview from '../../screenShare/ui/StreamPreview';
 import AudioControl from './AudioControl';
 import type { ConnectionStatus } from '../model/useConnectionStatus';
+import {useState} from "react";
 
 type Props = {
     status?: ConnectionStatus;
@@ -16,13 +15,14 @@ export default function HostMediaPanel({
                                            title = '송출 미리보기',
                                            muted = true,
                                        }: Props) {
-    const videoRef = useRef<HTMLVideoElement | null>(null);
+
+    const [mediaEl, setMediaEl] = useState<HTMLVideoElement | null>(null);
 
     return (
         <div style={{ display: 'grid', gap: 10 }}>
-            <StreamPreview ref={videoRef} title={title} stream={stream} muted={muted} />
+            <StreamPreview ref={setMediaEl} title={title} stream={stream} muted={muted} />
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <AudioControl mediaRef={videoRef} />
+                <AudioControl mediaEl={mediaEl} />
             </div>
         </div>
     );

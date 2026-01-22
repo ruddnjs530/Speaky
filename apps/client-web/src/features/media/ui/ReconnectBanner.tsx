@@ -3,10 +3,15 @@ import { getStatusMessage } from '../model/useConnectionStatus';
 
 type Props = {
     status: ConnectionStatus;
+
+    /** 권장: WebRTC/WS 재연결(REST join + connect 재호출) */
     onRetry?: () => void;
+
+    /** 최후 수단: 페이지 새로고침 */
+    onReload?: () => void;
 };
 
-export default function ReconnectBanner({ status, onRetry }: Props) {
+export default function ReconnectBanner({ status, onRetry, onReload }: Props) {
     const message = getStatusMessage(status);
     if (!message) return null;
 
@@ -25,10 +30,20 @@ export default function ReconnectBanner({ status, onRetry }: Props) {
             }}
         >
             <span>{message}</span>
+
             {isFailed && (
-                <button type="button" onClick={onRetry}>
-                    새로고침
-                </button>
+                <div style={{ display: 'flex', gap: 8 }}>
+                    {onRetry && (
+                        <button type="button" onClick={onRetry}>
+                            다시 시도
+                        </button>
+                    )}
+                    {onReload && (
+                        <button type="button" onClick={onReload}>
+                            새로고침
+                        </button>
+                    )}
+                </div>
             )}
         </div>
     );
