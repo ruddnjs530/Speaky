@@ -1,19 +1,46 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import signal
-from typing import AsyncIterator
+from typing import AsyncIterator, Optional
 
 import grpc
 
 # proto에서 생성된 코드 import
 from shared_proto import voice_pb2, voice_pb2_grpc
 
+# RVC 모델 관리자 import
+from src.services.model_manager import VoiceModelManager, load_models_from_config
+
 
 class VoiceService(voice_pb2_grpc.VoiceServiceServicer):
+    def __init__(self, model_manager: VoiceModelManager):
+        self.model_manager = model_manager
+    
     async def GetStatus(self, request: voice_pb2.StatusRequest, context: grpc.aio.ServicerContext):
-        # MVP: 모델 로딩 전이므로 항상 READY로 응답 (나중에 LOADING/ERROR로 확장)
-        return voice_pb2.StatusResponse(status="READY")
+        """서버 전체 상태 반환
+        
+        - 하나라도 READY 모델이 있으면 READY 반환
+        - 모든 모델이 ERROR면 ERROR 반환
+        - 그 외는 LOADING 반환
+        """
+        models = self.model_manager.list_models()
+        if not models:
+            return voice_pb2.StatusResponse(status="ERROR")
+        
+        # 하나라도 READY 모델이 있으면 READY
+        has_ready = any(m["status"] == "READY" for m in models.values())
+        if has_ready:
+            return voice_pb2.StatusResponse(status="READY")
+        
+        # 모든 모델이 ERROR면 ERROR
+        all_error = all(m["status"] == "ERROR" for m in models.values())
+        if all_error:
+            return voice_pb2.StatusResponse(status="ERROR")
+        
+        # 그 외는 LOADING
+        return voice_pb2.StatusResponse(status="LOADING")
 
     async def ConvertStream(
         self,
@@ -21,33 +48,105 @@ class VoiceService(voice_pb2_grpc.VoiceServiceServicer):
         context: grpc.aio.ServicerContext,
     ) -> AsyncIterator[voice_pb2.AudioChunk]:
         """
-        MVP: pass-through (에코)
-        - Media Server가 보낸 PCM chunk를 그대로 반환
-        - 나중에 여기서 RVC 변환(PCM -> PCM)을 수행
+        오디오 스트림 변환
+        - AudioChunk의 model_id를 받아서 해당 모델 사용
+        - model_id가 없으면 첫 번째 READY 모델 사용
+        - 모델이 없으면 pass-through
         """
+        current_model_id: Optional[str] = None
+        converter = None
+        
         async for chunk in request_iterator:
-            # 그대로 반환 (sample_rate/channels도 유지)
+            # model_id 추출 (AudioChunk의 model_id 필드 사용)
+            model_id = chunk.model_id if chunk.model_id else None
+            
+            # model_id가 없으면 첫 번째 READY 모델 사용
+            if not model_id:
+                models = self.model_manager.list_models()
+                ready_models = [m for m in models.values() if m["status"] == "READY"]
+                if ready_models:
+                    model_id = ready_models[0]["model_id"]
+            
+            # 모델이 변경되었거나 처음인 경우
+            if model_id and model_id != current_model_id:
+                converter = self.model_manager.get_converter(model_id)
+                if converter:
+                    current_model_id = model_id
+                    print(f"[AI Worker] Using model: {model_id}")
+                else:
+                    print(f"[WARNING] Model not found or not ready: {model_id}, using pass-through")
+                    converter = None
+                    current_model_id = None
+            
+            # 모델이 없으면 pass-through
+            if converter is None:
+                yield voice_pb2.AudioChunk(
+                    pcm=chunk.pcm,
+                    sample_rate=chunk.sample_rate,
+                    channels=chunk.channels,
+                )
+                continue
+            
+            # RVC 변환 수행
+            try:
+                out_pcm = await asyncio.to_thread(
+                    converter.convert,
+                    chunk.pcm,
+                    int(chunk.sample_rate),
+                    int(chunk.channels),
+                )
+            except Exception as e:
+                print(f"[ERROR] Conversion failed: {e}")
+                # 변환 실패 시 pass-through
+                out_pcm = chunk.pcm
+            
             yield voice_pb2.AudioChunk(
-                pcm=chunk.pcm,
+                pcm=out_pcm,
                 sample_rate=chunk.sample_rate,
                 channels=chunk.channels,
             )
 
 
 async def serve(host: str = "0.0.0.0", port: int = 50051) -> None:
+    # 모델 매니저 초기화
+    model_manager = VoiceModelManager()
+    
+    # 모델 설정 로드
+    config_path = os.getenv("MODELS_CONFIG_PATH", "src/config/models.yaml")
+    configs = load_models_from_config(config_path)
+    
+    # 모델 등록
+    for config in configs:
+        model_manager.register_model(config)
+    
+    # 모든 모델 로딩
+    if configs:
+        print(f"[AI Worker] Loading {len(configs)} models...")
+        await model_manager.load_all_models()
+        loaded_models = list(model_manager.list_models().keys())
+        print(f"[AI Worker] Loaded models: {loaded_models}")
+    else:
+        print("[AI Worker] No models configured, running in pass-through mode")
+    
+    # gRPC 서버 설정
     server = grpc.aio.server(
         options=[
             # 메시지 크기 제한(기본이 작아서 스트리밍 오디오에서 종종 걸림) - 필요 시 조정
-            ("grpc.max_receive_message_length", 16 * 1024 * 1024),
-            ("grpc.max_send_message_length", 16 * 1024 * 1024),
+            ("grpc.max_receive_message_length", 64 * 1024 * 1024),
+            ("grpc.max_send_message_length", 64 * 1024 * 1024),
         ]
     )
-    voice_pb2_grpc.add_VoiceServiceServicer_to_server(VoiceService(), server)
+    
+    voice_pb2_grpc.add_VoiceServiceServicer_to_server(
+        VoiceService(model_manager), server
+    )
+    
     listen_addr = f"{host}:{port}"
     server.add_insecure_port(listen_addr)
 
     await server.start()
-    print(f"[AI Worker] gRPC server started at {listen_addr}")
+    rvc_status = "ON" if configs else "OFF"
+    print(f"[AI Worker] gRPC server started at {listen_addr} (RVC={rvc_status})")
 
     # Ctrl+C graceful shutdown
     stop_event = asyncio.Event()
