@@ -1,7 +1,7 @@
 models:
   - model_id: "Korone Voice"
-    model_path: "/rvc-assets/weights/Korone.pth"
-    index_path: "/rvc-assets/indices/test_0119_02_IVF81_Flat_nprobe_1_test_0119_02_v2.index"
+    model_path: "/rvc-code/assets/weights/Korone.pth"
+    index_path: "/rvc-code/assets/indices/test_0119_02_IVF81_Flat_nprobe_1_test_0119_02_v2.index"
     index_rate: 0.75
     pitch: 0
     protect: 0.33
@@ -9,8 +9,8 @@ models:
     device: "cuda"
   
   - model_id: "Test Voice 1"
-    model_path: "/rvc-assets/weights/test_0119_02.pth"
-    index_path: "/rvc-assets/indices/test_0119_02_IVF81_Flat_nprobe_1_test_0119_02_v2.index"
+    model_path: "/rvc-code/assets/weights/test_0119_02.pth"
+    index_path: "/rvc-code/assets/indices/test_0119_02_IVF81_Flat_nprobe_1_test_0119_02_v2.index"
     index_rate: 0.75
     pitch: 0
     protect: 0.33
@@ -18,7 +18,7 @@ models:
     device: "cuda"
   
   - model_id: "Test Voice 2"
-    model_path: "/rvc-assets/weights/test_0116_01.pth"
+    model_path: "/rvc-code/assets/weights/test_0116_01.pth"
     # 인덱스 없음
     index_rate: 0.0
     pitch: 0
@@ -27,7 +27,7 @@ models:
     device: "cuda"
   
   - model_id: "Test Voice 3"
-    model_path: "/rvc-assets/weights/test_0119_01.pth"
+    model_path: "/rvc-code/assets/weights/test_0119_01.pth"
     # 인덱스 없음
     index_rate: 0.0
     pitch: 0
