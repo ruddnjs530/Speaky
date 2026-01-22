@@ -20,4 +20,5 @@ message AudioChunk {
   bytes pcm = 1;
   int32 sample_rate = 2;
   int32 channels = 3;
+  string model_id = 4;
 }
