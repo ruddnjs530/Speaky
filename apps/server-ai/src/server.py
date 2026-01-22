@@ -49,34 +49,39 @@ class VoiceService(voice_pb2_grpc.VoiceServiceServicer):
     ) -> AsyncIterator[voice_pb2.AudioChunk]:
         """
         오디오 스트림 변환
-        - AudioChunk의 model_id를 받아서 해당 모델 사용
-        - model_id가 없으면 첫 번째 READY 모델 사용
+        - AudioChunk의 voice_model_id를 받아서 해당 모델 사용
+        - voice_model_id가 없으면 첫 번째 READY 모델 사용
         - 모델이 없으면 pass-through
         """
-        current_model_id: Optional[str] = None
+        current_model_name: Optional[str] = None
         converter = None
         
         async for chunk in request_iterator:
-            # model_id 추출 (AudioChunk의 model_id 필드 사용)
-            model_id = chunk.model_id if chunk.model_id else None
+            # voice_model_id 추출 (int64) 및 model_name(string)로 변환
+            voice_model_id = chunk.voice_model_id if chunk.voice_model_id else None
+            model_name = None
             
-            # model_id가 없으면 첫 번째 READY 모델 사용
-            if not model_id:
+            if voice_model_id is not None:
+                # voice_model_id로 model_name 가져오기
+                model_name = self.model_manager.get_model_name_by_voice_model_id(voice_model_id)
+            
+            # model_name이 없으면 첫 번째 READY 모델 사용
+            if not model_name:
                 models = self.model_manager.list_models()
                 ready_models = [m for m in models.values() if m["status"] == "READY"]
                 if ready_models:
-                    model_id = ready_models[0]["model_id"]
+                    model_name = ready_models[0]["model_name"]
             
             # 모델이 변경되었거나 처음인 경우
-            if model_id and model_id != current_model_id:
-                converter = self.model_manager.get_converter(model_id)
+            if model_name and model_name != current_model_name:
+                converter = self.model_manager.get_converter(model_name)
                 if converter:
-                    current_model_id = model_id
-                    print(f"[AI Worker] Using model: {model_id}")
+                    current_model_name = model_name
+                    print(f"[AI Worker] Using model: {model_name}")
                 else:
-                    print(f"[WARNING] Model not found or not ready: {model_id}, using pass-through")
+                    print(f"[WARNING] Model not found or not ready: {model_name}, using pass-through")
                     converter = None
-                    current_model_id = None
+                    current_model_name = None
             
             # 모델이 없으면 pass-through
             if converter is None:
