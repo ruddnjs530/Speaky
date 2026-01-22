@@ -6,8 +6,17 @@ FROM python:3.10-slim AS base
 WORKDIR /app
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
+RUN apt-get update && \
+    (apt-get install -y --no-install-recommends \
+        gcc \
+        g++ \
+        make \
+        ffmpeg \
+     || (sleep 3 && apt-get update && apt-get install -y --no-install-recommends --fix-missing \
+         gcc \
+         g++ \
+         make \
+         ffmpeg)) \
     && rm -rf /var/lib/apt/lists/*
 
 # 1. Copy Shared Packages (Proto)
