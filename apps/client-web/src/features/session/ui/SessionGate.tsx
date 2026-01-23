@@ -4,6 +4,7 @@ import { IdlePanel } from "./panels/IdlePanel";
 import { LoadingPanel } from "./panels/LoadingPanel";
 import { ReadyPanel } from "./panels/ReadyPanel";
 import { ErrorPanel } from "./panels/ErrorPanel";
+import { DebugPanel } from "./panels/DebugPanel";
 
 import "./SessionGate.css";
 
@@ -39,6 +40,8 @@ export function SessionGate({ children }: { children: ReactNode }) {
                     </div>
                 </div>
             )}
+
+            {isDev && <DebugPanel />}{/* ✅ 추가 */}
         </>
     );
 }
