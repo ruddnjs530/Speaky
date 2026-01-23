@@ -89,6 +89,7 @@ class VoiceService(voice_pb2_grpc.VoiceServiceServicer):
                     pcm=chunk.pcm,
                     sample_rate=chunk.sample_rate,
                     channels=chunk.channels,
+                    timestamp=chunk.timestamp,
                 )
                 continue
             
@@ -109,6 +110,7 @@ class VoiceService(voice_pb2_grpc.VoiceServiceServicer):
                 pcm=out_pcm,
                 sample_rate=chunk.sample_rate,
                 channels=chunk.channels,
+                timestamp=chunk.timestamp,
             )
 
 
