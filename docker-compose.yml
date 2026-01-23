@@ -48,9 +48,21 @@ services:
     volumes:
       - ./apps/server-ai:/app
       - ./packages/proto:/packages/proto
+      - ${RVC_ASSETS_PATH}:/rvc-code/assets:ro
+      - ${RVC_CODE_INFER_PATH}:/rvc-code/infer:ro
+      - ${RVC_CODE_CONFIGS_PATH}:/rvc-code/configs
     environment:
       - PYTHONUNBUFFERED=1
       - PYTHONPATH=/app:/packages/proto/generated/python
+      - RVC_WEBUI_ROOT=/rvc-code
+      - MODELS_CONFIG_PATH=/app/src/config/models.yaml
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
 
   # 4. Spring Signaling Server (Pending)
   server-sc:
