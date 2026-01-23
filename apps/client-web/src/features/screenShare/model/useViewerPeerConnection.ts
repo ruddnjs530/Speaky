@@ -239,6 +239,12 @@ export function useViewerPeerConnection({
 
     sigRef.current = sig;
     try {
+      sig.setContext({
+        channelId,
+        sessionId,
+        from: { role: 'GUEST' },
+      });
+
       sig.connect(wsUrl, token);
     } catch {
       setStatus('error');
