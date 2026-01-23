@@ -6,7 +6,7 @@ import { signalingTrace } from './trace';
 export type SendOpts = {
   channelId: string;
   sessionId: string;
-  from: { role: Role };
+  from: { role: Role; clientId?: string };
 };
 
 type Context = SendOpts;
@@ -38,7 +38,7 @@ export class SignalingClient {
   private reconnectAttempt = 0;
   private reconnectTimer: number | null = null;
 
-  // 핑/퐁(선택): 서버가 지원하면 keep-alive, 미지원이면 무시될 수 있음
+  // 핑/퐁(선택)
   private pingTimer: number | null = null;
   private pongTimer: number | null = null;
 
@@ -82,14 +82,18 @@ export class SignalingClient {
     this.ws.send(raw);
   }
 
-  sendMessage<TPayload>(type: Envelope['type'], opts: SendOpts, payload: TPayload) {
-    const env = createEnvelope({
+  // createEnvelope 새 시그니처에 맞춘 버전
+  sendMessage<TPayload>(type: string, opts: SendOpts, payload?: TPayload) {
+    const env = createEnvelope<TPayload>(
       type,
-      channelId: opts.channelId,
-      sessionId: opts.sessionId,
-      from: opts.from,
-      payload,
-    });
+      {
+        channelId: opts.channelId,
+        sessionId: opts.sessionId,
+        from: opts.from, // clientId 없으면 envelope.ts에서 localStorage 기반으로 채움
+      },
+      payload
+    );
+
     this.send(env);
   }
 
@@ -103,21 +107,18 @@ export class SignalingClient {
 
     this.ws.onopen = () => {
       signalingTrace.pushWs('OPEN');
-      this.reconnectAttempt = 0; // 성공 시 초기화
+      this.reconnectAttempt = 0;
       this.clearReconnect();
       this.startPingPong();
 
-      // 재연결(open이면서 이전에 끊긴 상태였던 경우) → resume attach 자동 전송
-      // (최초 connect 직후에도 context가 있다면 resume:false는 상위 훅에서 보내므로, 여기서는 resume:true만)
+      // 재연결 시 resume attach 자동 전송
       if (this.context) {
         try {
-          this.sendMessage<SysAttachPayload>(
-            'SYS_ATTACH',
-            this.context,
-            { resume: true },
-          );
+          this.sendMessage<SysAttachPayload>('SYS_ATTACH', this.context, {
+            resume: true,
+          });
         } catch {
-          // attach 실패해도 소켓은 살아있을 수 있으므로 여기서 강제 close하지 않음
+          // ignore
         }
       }
 
@@ -128,27 +129,22 @@ export class SignalingClient {
     this.ws.onclose = (ev) => {
       signalingTrace.pushWs(
         'CLOSE',
-        `code=${ev.code}${ev.reason ? ` reason=${ev.reason}` : ''}`,
+        `code=${ev.code}${ev.reason ? ` reason=${ev.reason}` : ''}`
       );
 
       this.clearPingPong();
       this.handlers.onClose?.(ev);
 
-      // 정상 종료(사용자 close)면 재연결하지 않음
       if (this.manualClose) return;
-
-      // 비정상 종료면 재연결 시도
       this.scheduleReconnect();
     };
 
     this.ws.onerror = (ev) => {
       signalingTrace.pushWs('ERROR');
       this.handlers.onError?.(ev);
-      // onclose에서 재연결 트리거되므로 여기서는 별도 처리 최소화
     };
 
     this.ws.onmessage = (ev) => {
-      // 서버가 단순 PONG 문자열 등을 보낼 수 있는 경우를 고려
       const env = parseEnvelope(ev.data, '[Signaling]');
       if (!env) return;
 
@@ -160,10 +156,9 @@ export class SignalingClient {
   private scheduleReconnect() {
     this.clearReconnect();
 
-    // 지수 백오프(상한 포함)
     this.reconnectAttempt += 1;
-    const base = 300; // ms
-    const max = 5_000; // ms
+    const base = 300;
+    const max = 5_000;
     const delay = Math.min(max, base * Math.pow(2, this.reconnectAttempt - 1));
 
     this.handlers.onReconnectAttempt?.(this.reconnectAttempt, delay);
@@ -175,7 +170,6 @@ export class SignalingClient {
       try {
         this.openWs(this.lastWsUrl, this.lastToken);
       } catch {
-        // 실패하면 다음 tick에서 재시도
         this.scheduleReconnect();
       }
     }, delay);
@@ -189,8 +183,6 @@ export class SignalingClient {
   private startPingPong() {
     this.clearPingPong();
 
-    // 서버가 SYS_PING/SYS_PONG을 지원한다는 가정 하의 keep-alive.
-    // 미지원이면 서버가 무시할 수 있으므로, 타임아웃 정책은 공격적으로 두지 않습니다.
     this.pingTimer = window.setInterval(() => {
       if (!this.context) return;
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
@@ -201,11 +193,9 @@ export class SignalingClient {
         // ignore
       }
 
-      // pong 타임아웃은 선택. 너무 공격적이면 불안정해질 수 있어 넉넉히 둠.
       if (this.pongTimer) window.clearTimeout(this.pongTimer);
       this.pongTimer = window.setTimeout(() => {
-        // pong 미수신만으로 즉시 close하지는 않음(네트워크 상황 고려)
-        // 필요 시 정책 강화 가능
+        // 정책 강화 가능
       }, 20_000);
     }, 15_000);
   }
