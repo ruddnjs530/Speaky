@@ -1,7 +1,15 @@
-// apps/client-web/src/shared/lib/signaling/SignalingClient.ts
 import type { Envelope, Role } from './envelope';
 import { createEnvelope } from './envelope';
 import { parseEnvelope } from './parse';
+import { signalingTrace } from './trace';
+
+export type SendOpts = {
+  channelId: string;
+  sessionId: string;
+  from: { role: Role };
+};
+
+type Context = SendOpts;
 
 type Handlers = {
   onOpen?: () => void;
@@ -14,95 +22,35 @@ type Handlers = {
   onReconnected?: () => void;
 };
 
-export type SendOpts = {
-  channelId: string;
-  sessionId: string;
-  from: { role: Role; clientId?: string };
-  requestId?: string;
-  ts?: number;
-};
-
-type ReconnectOptions = {
-  enabled: boolean;
-  baseMs: number;
-  maxMs: number;
-  factor: number;
-  jitterRatio: number;
-};
-
-type KeepAliveOptions = {
-  enabled: boolean;
-  pingIntervalMs: number;
-  pongTimeoutMs: number;
-};
-
-type ClientOptions = {
-  reconnect?: Partial<ReconnectOptions>;
-  keepAlive?: Partial<KeepAliveOptions>;
-  resumeOnReconnect?: boolean; // default true
-};
-
-const DEFAULT_RECONNECT: ReconnectOptions = {
-  enabled: true,
-  baseMs: 500,
-  maxMs: 10_000,
-  factor: 1.7,
-  jitterRatio: 0.2,
-};
-
-const DEFAULT_KEEPALIVE: KeepAliveOptions = {
-  enabled: true,
-  pingIntervalMs: 20_000,
-  pongTimeoutMs: 10_000,
-};
+type SysAttachPayload = { resume?: boolean };
 
 export class SignalingClient {
   private ws: WebSocket | null = null;
   private handlers: Handlers;
 
-  private reconnectOpt: ReconnectOptions;
-  private keepAliveOpt: KeepAliveOptions;
-  private resumeOnReconnect: boolean;
-
-  private manualClose = false;
-
-  // reconnect state
-  private attempt = 0;
-  private reconnectTimer: number | null = null;
-
-  // keepalive state
-  private pingTimer: number | null = null;
-  private pongTimer: number | null = null;
-
-  // last connect info
   private lastWsUrl: string | null = null;
   private lastToken: string | null = null;
 
-  // 자동 SYS_* 전송을 위한 기본 컨텍스트
-  private defaultSendOpts: SendOpts | null = null;
+  private context: Context | null = null;
 
-  constructor(handlers: Handlers = {}, options: ClientOptions = {}) {
+  private manualClose = false;
+
+  private reconnectAttempt = 0;
+  private reconnectTimer: number | null = null;
+
+  // 핑/퐁(선택): 서버가 지원하면 keep-alive, 미지원이면 무시될 수 있음
+  private pingTimer: number | null = null;
+  private pongTimer: number | null = null;
+
+  constructor(handlers: Handlers) {
     this.handlers = handlers;
-
-    this.reconnectOpt = { ...DEFAULT_RECONNECT, ...(options.reconnect ?? {}) };
-    this.keepAliveOpt = { ...DEFAULT_KEEPALIVE, ...(options.keepAlive ?? {}) };
-    this.resumeOnReconnect = options.resumeOnReconnect ?? true;
   }
 
-  // SYS_ATTACH/PING/PONG 같은 자동 메시지에 쓸 컨텍스트 저장
-  setContext(opts: SendOpts) {
-    this.defaultSendOpts = opts;
+  setContext(ctx: Context) {
+    this.context = ctx;
   }
 
   connect(wsUrl: string, token: string) {
-    if (
-      this.ws &&
-      (this.ws.readyState === WebSocket.OPEN ||
-        this.ws.readyState === WebSocket.CONNECTING)
-    ) {
-      return;
-    }
-
     this.manualClose = false;
     this.lastWsUrl = wsUrl;
     this.lastToken = token;
@@ -110,152 +58,163 @@ export class SignalingClient {
     this.openWs(wsUrl, token);
   }
 
+  close() {
+    this.manualClose = true;
+
+    this.clearReconnect();
+    this.clearPingPong();
+
+    try {
+      this.ws?.close();
+    } catch {
+      // ignore
+    } finally {
+      this.ws = null;
+    }
+  }
+
   send(envelope: Envelope) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      throw new Error('WebSocket이 연결되어 있지 않습니다.');
+      throw new Error('WebSocket is not open');
     }
-    this.ws.send(JSON.stringify(envelope));
+    const raw = JSON.stringify(envelope);
+    signalingTrace.pushOut(envelope);
+    this.ws.send(raw);
   }
 
-  sendMessage<T>(type: string, opts: SendOpts, payload?: T): Envelope<T> {
-    const env = createEnvelope<T>(type, opts, payload);
-    this.send(env as Envelope);
-    return env;
+  sendMessage<TPayload>(type: Envelope['type'], opts: SendOpts, payload: TPayload) {
+    const env = createEnvelope({
+      type,
+      channelId: opts.channelId,
+      sessionId: opts.sessionId,
+      from: opts.from,
+      payload,
+    });
+    this.send(env);
   }
 
-  // 컨텍스트 저장해뒀으면 opts 없이도 보낼 수 있게
-  sendAuto<T>(type: string, payload?: T): Envelope<T> | null {
-    if (!this.defaultSendOpts) return null;
-    return this.sendMessage<T>(type, this.defaultSendOpts, payload);
-  }
-
-  close(code?: number, reason?: string) {
-    this.manualClose = true;
-    this.clearReconnectTimer();
-    this.stopKeepAlive();
-
-    this.ws?.close(code, reason);
-    this.ws = null;
-  }
-
-  // ========= internal =========
+  // -------------------------
+  // Internals
+  // -------------------------
 
   private openWs(wsUrl: string, token: string) {
-    this.stopKeepAlive();
-
     const url = this.buildUrl(wsUrl, token);
     this.ws = new WebSocket(url);
 
     this.ws.onopen = () => {
-      const wasReconnecting = this.attempt > 0;
-      this.attempt = 0;
+      signalingTrace.pushWs('OPEN');
+      this.reconnectAttempt = 0; // 성공 시 초기화
+      this.clearReconnect();
+      this.startPingPong();
 
-      this.handlers.onOpen?.();
-
-      // 재연결 성공 시 attach(resume:true)
-      if (wasReconnecting && this.resumeOnReconnect) {
-        this.sendAuto('SYS_ATTACH', { resume: true });
-        this.handlers.onReconnected?.();
+      // 재연결(open이면서 이전에 끊긴 상태였던 경우) → resume attach 자동 전송
+      // (최초 connect 직후에도 context가 있다면 resume:false는 상위 훅에서 보내므로, 여기서는 resume:true만)
+      if (this.context) {
+        try {
+          this.sendMessage<SysAttachPayload>(
+            'SYS_ATTACH',
+            this.context,
+            { resume: true },
+          );
+        } catch {
+          // attach 실패해도 소켓은 살아있을 수 있으므로 여기서 강제 close하지 않음
+        }
       }
 
-      if (this.keepAliveOpt.enabled) this.startKeepAlive();
+      this.handlers.onOpen?.();
+      this.handlers.onReconnected?.();
     };
 
     this.ws.onclose = (ev) => {
+      signalingTrace.pushWs(
+        'CLOSE',
+        `code=${ev.code}${ev.reason ? ` reason=${ev.reason}` : ''}`,
+      );
+
+      this.clearPingPong();
       this.handlers.onClose?.(ev);
-      this.stopKeepAlive();
-      this.ws = null;
 
+      // 정상 종료(사용자 close)면 재연결하지 않음
       if (this.manualClose) return;
-      if (!this.reconnectOpt.enabled) return;
 
+      // 비정상 종료면 재연결 시도
       this.scheduleReconnect();
     };
 
     this.ws.onerror = (ev) => {
+      signalingTrace.pushWs('ERROR');
       this.handlers.onError?.(ev);
-      // 대개 onclose가 오지만, 안전하게 재연결 스케줄
-      if (this.manualClose) return;
-      if (!this.ws || this.ws.readyState === WebSocket.CLOSED) {
-        if (this.reconnectOpt.enabled) this.scheduleReconnect();
-      }
+      // onclose에서 재연결 트리거되므로 여기서는 별도 처리 최소화
     };
 
     this.ws.onmessage = (ev) => {
+      // 서버가 단순 PONG 문자열 등을 보낼 수 있는 경우를 고려
       const env = parseEnvelope(ev.data, '[Signaling]');
       if (!env) return;
 
-      // 서버가 PING을 보내는 경우: PONG 응답
-      if (env.type === 'SYS_PING') {
-        this.sendAuto('SYS_PONG', { ts: Date.now() });
-        return;
-      }
-
-      // 우리가 보낸 PING의 응답(PONG) 처리
-      if (env.type === 'SYS_PONG') {
-        this.clearPongTimeout();
-        return;
-      }
-
+      signalingTrace.pushIn(env);
       this.handlers.onMessage?.(env);
     };
   }
 
   private scheduleReconnect() {
-    this.clearReconnectTimer();
+    this.clearReconnect();
 
-    const cfg = this.reconnectOpt;
-    const exp = cfg.baseMs * Math.pow(cfg.factor, this.attempt++);
-    const capped = Math.min(exp, cfg.maxMs);
+    // 지수 백오프(상한 포함)
+    this.reconnectAttempt += 1;
+    const base = 300; // ms
+    const max = 5_000; // ms
+    const delay = Math.min(max, base * Math.pow(2, this.reconnectAttempt - 1));
 
-    const jitter = capped * cfg.jitterRatio;
-    const delay = Math.max(0, capped + (Math.random() * 2 - 1) * jitter);
-
-    this.handlers.onReconnectAttempt?.(this.attempt, Math.round(delay));
+    this.handlers.onReconnectAttempt?.(this.reconnectAttempt, delay);
 
     this.reconnectTimer = window.setTimeout(() => {
       if (this.manualClose) return;
       if (!this.lastWsUrl || !this.lastToken) return;
 
-      this.openWs(this.lastWsUrl, this.lastToken);
+      try {
+        this.openWs(this.lastWsUrl, this.lastToken);
+      } catch {
+        // 실패하면 다음 tick에서 재시도
+        this.scheduleReconnect();
+      }
     }, delay);
   }
 
-  private clearReconnectTimer() {
-    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+  private clearReconnect() {
+    if (this.reconnectTimer) window.clearTimeout(this.reconnectTimer);
     this.reconnectTimer = null;
   }
 
-  private startKeepAlive() {
-    this.stopKeepAlive();
+  private startPingPong() {
+    this.clearPingPong();
 
-    const { pingIntervalMs, pongTimeoutMs } = this.keepAliveOpt;
-
+    // 서버가 SYS_PING/SYS_PONG을 지원한다는 가정 하의 keep-alive.
+    // 미지원이면 서버가 무시할 수 있으므로, 타임아웃 정책은 공격적으로 두지 않습니다.
     this.pingTimer = window.setInterval(() => {
+      if (!this.context) return;
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
 
-      // 최소 keep-alive (컨텍스트 없으면 스킵)
-      const sent = this.sendAuto('SYS_PING', { ts: Date.now() });
-      if (!sent) return;
+      try {
+        this.sendMessage('SYS_PING', this.context, { ts: Date.now() });
+      } catch {
+        // ignore
+      }
 
-      // PONG 안 오면 강제 close -> onclose에서 재연결
-      this.clearPongTimeout();
+      // pong 타임아웃은 선택. 너무 공격적이면 불안정해질 수 있어 넉넉히 둠.
+      if (this.pongTimer) window.clearTimeout(this.pongTimer);
       this.pongTimer = window.setTimeout(() => {
-        try {
-          this.ws?.close(4000, 'pong_timeout');
-        } catch {}
-      }, pongTimeoutMs);
-    }, pingIntervalMs);
+        // pong 미수신만으로 즉시 close하지는 않음(네트워크 상황 고려)
+        // 필요 시 정책 강화 가능
+      }, 20_000);
+    }, 15_000);
   }
 
-  private stopKeepAlive() {
-    if (this.pingTimer) clearInterval(this.pingTimer);
+  private clearPingPong() {
+    if (this.pingTimer) window.clearInterval(this.pingTimer);
     this.pingTimer = null;
-    this.clearPongTimeout();
-  }
 
-  private clearPongTimeout() {
-    if (this.pongTimer) clearTimeout(this.pongTimer);
+    if (this.pongTimer) window.clearTimeout(this.pongTimer);
     this.pongTimer = null;
   }
 

@@ -21,4 +21,5 @@ message AudioChunk {
   int32 sample_rate = 2;
   int32 channels = 3;
   uint32 timestamp = 4;
+  int64 voice_model_id = 5;
 }

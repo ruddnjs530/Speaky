@@ -17,7 +17,7 @@ func TestRoom_Join_WiresPipeline(t *testing.T) {
 	cfg := &config.Config{}
 	roomID := "test-room"
 	userID := "test-user"
-	room := NewRoom(roomID, cfg, nil) 
+	room := NewRoom(roomID, cfg, nil)
 
 	// Create Mocks
 	mockReceiver := &MockReceiver{}
@@ -33,7 +33,7 @@ func TestRoom_Join_WiresPipeline(t *testing.T) {
 		CancelFunc: func() {},
 	}
 	room.participants[userID] = participant
-	
+
 	// 2. Execute Wiring (Direct call to internal method)
 	room.wirePipeline(context.Background(), participant)
 
@@ -47,7 +47,7 @@ func TestRoom_Join_WiresPipeline(t *testing.T) {
 	// Fire the callback with a dummy RTP packet
 	dummyPayload := []byte{0x01, 0x02, 0x03, 0x04}
 	packet := &rtp.Packet{Payload: dummyPayload}
-	
+
 	// Capturing WriteOpus call
 	var capturedPacket *rtp.Packet
 	mockTranscoder.WriteOpusFunc = func(p *rtp.Packet) error {
@@ -70,7 +70,7 @@ func TestRoom_Close_StopsPipeline(t *testing.T) {
 
 	mockTranscoder := NewMockTranscoder()
 	mockSender := &MockSender{}
-	
+
 	participant := &Participant{
 		Transcoder: mockTranscoder,
 		Sender:     mockSender,

@@ -172,6 +172,38 @@ Host / Viewer 역할 분리, 상태 중심 UI, 통신 규약 기반 시그널링
 
 - 모노레포 구조를 기준으로 경로/빌드 컨텍스트 고정
 ---
+## Debug / Observability (Dev Only)
+
+개발 환경에서 WebSocket 시그널링 트래픽을 requestId 기준으로 추적할 수 있습니다.
+
+- DebugPanel: 우측 하단 `Debug` 버튼 (DEV 모드에서만 노출)
+- 기록 대상:
+  - WS lifecycle: `WS_OPEN / WS_CLOSE / WS_ERROR`
+  - Signaling messages: `SYS_*`, `SIG_*` in/out
+- requestId 상관관계:
+  - `SYS_ACK`, `SYS_ERROR`는 원 요청의 requestId를 사용
+  - `SIG_ANSWER`는 해당 `SIG_OFFER`의 requestId를 상관관계로 사용(정책)
+
+### Troubleshooting Quick Checks
+
+1. WS가 열렸는지: `WS_OPEN`
+2. 첫 메시지가 `SYS_ATTACH`인지
+3. `SIG_OFFER` 송신 후 `SIG_ANSWER` 수신 여부(동일 requestId)
+4. `SIG_ICE`가 왕복하는지
+5. 실패 시 `SYS_ERROR.code`로 분기
+
+### QA 시나리오 문서
+
+- `docs/FE/QA_CHECKLIST.md` 참고
+
+### (Dev) WebRTC Hook Structure Note
+
+현재 MVP에서는 `useScreenShare`가 캡처 + 시그널링 + PeerConnection을 통합하여 사용합니다.  
+별도로 `useHostPeerConnection` / `useViewerPeerConnection` 훅은 역할 분리(Host/Viewer) 설계안으로 보관 중이며,
+향후 안정화 단계에서 통합 로직을 분리할 때 전환 예정입니다.
+
+
+---
 ## Summary
 
 본 프론트엔드는
