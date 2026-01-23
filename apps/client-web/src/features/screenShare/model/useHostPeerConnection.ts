@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Envelope } from '../../../shared/lib/signaling/envelope';
 import { SignalingClient } from '../../../shared/lib/signaling/SignalingClient';
+import type { SendOpts } from '../../../shared/lib/signaling/SignalingClient';
+import { HostPeerController } from '../../../features/screenShare/api/HostPeerController';
 
 type Status = 'idle' | 'connecting' | 'connected' | 'error';
 
@@ -33,31 +35,22 @@ export function useHostPeerConnection({
   stream,
   rtcConfig,
 }: Args) {
-  const pcRef = useRef<RTCPeerConnection | null>(null);
   const sigRef = useRef<SignalingClient | null>(null);
-
-  const pendingRemoteIceRef = useRef<RTCIceCandidateInit[]>([]);
-  const remoteDescSetRef = useRef(false);
+  const hostCtrlRef = useRef<HostPeerController | null>(null);
 
   const [status, setStatus] = useState<Status>('idle');
   const [error, setError] = useState('');
 
-  const flushPendingRemoteIce = useCallback(async () => {
-    const pc = pcRef.current;
-    if (!pc) return;
+  const sendOptsRef = useRef<SendOpts>({
+    channelId,
+    sessionId,
+    from: { role: 'HOST' },
+  });
 
-    const list = pendingRemoteIceRef.current;
-    if (list.length === 0) return;
-
-    for (const c of list) {
-      try {
-        await pc.addIceCandidate(c);
-      } catch {
-        // ignore
-      }
-    }
-    pendingRemoteIceRef.current = [];
-  }, []);
+  // sendOpts 최신화 (props 변경 대응)
+  useEffect(() => {
+    sendOptsRef.current = { channelId, sessionId, from: { role: 'HOST' } };
+  }, [channelId, sessionId]);
 
   const handleEnvelope = useCallback(
     async (env: Envelope) => {
@@ -65,9 +58,7 @@ export function useHostPeerConnection({
       if (env.channelId !== channelId) return;
       if (env.sessionId !== sessionId) return;
 
-      const pc = pcRef.current;
-      if (!pc) return;
-
+      // SYS_ERROR는 훅에서 처리
       if (env.type === 'SYS_ERROR') {
         const p = env.payload as SysErrorPayload | undefined;
         setStatus('error');
@@ -75,131 +66,97 @@ export function useHostPeerConnection({
         return;
       }
 
-      if (env.type === 'SIG_ANSWER') {
-        const p = env.payload as SigAnswerPayload | undefined;
-        if (!p?.sdp) return;
-
-        try {
-          await pc.setRemoteDescription({ type: p.sdpType, sdp: p.sdp });
-          remoteDescSetRef.current = true;
-          await flushPendingRemoteIce();
-          setStatus('connected');
-        } catch {
-          setStatus('error');
-          setError('setRemoteDescription 실패');
-        }
-        return;
-      }
-
-      if (env.type === 'SIG_ICE') {
-        const p = env.payload as SigIcePayload | undefined;
-        if (!p?.candidate) return;
-
-        const ice: RTCIceCandidateInit = {
-          candidate: p.candidate,
-          sdpMid: p.sdpMid ?? undefined,
-          sdpMLineIndex: p.sdpMLineIndex ?? undefined,
-        };
-
-        if (!remoteDescSetRef.current) {
-          pendingRemoteIceRef.current.push(ice);
-          return;
-        }
-        try {
-          await pc.addIceCandidate(ice);
-        } catch {
-          // ignore
-        }
-      }
+      // 나머지 (Answer/ICE 등)는 컨트롤러로 위임
+      const ctrl = hostCtrlRef.current;
+      if (!ctrl) return;
+      await ctrl.handleEnvelope(env);
     },
-    [channelId, sessionId, flushPendingRemoteIce]
+    [channelId, sessionId]
   );
 
   const start = useCallback(async () => {
     setStatus('connecting');
     setError('');
 
-    const sig = new SignalingClient({ onMessage: handleEnvelope });
-    sig.connect(wsUrl, token);
+    // WS
+    const sig = new SignalingClient(
+      {
+        onMessage: handleEnvelope,
+        onOpen: () => {
+          // 열렸다고 바로 connected는 아님
+          // 필요하면 여기서 UI 상태 갱신 가능
+        },
+        onClose: () => {
+          if (status !== 'idle') setStatus('connecting');
+        },
+      },
+
+    );
+
+    // 자동 SYS_* (PING/PONG, 재연결 attach resume:true)에 쓸 컨텍스트
+    sig.setContext({
+      channelId,
+      sessionId,
+      from: { role: 'HOST' },
+    });
+
+    try {
+      sig.connect(wsUrl, token);
+    } catch {
+      setStatus('error');
+      setError('WebSocket connect 실패');
+      return;
+    }
+
     sigRef.current = sig;
 
-    // WS 라우팅 바인딩
+    // 최초 attach (resume:false) — 너희 기존 흐름 유지
     sig.sendMessage<SysAttachPayload>(
       'SYS_ATTACH',
       { channelId, sessionId, from: { role: 'HOST' } },
       { resume: false }
     );
 
-    const pc = new RTCPeerConnection(
-      rtcConfig ?? { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
-    );
-    pcRef.current = pc;
+    // HostPeerController 생성/시작
+    // - 끊김 시 PC 재생성, offer부터 재시작 정책은 컨트롤러가 책임
+    const ctrl = new HostPeerController({
+      signaling: sig,
+      sendOpts: sendOptsRef.current,
+      rtcConfig: rtcConfig ?? { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] },
 
-    remoteDescSetRef.current = false;
-    pendingRemoteIceRef.current = [];
+      // stream은 인자로 들어온 걸 그대로 사용
+      getLocalStream: () => stream,
 
-    // 로컬 트랙 추가
-    for (const track of stream.getTracks()) {
-      pc.addTrack(track, stream);
-    }
-
-    // ICE - SIG_ICE
-    pc.onicecandidate = (ev) => {
-      if (!ev.candidate) return;
-      sig.sendMessage<SigIcePayload>(
-        'SIG_ICE',
-        { channelId, sessionId, from: { role: 'HOST' } },
-        {
-          candidate: ev.candidate.candidate,
-          sdpMid: ev.candidate.sdpMid,
-          sdpMLineIndex: ev.candidate.sdpMLineIndex,
+      onPcState: (s) => {
+        if (s === 'connected') setStatus('connected');
+        if (s === 'failed' || s === 'disconnected') {
+          // 컨트롤러가 즉시 재생성, 재협상을 시작할 것이므로
+          setStatus('connecting');
         }
-      );
-    };
+      },
+    });
 
-    pc.onconnectionstatechange = () => {
-      if (pc.connectionState === 'connected') setStatus('connected');
-      if (pc.connectionState === 'failed') {
-        setStatus('error');
-        setError('PeerConnection failed');
-      }
-    };
+    hostCtrlRef.current = ctrl;
 
     try {
-      // Offer - LocalDesc - SIG_OFFER
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-
-      sig.sendMessage<SigOfferPayload>(
-        'SIG_OFFER',
-        { channelId, sessionId, from: { role: 'HOST' } },
-        {
-          sdpType: 'offer',
-          sdp: pc.localDescription?.sdp ?? '',
-        }
-      );
+      await ctrl.start(); // offer부터 시작
+      // connected는 Answer 들어오거나 pc 상태로 바뀔 때 찍힘
     } catch {
       setStatus('error');
-      setError('Offer 파이프라인 실패');
+      setError('PeerConnection 시작 실패');
+      return;
     }
-  }, [wsUrl, token, channelId, sessionId, stream, rtcConfig, handleEnvelope]);
+  }, [wsUrl, token, channelId, sessionId, stream, rtcConfig, handleEnvelope, status]);
 
   const stop = useCallback(() => {
+    hostCtrlRef.current?.stop();
+    hostCtrlRef.current = null;
+
     sigRef.current?.close();
     sigRef.current = null;
 
-    const pc = pcRef.current;
-    pcRef.current = null;
-
-    remoteDescSetRef.current = false;
-    pendingRemoteIceRef.current = [];
-
-    if (pc) {
-      pc.onicecandidate = null;
-      pc.onconnectionstatechange = null;
-      pc.close();
-    }
     setStatus('idle');
+    setError('');
   }, []);
 
   useEffect(() => stop, [stop]);

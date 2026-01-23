@@ -238,6 +238,12 @@ export function useScreenShare() {
           });
 
           wsRef.current = sc;
+          sc.setContext({
+            channelId,
+            sessionId,
+            from: { role: 'SC' },
+          });
+
           sc.connect(wsUrl, token);
         });
 
