@@ -25,6 +25,7 @@ services:
       target: dev
     ports:
       - "8080:8080" # REST/gRPC
+      - "8081:8081" # HTTP (Test)
       - "50000-50010:50000-50010/udp" # WebRTC
     volumes:
       - ./apps/server-media:/app

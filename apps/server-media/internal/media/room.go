@@ -26,6 +26,12 @@ type Room struct {
 	participants map[string]*Participant
 	mu           sync.RWMutex
 
+	// Sync baseline timestamps (for Delta-based correlation)
+	baseAudioTS     uint32
+	baseVideoTS     uint32
+	baseInitialized bool
+	syncMu          sync.Mutex
+
 	// Context for the entire room
 	ctx        context.Context
 	cancelFunc context.CancelFunc
@@ -89,27 +95,65 @@ func (r *Room) Join(userID string, sdpOffer string) (string, error) {
 		return "", fmt.Errorf("failed to create upstream sender: %w", err)
 	}
 
+	// D. Opus Encoder (for Egress: AI PCM → Opus RTP)
+	opusEncoder, err := pipeline.NewOpusEncoder(r.cfg.AudioSampleRate, r.cfg.AudioChannels, 0)
+	if err != nil {
+		pCancel()
+		receiver.Close()
+		sender.Close()
+		return "", fmt.Errorf("failed to create opus encoder: %w", err)
+	}
+
+	// E. SFU Sender (for broadcasting to Guest)
+	// Create a new PeerConnection for Egress
+	egressPC, err := r.api.NewPeerConnection(webrtc.Configuration{})
+	if err != nil {
+		pCancel()
+		receiver.Close()
+		sender.Close()
+		opusEncoder.Close()
+		return "", fmt.Errorf("failed to create egress peer connection: %w", err)
+	}
+
+	sfuSender, err := mediaWebrtc.NewPionSender(egressPC)
+	if err != nil {
+		pCancel()
+		receiver.Close()
+		sender.Close()
+		opusEncoder.Close()
+		egressPC.Close()
+		return "", fmt.Errorf("failed to create SFU sender: %w", err)
+	}
+
 	// 4. Assemble Participant
 	participant := &Participant{
-		ID:         userID,
-		Receiver:   receiver,
-		Transcoder: transcoder,
-		Sender:     sender,
-		VideoQueue: pipeline.NewVideoQueue(),
-		CancelFunc: pCancel,
+		ID:             userID,
+		Receiver:       receiver,
+		Transcoder:     transcoder,
+		Sender:         sender,
+		VideoQueue:     pipeline.NewVideoQueue(),
+		OpusEncoder:    opusEncoder,
+		SFUSender:      sfuSender,
+		AIResponseChan: make(chan *pipeline.AudioFrame, 50), // Buffered channel
+		CancelFunc:     pCancel,
 	}
 
 	// 5. Connect Pipeline (Handler Registration)
 	// CRITICAL: Must register handlers BEFORE calling Connect to avoid dropping initial packets.
 	r.wirePipeline(pCtx, participant)
 
-	// 6. Perform SDP Exchange (Connect)
+	// 6. Start AI Response Processing Loop
+	go r.processAIResponse(pCtx, participant)
+
+	// 7. Perform SDP Exchange (Connect)
 	// This will block until ICE gathering is complete (unless Trickle ICE logic is added later).
 	sdpAnswer, err := receiver.Connect(sdpOffer)
 	if err != nil {
 		pCancel()
 		receiver.Close()
 		sender.Close()
+		opusEncoder.Close()
+		sfuSender.Close()
 		return "", fmt.Errorf("failed to connect receiver: %w", err)
 	}
 
@@ -189,11 +233,39 @@ func (r *Room) wirePipeline(ctx context.Context, p *Participant) {
 	go r.pumpAudio(ctx, p)
 }
 
-// pumpAudio continuously reads PCM from Transcoder and sends to Sender.
+// pumpAudio continuously reads PCM from Transcoder, sends to AI, and forwards responses.
 // Unexported for white-box testing.
 func (r *Room) pumpAudio(ctx context.Context, p *Participant) {
 	slog.Debug("Starting Audio Pump", "user_id", p.ID)
 	defer slog.Debug("Stopping Audio Pump", "user_id", p.ID)
+
+	// Start a goroutine to receive AI responses
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			// Receive AI response from stream
+			aiResponse, err := p.Sender.Receive()
+			if err != nil {
+				if ctx.Err() != nil {
+					return // Context cancelled
+				}
+				slog.Error("Failed to receive AI response", "error", err, "user_id", p.ID)
+				return
+			}
+
+			// Forward to AI response channel for processing
+			select {
+			case p.AIResponseChan <- aiResponse:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 
 	consecutiveErrors := 0
 	const maxConsecutiveErrors = 100
@@ -217,7 +289,7 @@ func (r *Room) pumpAudio(ctx context.Context, p *Participant) {
 			return
 		}
 
-		// 3. Send to Upstream
+		// 3. Send to Upstream (AI Server)
 		if err := p.Sender.Send(frame); err != nil {
 			consecutiveErrors++
 			if consecutiveErrors <= 5 { // Throttle logs
