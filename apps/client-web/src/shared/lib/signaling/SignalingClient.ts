@@ -1,6 +1,7 @@
-import type { Envelope, Role } from './envelope';
-import { createEnvelope } from './envelope';
-import { parseEnvelope } from './parse';
+import type { Envelope, Role } from "./envelope";
+import { createEnvelope } from "./envelope";
+import { parseEnvelope } from "./parse";
+import { signalingTrace } from "./trace"; // ✅ 추가
 
 type Handlers = {
   onOpen?: () => void;
@@ -27,9 +28,9 @@ export class SignalingClient {
 
   connect(wsUrl: string, token: string) {
     if (
-      this.ws &&
-      (this.ws.readyState === WebSocket.OPEN ||
-        this.ws.readyState === WebSocket.CONNECTING)
+        this.ws &&
+        (this.ws.readyState === WebSocket.OPEN ||
+            this.ws.readyState === WebSocket.CONNECTING)
     ) {
       return;
     }
@@ -37,22 +38,36 @@ export class SignalingClient {
     const url = this.buildUrl(wsUrl, token);
     this.ws = new WebSocket(url);
 
-    this.ws.onopen = () => this.handlers.onOpen?.();
-    this.ws.onclose = (ev) => this.handlers.onClose?.(ev);
-    this.ws.onerror = (ev) => this.handlers.onError?.(ev);
+    this.ws.onopen = () => {
+      signalingTrace.pushWs("OPEN");
+      this.handlers.onOpen?.();
+    };
+
+    this.ws.onclose = (ev) => {
+      signalingTrace.pushWs("CLOSE", `code=${ev.code}${ev.reason ? ` reason=${ev.reason}` : ""}`);
+      this.handlers.onClose?.(ev);
+    };
+
+    this.ws.onerror = (ev) => {
+      signalingTrace.pushWs("ERROR");
+      this.handlers.onError?.(ev);
+    };
 
     this.ws.onmessage = (ev) => {
-      const env = parseEnvelope(ev.data, '[Signaling]');
-      if (!env) return; // 필수 필드 누락, 형식 오류면 드랍
+      const env = parseEnvelope(ev.data, "[Signaling]");
+      if (!env) return;
 
+      signalingTrace.pushIn(env); // ✅ 수신 트레이스
       this.handlers.onMessage?.(env);
     };
   }
 
   send(envelope: Envelope) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      throw new Error('WebSocket이 연결되어 있지 않습니다.');
+      throw new Error("WebSocket이 연결되어 있지 않습니다.");
     }
+
+    signalingTrace.pushOut(envelope); // ✅ 송신 트레이스
     this.ws.send(JSON.stringify(envelope));
   }
 
@@ -69,12 +84,11 @@ export class SignalingClient {
 
   private buildUrl(wsUrl: string, token: string) {
     const u = new URL(wsUrl, window.location.origin);
-    u.searchParams.set('token', token);
+    u.searchParams.set("token", token);
 
-    // wsUrl이 http(s)로 들어오면 ws(s)로 교체
     const s = u.toString();
-    if (s.startsWith('https://')) return s.replace('https://', 'wss://');
-    if (s.startsWith('http://')) return s.replace('http://', 'ws://');
-    return s; // 이미 ws:// or wss:// 라면 그대로
+    if (s.startsWith("https://")) return s.replace("https://", "wss://");
+    if (s.startsWith("http://")) return s.replace("http://", "ws://");
+    return s;
   }
 }

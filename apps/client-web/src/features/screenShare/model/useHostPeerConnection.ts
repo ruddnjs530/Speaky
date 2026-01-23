@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Envelope } from '../../../shared/lib/signaling/envelope';
 import { SignalingClient } from '../../../shared/lib/signaling/SignalingClient';
+import { applySignalingEnvelope } from './applySignaling';
+
 
 type Status = 'idle' | 'connecting' | 'connected' | 'error';
 
@@ -16,15 +18,14 @@ type Args = {
 type SysAttachPayload = { resume?: boolean };
 
 type SigOfferPayload = { sdpType: 'offer'; sdp: string };
-type SigAnswerPayload = { sdpType: 'answer'; sdp: string };
 type SigIcePayload = {
   candidate: string;
   sdpMid: string | null;
   sdpMLineIndex: number | null;
 };
 
-type SysErrorPayload = { code: string; msg?: string };
-
+// NOTE(Day4): 현재는 useScreenShare 통합 구현을 사용 중이라 미사용.
+// 향후 signaling/webrtc 책임 분리 시(Host/Viewer 분리) 재사용 예정.
 export function useHostPeerConnection({
   wsUrl,
   token,
@@ -41,6 +42,32 @@ export function useHostPeerConnection({
 
   const [status, setStatus] = useState<Status>('idle');
   const [error, setError] = useState('');
+
+  // WS open 전에는 메시지 전송(attach/ice/offer)이 위험하므로 상태 관리
+  const wsReadyRef = useRef(false);
+  const pendingLocalIceRef = useRef<SigIcePayload[]>([]);
+
+  const flushPendingLocalIce = useCallback(() => {
+    const sig = sigRef.current;
+    if (!sig) return;
+
+    const list = pendingLocalIceRef.current;
+    if (list.length === 0) return;
+
+    for (const ice of list) {
+      try {
+        sig.sendMessage<SigIcePayload>(
+            'SIG_ICE',
+            { channelId, sessionId, from: { role: 'HOST' } },
+            ice
+        );
+      } catch {
+        // ignore
+      }
+    }
+    pendingLocalIceRef.current = [];
+  }, [channelId, sessionId]);
+
 
   const flushPendingRemoteIce = useCallback(async () => {
     const pc = pcRef.current;
@@ -60,129 +87,149 @@ export function useHostPeerConnection({
   }, []);
 
   const handleEnvelope = useCallback(
-    async (env: Envelope) => {
-      // 라우팅 필터
-      if (env.channelId !== channelId) return;
-      if (env.sessionId !== sessionId) return;
-
-      const pc = pcRef.current;
-      if (!pc) return;
-
-      if (env.type === 'SYS_ERROR') {
-        const p = env.payload as SysErrorPayload | undefined;
-        setStatus('error');
-        setError(p?.msg ? `${p.code}: ${p.msg}` : p?.code ?? 'SYS_ERROR');
-        return;
-      }
-
-      if (env.type === 'SIG_ANSWER') {
-        const p = env.payload as SigAnswerPayload | undefined;
-        if (!p?.sdp) return;
+      async (env: Envelope) => {
+        const pc = pcRef.current;
+        if (!pc) return;
 
         try {
-          await pc.setRemoteDescription({ type: p.sdpType, sdp: p.sdp });
-          remoteDescSetRef.current = true;
-          await flushPendingRemoteIce();
-          setStatus('connected');
+          await applySignalingEnvelope(env, {
+            channelId,
+            sessionId,
+            pc,
+            remoteDescSetRef,
+            pendingRemoteIceRef,
+            flushPendingRemoteIce,
+            onSysError: (msg) => {
+              setStatus('error');
+              setError(msg);
+            },
+            onConnected: () => setStatus('connected'),
+          });
         } catch {
           setStatus('error');
-          setError('setRemoteDescription 실패');
+          setError('시그널링 처리 실패');
         }
-        return;
-      }
-
-      if (env.type === 'SIG_ICE') {
-        const p = env.payload as SigIcePayload | undefined;
-        if (!p?.candidate) return;
-
-        const ice: RTCIceCandidateInit = {
-          candidate: p.candidate,
-          sdpMid: p.sdpMid ?? undefined,
-          sdpMLineIndex: p.sdpMLineIndex ?? undefined,
-        };
-
-        if (!remoteDescSetRef.current) {
-          pendingRemoteIceRef.current.push(ice);
-          return;
-        }
-        try {
-          await pc.addIceCandidate(ice);
-        } catch {
-          // ignore
-        }
-      }
-    },
-    [channelId, sessionId, flushPendingRemoteIce]
+      },
+      [channelId, sessionId, flushPendingRemoteIce]
   );
+
 
   const start = useCallback(async () => {
     setStatus('connecting');
     setError('');
 
-    const sig = new SignalingClient({ onMessage: handleEnvelope });
-    sig.connect(wsUrl, token);
-    sigRef.current = sig;
-
-    // WS 라우팅 바인딩
-    sig.sendMessage<SysAttachPayload>(
-      'SYS_ATTACH',
-      { channelId, sessionId, from: { role: 'HOST' } },
-      { resume: false }
-    );
-
-    const pc = new RTCPeerConnection(
-      rtcConfig ?? { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
-    );
-    pcRef.current = pc;
-
+    // 초기화
+    wsReadyRef.current = false;
+    pendingLocalIceRef.current = [];
     remoteDescSetRef.current = false;
     pendingRemoteIceRef.current = [];
 
-    // 로컬 트랙 추가
-    for (const track of stream.getTracks()) {
-      pc.addTrack(track, stream);
-    }
+    const sig = new SignalingClient({
+      onOpen: async () => {
+        wsReadyRef.current = true;
 
-    // ICE - SIG_ICE
-    pc.onicecandidate = (ev) => {
-      if (!ev.candidate) return;
-      sig.sendMessage<SigIcePayload>(
-        'SIG_ICE',
-        { channelId, sessionId, from: { role: 'HOST' } },
-        {
-          candidate: ev.candidate.candidate,
-          sdpMid: ev.candidate.sdpMid,
-          sdpMLineIndex: ev.candidate.sdpMLineIndex,
+        try {
+          // ✅ 반드시 첫 메시지: SYS_ATTACH
+          sig.sendMessage<SysAttachPayload>(
+              'SYS_ATTACH',
+              { channelId, sessionId, from: { role: 'HOST' } },
+              { resume: false }
+          );
+
+          // WS 준비가 끝났으니, 그동안 모인 로컬 ICE flush
+          flushPendingLocalIce();
+
+          // PeerConnection 생성
+          const pc = new RTCPeerConnection(
+              rtcConfig ?? { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }
+          );
+          pcRef.current = pc;
+
+          // 로컬 트랙 추가
+          for (const track of stream.getTracks()) {
+            pc.addTrack(track, stream);
+          }
+
+          // ICE - SIG_ICE
+          pc.onicecandidate = (ev) => {
+            if (!ev.candidate) return;
+
+            const icePayload: SigIcePayload = {
+              candidate: ev.candidate.candidate,
+              sdpMid: ev.candidate.sdpMid,
+              sdpMLineIndex: ev.candidate.sdpMLineIndex,
+            };
+
+            // ✅ WS 준비 전이면 큐잉
+            if (!wsReadyRef.current) {
+              pendingLocalIceRef.current.push(icePayload);
+              return;
+            }
+
+            try {
+              sig.sendMessage<SigIcePayload>(
+                  'SIG_ICE',
+                  { channelId, sessionId, from: { role: 'HOST' } },
+                  icePayload
+              );
+            } catch {
+              // ignore
+            }
+          };
+
+          pc.onconnectionstatechange = () => {
+            if (pc.connectionState === 'connected') setStatus('connected');
+            if (pc.connectionState === 'failed') {
+              setStatus('error');
+              setError('PeerConnection failed');
+            }
+          };
+
+          // Offer - LocalDesc - SIG_OFFER
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+
+          sig.sendMessage<SigOfferPayload>(
+              'SIG_OFFER',
+              { channelId, sessionId, from: { role: 'HOST' } },
+              {
+                sdpType: 'offer',
+                sdp: pc.localDescription?.sdp ?? '',
+              }
+          );
+        } catch {
+          setStatus('error');
+          setError('WS attach / offer 파이프라인 실패');
         }
-      );
-    };
-
-    pc.onconnectionstatechange = () => {
-      if (pc.connectionState === 'connected') setStatus('connected');
-      if (pc.connectionState === 'failed') {
+      },
+      onMessage: handleEnvelope,
+      onError: () => {
         setStatus('error');
-        setError('PeerConnection failed');
-      }
-    };
+        setError('WebSocket error');
+      },
+      onClose: () => {
+        // 원하시면 여기서 "연결 끊김" UX/상태 반영 가능
+      },
+    });
+
+    sigRef.current = sig;
 
     try {
-      // Offer - LocalDesc - SIG_OFFER
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-
-      sig.sendMessage<SigOfferPayload>(
-        'SIG_OFFER',
-        { channelId, sessionId, from: { role: 'HOST' } },
-        {
-          sdpType: 'offer',
-          sdp: pc.localDescription?.sdp ?? '',
-        }
-      );
+      sig.connect(wsUrl, token);
     } catch {
       setStatus('error');
-      setError('Offer 파이프라인 실패');
+      setError('WebSocket connect 실패');
     }
-  }, [wsUrl, token, channelId, sessionId, stream, rtcConfig, handleEnvelope]);
+  }, [
+    wsUrl,
+    token,
+    channelId,
+    sessionId,
+    stream,
+    rtcConfig,
+    handleEnvelope,
+    flushPendingLocalIce,
+  ]);
 
   const stop = useCallback(() => {
     sigRef.current?.close();

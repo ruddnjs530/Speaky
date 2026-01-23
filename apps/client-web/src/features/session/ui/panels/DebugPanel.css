@@ -1,0 +1,159 @@
+/* src/features/session/ui/panels/DebugPanel.css */
+
+.dbgRoot {
+    position: fixed;
+    right: 16px;
+    bottom: 16px;
+    z-index: 9999;
+}
+
+.dbgFab {
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(20, 20, 20, 0.85);
+    color: white;
+    padding: 10px 12px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.dbgPanel {
+    width: min(920px, calc(100vw - 32px));
+    height: min(520px, calc(100vh - 120px));
+    margin-top: 10px;
+
+    background: rgba(12, 12, 12, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 12px;
+    color: #eaeaea;
+
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+}
+
+.dbgHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    padding: 12px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.dbgTitle {
+    font-weight: 700;
+    font-size: 13px;
+}
+
+.dbgActions {
+    display: flex;
+    gap: 8px;
+}
+
+.dbgBtn {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #eaeaea;
+    padding: 6px 10px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.dbgFilters {
+    display: flex;
+    gap: 10px;
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.dbgLabel {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    opacity: 0.95;
+}
+
+.dbgInput {
+    width: 260px;
+    max-width: calc(50vw - 80px);
+    padding: 6px 8px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.06);
+    color: #eaeaea;
+    outline: none;
+}
+
+.dbgList {
+    padding: 10px 12px;
+    overflow: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+    monospace;
+    font-size: 12px;
+}
+
+.dbgRow {
+    padding: 8px 10px;
+    border-radius: 10px;
+    margin-bottom: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.dbgRow.dbg_in {
+    background: rgba(80, 160, 255, 0.06);
+}
+.dbgRow.dbg_out {
+    background: rgba(90, 220, 150, 0.06);
+}
+.dbgRow.dbg_ws {
+    background: rgba(255, 200, 80, 0.06);
+}
+
+.dbgMeta {
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+    opacity: 0.95;
+}
+
+.dbgTime {
+    opacity: 0.75;
+}
+
+.dbgDir {
+    font-weight: 700;
+}
+
+.dbgType {
+    font-weight: 700;
+}
+
+.dbgInfo {
+    margin-top: 6px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+
+.dbgChip {
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    opacity: 0.95;
+}
+
+.dbgSummary {
+    opacity: 0.9;
+}
+
+.dbgEmpty {
+    padding: 20px 0;
+    opacity: 0.7;
+}
