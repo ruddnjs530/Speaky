@@ -71,7 +71,7 @@ public class User {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 10)
     @Builder.Default
-    private UserRole role = UserRole.HOST;
+    private UserRole role = UserRole.USER;
     
     /**
      * 계정 상태
