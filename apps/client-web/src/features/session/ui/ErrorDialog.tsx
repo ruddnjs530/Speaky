@@ -1,12 +1,12 @@
 
-import type { AppError } from "../../state/appState.types";
-import Button from "../../../../shared/ui/Button";
-import Card from "../../../../shared/ui/Card";
+import type { AppError } from "../state/appState.types";
+import Button from "../../../shared/ui/Button";
+import Card from "../../../shared/ui/Card";
 import {
     getSysErrorUx,
     type SysErrorActionType,
     type SysErrorUxAction,
-} from "../../errors/sysErrorUx";
+} from "../errors/sysErrorUx";
 
 export interface ErrorDialogProps {
     error: AppError;
