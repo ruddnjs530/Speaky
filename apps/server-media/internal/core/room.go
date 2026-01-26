@@ -44,6 +44,13 @@ func NewRoom(id string, cfg *config.Config, api *webrtc.API) *Room {
 	}
 }
 
+// BroadcastTrack forwards a track from one participant to all others.
+// Full implementation will be added in Step 4.
+func (r *Room) BroadcastTrack(fromUserID string, track *webrtc.TrackRemote, ctx context.Context) error {
+	// TODO: Implement full SFU broadcast logic
+	return nil
+}
+
 // Close gracefully shuts down the room and cleans up resources.
 func (r *Room) Close() error {
 	r.mu.Lock()
