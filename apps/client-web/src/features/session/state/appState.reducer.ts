@@ -2,36 +2,38 @@ import type { AppState } from "./appState.types";
 import type { AppEvent } from "./appState.events";
 
 export function appStateReducer(state: AppState, event: AppEvent): AppState {
-    // RESET은 어디서든 처리
-    if (event.type === "RESET") {
-        return {
-            kind: "Idle",
-            context: {
-                channelId: null,
-                sessionId: null,
-                role: null,
-                wsUrl: null,
-                signalingToken: null,
-                clientId: null,
-                lastError: null,
-            },
-        };
+    // 1. 전역 초기화/에러 처리
+    switch (event.type) {
+        case "EV_RESET":
+            return {
+                kind: "Idle",
+                context: {
+                    channelId: null,
+                    sessionId: null,
+                    role: null,
+                    wsUrl: null,
+                    signalingToken: null,
+                    clientId: null,
+                    lastError: null,
+                },
+            };
+
+        case "EV_BOOTSTRAP_FAIL":
+        case "EV_ERROR":
+            return {
+                kind: "Error",
+                context: {
+                    ...state.context,
+                    lastError: event.error,
+                },
+            };
     }
 
-    // 에러는 어디서든 Error로 수렴(Day1 기준)
-    if (event.type === "BOOTSTRAP_FAIL" || event.type === "SYS_ERROR") {
-        return {
-            kind: "Error",
-            context: {
-                ...state.context,
-                lastError: event.error,
-            },
-        };
-    }
-
+    // 2. 상태별 전이 로직
     switch (state.kind) {
-        case "Idle": {
-            if (event.type === "BOOTSTRAP_SUCCESS") {
+        case "Idle":
+        case "Error": {
+            if (event.type === "EV_BOOTSTRAPPED") {
                 return {
                     kind: "SessionReady",
                     context: {
@@ -41,54 +43,85 @@ export function appStateReducer(state: AppState, event: AppEvent): AppState {
                     },
                 };
             }
+            // 재시도(RETRY) 시 Idle로 가서 다시 Bootstrap 유도
+            if (event.type === "EV_RETRY") {
+                return {
+                    kind: "Idle",
+                    context: { ...state.context, lastError: null },
+                };
+            }
             return state;
         }
 
         case "SessionReady": {
-            if (event.type === "WS_CONNECT_START") {
+            // WS 연결 시작
+            if (event.type === "EV_WS_CONNECTING") {
                 return { kind: "WsConnecting", context: { ...state.context } };
             }
             return state;
         }
 
         case "WsConnecting": {
-            if (event.type === "WS_ATTACH_SUCCESS") {
+            // WS가 붙었더라도, SYS_ATTACH_OK(EV_ATTACHED_OK)를 받아야 진짜 Attached
+            if (event.type === "EV_ATTACHED_OK") {
                 return { kind: "Attached", context: { ...state.context } };
+            }
+            // 단순히 소켓 열림 이벤트는 상태 유지 (Connecting... UI 유지)
+            // 혹은 "Handshaking" 같은 중간 상태를 둘 수도 있으나, 여기선 WsConnecting 유지
+            if (event.type === "EV_WS_CONNECTED") {
+                return state;
             }
             return state;
         }
 
         case "Attached": {
-            if (event.type === "PC_CONNECT_START") {
+            // Signaling 준비 완료 -> SDP Offer/Answer 교환 시작
+            if (event.type === "EV_PC_CONNECTING") {
                 return { kind: "PcConnecting", context: { ...state.context } };
+            }
+            // 바로 Connected 될 수도 있음 (IceRestart 등)
+            if (event.type === "EV_PC_CONNECTED") {
+                return { kind: "Connected", context: { ...state.context } };
+            }
+            // Answer/ICE 수신은 상태 변화 없이 처리(Side Effect로 처리됨)
+            if (event.type === "EV_GOT_ANSWER" || event.type === "EV_GOT_ICE") {
+                return state;
             }
             return state;
         }
 
         case "PcConnecting": {
-            if (event.type === "PC_CONNECTED") {
+            if (event.type === "EV_PC_CONNECTED") {
                 return { kind: "Connected", context: { ...state.context } };
             }
-            return state;
-        }
-
-        case "Error": {
-            if (event.type === "RETRY") {
-                // Day1 기준: 가장 단순하게 Idle로 돌리고 bootstrap부터 다시
-                return { kind: "Idle", context: { ...state.context, lastError: null } };
+            // Negotiation 중에도 ICE/Answer 는 계속 옴
+            if (event.type === "EV_GOT_ANSWER" || event.type === "EV_GOT_ICE") {
+                return state;
             }
             return state;
         }
 
-        // Day1에서는 아래 상태들은 아직 적극적으로 쓰지 않지만,
-        // reducer가 안전하게 유지되도록 기본값 처리
-        case "Connected":
-        case "Reconnecting":
+        case "Connected": {
+            // 재협상(Renegotiation) 필요 시 다시 PcConnecting 갈 수 있음
+            if (event.type === "EV_PC_CONNECTING") {
+                return { kind: "PcConnecting", context: { ...state.context } };
+            }
+            // PING은 상태 변화 없음
+            if (event.type === "EV_PING") {
+                return state;
+            }
             return state;
-
-        default: {
-            const _exhaustive: never = state;
-            return _exhaustive;
         }
+
+        case "Reconnecting": {
+            // 재연결 성공 시 Attached로 복귀 (혹은 바로 Connected)
+            if (event.type === "EV_ATTACHED_OK") {
+                return { kind: "Attached", context: { ...state.context, lastError: null } };
+            }
+            return state;
+        }
+
+        default:
+            return state;
     }
 }
