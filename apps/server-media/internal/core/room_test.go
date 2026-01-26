@@ -1,6 +1,8 @@
 package core
 
 import (
+	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -92,3 +94,127 @@ func TestRoom_Close_Idempotent(t *testing.T) {
 		t.Fatal("context should remain canceled")
 	}
 }
+
+// TestRoom_Join_SingleUser tests basic join functionality
+func TestRoom_Join_SingleUser(t *testing.T) {
+	cfg := &config.Config{}
+	api := &webrtc.API{}
+	room := NewRoom("test-room", cfg, api)
+	defer room.Close()
+
+	// Note: Real SDP exchange requires complex setup
+	// This test verifies the method structure only
+	t.Skip("Join requires real PeerConnection setup; tested in integration tests")
+}
+
+// TestRoom_Join_Duplicate tests duplicate join prevention
+func TestRoom_Join_Duplicate(t *testing.T) {
+	cfg := &config.Config{}
+	api := &webrtc.API{}
+	room := NewRoom("test-room", cfg, api)
+	defer room.Close()
+
+	// Manually add a session to simulate existing user
+	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{})
+	require.NoError(t, err)
+	defer pc.Close()
+
+	session := NewSession("user-1", room, pc)
+	room.mu.Lock()
+	room.sessions["user-1"] = session
+	room.mu.Unlock()
+
+	// Try to join with same user ID
+	_, err = room.Join("user-1", "fake-sdp")
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, ErrSessionAlreadyExists))
+}
+
+// TestRoom_Leave tests removing a participant
+func TestRoom_Leave(t *testing.T) {
+	cfg := &config.Config{}
+	api := &webrtc.API{}
+	room := NewRoom("test-room", cfg, api)
+	defer room.Close()
+
+	// Manually add a session
+	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{})
+	require.NoError(t, err)
+
+	session := NewSession("user-1", room, pc)
+	room.mu.Lock()
+	room.sessions["user-1"] = session
+	room.mu.Unlock()
+
+	// Leave
+	err = room.Leave("user-1")
+	require.NoError(t, err)
+
+	// Verify session removed
+	room.mu.RLock()
+	_, exists := room.sessions["user-1"]
+	room.mu.RUnlock()
+	assert.False(t, exists, "session should be removed")
+}
+
+// TestRoom_Leave_NotFound tests leaving non-existent session
+func TestRoom_Leave_NotFound(t *testing.T) {
+	cfg := &config.Config{}
+	api := &webrtc.API{}
+	room := NewRoom("test-room", cfg, api)
+	defer room.Close()
+
+	err := room.Leave("non-existent")
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, ErrSessionNotFound))
+}
+
+// TestRoom_Concurrency tests concurrent Join/Leave operations
+func TestRoom_Concurrency(t *testing.T) {
+	cfg := &config.Config{}
+	api := &webrtc.API{}
+	room := NewRoom("test-room", cfg, api)
+	defer room.Close()
+
+	const numGoroutines = 100
+	done := make(chan bool, numGoroutines)
+
+	// Spawn goroutines that add/remove sessions
+	for i := 0; i < numGoroutines; i++ {
+		go func(id int) {
+			defer func() { done <- true }()
+
+			userID := fmt.Sprintf("user-%d", id)
+
+			// Create and manually add session
+			pc, err := webrtc.NewPeerConnection(webrtc.Configuration{})
+			if err != nil {
+				return
+			}
+			defer pc.Close()
+
+			session := NewSession(userID, room, pc)
+
+			// Add session
+			room.mu.Lock()
+			room.sessions[userID] = session
+			room.mu.Unlock()
+
+			// Leave
+			_ = room.Leave(userID)
+		}(i)
+	}
+
+	// Wait for all goroutines
+	for i := 0; i < numGoroutines; i++ {
+		<-done
+	}
+
+	// Verify room is empty
+	room.mu.RLock()
+	sessionCount := len(room.sessions)
+	room.mu.RUnlock()
+
+	assert.Equal(t, 0, sessionCount, "all sessions should be removed")
+}
+

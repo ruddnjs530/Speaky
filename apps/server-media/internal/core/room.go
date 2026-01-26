@@ -95,6 +95,110 @@ func (r *Room) BroadcastTrack(fromUserID string, track *webrtc.TrackRemote, ctx 
 	return nil
 }
 
+// Join adds a new participant to the room and establishes WebRTC connection.
+// Supports Late Joiner scenario by subscribing to all existing tracks.
+func (r *Room) Join(userID, offerSDP string) (string, error) {
+	r.mu.Lock()
+
+	// 1. Check if user already exists
+	if _, exists := r.sessions[userID]; exists {
+		r.mu.Unlock()
+		return "", fmt.Errorf("%w: %s", ErrSessionAlreadyExists, userID)
+	}
+
+	// 2. Create PeerConnection using room's WebRTC API
+	pc, err := r.api.NewPeerConnection(webrtc.Configuration{})
+	if err != nil {
+		r.mu.Unlock()
+		return "", fmt.Errorf("failed to create peer connection: %w", err)
+	}
+
+	// 3. Create Session wrapper
+	session := NewSession(userID, r, pc)
+
+	// 4. Subscribe to existing tracks (Late Joiner support)
+	for _, activeTrack := range r.activeTracks {
+		if activeTrack.OwnerID == userID {
+			continue // Don't send user's own tracks back
+		}
+
+		if err := r.subscribeToTrack(session, activeTrack); err != nil {
+			slog.Warn("Failed to subscribe to existing track",
+				"sessionID", userID,
+				"ownerID", activeTrack.OwnerID,
+				"error", err,
+			)
+			// Continue with other tracks (non-fatal)
+		}
+	}
+
+	// 5. Store session
+	r.sessions[userID] = session
+	r.mu.Unlock()
+
+	// 6. Handle SDP offer (outside lock to avoid blocking)
+	answerSDP, err := session.HandleOffer(offerSDP)
+	if err != nil {
+		// Cleanup on failure
+		r.Leave(userID)
+		return "", fmt.Errorf("failed to handle offer: %w", err)
+	}
+
+	slog.Info("User joined room",
+		"roomID", r.ID,
+		"userID", userID,
+		"existingTracks", len(r.activeTracks),
+	)
+
+	return answerSDP, nil
+}
+
+// Leave removes a participant from the room and cleans up resources.
+func (r *Room) Leave(userID string) error {
+	r.mu.Lock()
+
+	session, exists := r.sessions[userID]
+	if !exists {
+		r.mu.Unlock()
+		return fmt.Errorf("%w: %s", ErrSessionNotFound, userID)
+	}
+
+	// Remove from sessions map
+	delete(r.sessions, userID)
+
+	// Remove this user from all track subscribers and clean up owned tracks
+	for trackID, activeTrack := range r.activeTracks {
+		// Remove as subscriber
+		activeTrack.mu.Lock()
+		delete(activeTrack.subscribers, userID)
+		activeTrack.mu.Unlock()
+
+		// If this user owns the track, stop processRTP and remove track
+		if activeTrack.OwnerID == userID {
+			activeTrack.cancel() // Stop processRTP goroutine
+			delete(r.activeTracks, trackID)
+		}
+	}
+
+	// Capture remaining sessions count before unlock
+	remainingSessions := len(r.sessions)
+
+	r.mu.Unlock()
+
+	// Close session (outside lock to avoid blocking)
+	if err := session.Close(); err != nil {
+		slog.Warn("Error closing session", "userID", userID, "error", err)
+	}
+
+	slog.Info("User left room",
+		"roomID", r.ID,
+		"userID", userID,
+		"remainingSessions", remainingSessions,
+	)
+
+	return nil
+}
+
 // subscribeToTrack adds a session as a subscriber to an active track.
 // This is used by both Join (late joiner) and BroadcastTrack (new track).
 func (r *Room) subscribeToTrack(session *Session, activeTrack *ActiveTrack) error {
