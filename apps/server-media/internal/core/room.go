@@ -52,9 +52,46 @@ func NewRoom(id string, cfg *config.Config, api *webrtc.API) *Room {
 }
 
 // BroadcastTrack forwards a track from one participant to all others.
-// Full implementation will be added in Step 4-4.
+// CRITICAL: This is called from OnTrack callback (Pion's internal goroutine).
+// Must not block for extended periods.
 func (r *Room) BroadcastTrack(fromUserID string, track *webrtc.TrackRemote, ctx context.Context) error {
-	// TODO: Implement full SFU broadcast logic
+	// Create child context for this specific track
+	trackCtx, cancel := context.WithCancel(ctx)
+
+	r.mu.Lock()
+
+	// 1. Create ActiveTrack with subscriber management
+	trackID := fmt.Sprintf("%s-%s", fromUserID, track.ID())
+	activeTrack := &ActiveTrack{
+		Remote:      track,
+		OwnerID:     fromUserID,
+		Kind:        track.Kind(),
+		subscribers: make(map[string]*webrtc.TrackLocalStaticRTP),
+		cancel:      cancel,
+	}
+	r.activeTracks[trackID] = activeTrack
+
+	// 2. Add existing participants as subscribers
+	for userID, session := range r.sessions {
+		if userID == fromUserID {
+			continue // Don't send track back to sender
+		}
+
+		if err := r.subscribeToTrack(session, activeTrack); err != nil {
+			slog.Warn("Failed to subscribe session to track",
+				"sessionID", userID,
+				"trackID", trackID,
+				"error", err,
+			)
+			// Continue with other sessions (non-fatal)
+		}
+	}
+
+	r.mu.Unlock()
+
+	// 3. Start Single Reader Goroutine (CRITICAL FIX for Fan-out)
+	go r.processRTP(trackCtx, activeTrack)
+
 	return nil
 }
 
