@@ -2,30 +2,30 @@ export type Role = "HOST" | "GUEST";
 
 export type AppStateKind =
     | "Idle"
-    | "SessionReady"     // REST 성공(세션 메타 확보)
-    | "WsConnecting"     // (Day2) WSS 연결 시도
-    | "Attached"         // (Day2) SYS_ATTACH 성공
-    | "PcConnecting"     // (Day2) offer/answer 교환 중
-    | "Connected"        // (Day2) WebRTC 연결 완료
-    | "Reconnecting"
-    | "Error";
+    | "SessionReady"     // REST 성공 (세션 메타 확보)
+    | "WsConnecting"     // WSS 연결 시도 중
+    | "Attached"         // SYS_ATTACH 성공 (시그널링 준비 완료)
+    | "PcConnecting"     // WebRTC Negotiation 중 (Offer/Answer)
+    | "Connected"        // WebRTC 연결 완료 (미디어 스트림 가능)
+    | "Reconnecting"     // 재연결 시도 중
+    | "Error";           // 치명적 에러
 
+// 에러 코드별 유저 액션 정의
 export type SysErrorCode =
-    | "UNAUTHORIZED"
-    | "INVALID_CLIENT_ID"
-    | "INVALID_STATE"
-    | "SESSION_NOT_ACTIVE"
-    | "DUPLICATE_HOST"
-    | "MEDIA_UNAVAILABLE"
-    | "RATE_LIMITED"
-    // Day1에서 REST 에러도 동일 포맷으로 흡수할 수 있게 확장
-    | "REST_ERROR"
-    | "UNKNOWN";
+    | "UNAUTHORIZED"       // -> 로그인 이동
+    | "INVALID_CLIENT_ID"  // -> 새로고침/재접속
+    | "INVALID_STATE"      // -> 새로고침/재접속
+    | "SESSION_NOT_ACTIVE" // -> 홈 이동 + 안내
+    | "DUPLICATE_HOST"     // -> Host 전용 안내 + 종료
+    | "MEDIA_UNAVAILABLE"  // -> 재시도 + 실패 시 안내
+    | "RATE_LIMITED"       // -> 대기 안내
+    | "REST_ERROR"         // (Fallback)
+    | "UNKNOWN";           // (Fallback)
 
 export interface AppError {
     code: SysErrorCode;
     message: string;
-    requestId?: string; // SYS_ERROR가 특정 requestId와 연관될 때
+    requestId?: string;
 }
 
 export interface AppStateContext {
@@ -33,9 +33,9 @@ export interface AppStateContext {
     sessionId: string | null;
     role: Role | null;
 
-    wsUrl: string | null;            // wss://.../ws/signaling
-    signalingToken: string | null;   // token
-    clientId: string | null;         // web-xxxxxxxx (탭 단위, 불변)
+    wsUrl: string | null;
+    signalingToken: string | null;
+    clientId: string | null;    // A파트에서 주입받음
 
     lastError: AppError | null;
 }
