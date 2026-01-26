@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 import signal
+import traceback
 from typing import AsyncIterator, Optional
 
 import grpc
@@ -12,11 +13,14 @@ from shared_proto import voice_pb2, voice_pb2_grpc
 
 # RVC 모델 관리자 import
 from src.services.model_manager import VoiceModelManager, load_models_from_config
+from src.services.rvc_converter import RVCConverter
 
 
 class VoiceService(voice_pb2_grpc.VoiceServiceServicer):
     def __init__(self, model_manager: VoiceModelManager):
         self.model_manager = model_manager
+        self._logged_error_types = set()  # 에러 타입별로 traceback 출력 추적
+        self._first_sample_rate_warning_logged = False  # 샘플레이트 경고 한 번만 출력
     
     async def GetStatus(self, request: voice_pb2.StatusRequest, context: grpc.aio.ServicerContext):
         """서버 전체 상태 반환
@@ -49,39 +53,35 @@ class VoiceService(voice_pb2_grpc.VoiceServiceServicer):
     ) -> AsyncIterator[voice_pb2.AudioChunk]:
         """
         오디오 스트림 변환
-        - AudioChunk의 voice_model_id를 받아서 해당 모델 사용
-        - voice_model_id가 없으면 첫 번째 READY 모델 사용
+        - 첫 번째 청크의 voice_model_id로 모델 선택 (연결당 한 번만)
+        - 이후 청크들은 같은 모델 재사용 (voice_model_id는 변경되지 않음)
+        - voice_model_id가 없으면 pass-through
         - 모델이 없으면 pass-through
         """
-        current_model_name: Optional[str] = None
-        converter = None
+        current_converter: Optional[RVCConverter] = None
+        model_initialized = False  # 첫 번째 청크에서만 모델 선택
         
         async for chunk in request_iterator:
-            # voice_model_id 추출 (int64) 및 model_name(string)로 변환
-            voice_model_id = chunk.voice_model_id if chunk.voice_model_id else None
-            model_name = None
-            
-            if voice_model_id is not None:
-                # voice_model_id로 model_name 가져오기
-                model_name = self.model_manager.get_model_name_by_voice_model_id(voice_model_id)
-            
-            # model_name이 없으면 첫 번째 READY 모델 사용
-            if not model_name:
-                models = self.model_manager.list_models()
-                ready_models = [m for m in models.values() if m["status"] == "READY"]
-                if ready_models:
-                    model_name = ready_models[0]["model_name"]
-            
-            # 모델이 변경되었거나 처음인 경우
-            if model_name and model_name != current_model_name:
-                converter = self.model_manager.get_converter(model_name)
-                if converter:
-                    current_model_name = model_name
-                    print(f"[AI Worker] Using model: {model_name}")
+            # 첫 번째 청크에서만 모델 선택 (연결당 한 번만)
+            if not model_initialized:
+                voice_model_id = chunk.voice_model_id if chunk.voice_model_id else None
+                
+                if voice_model_id is not None:
+                    converter, model_name = self.model_manager.get_converter_by_voice_model_id(voice_model_id)
                 else:
-                    print(f"[WARNING] Model not found or not ready: {model_name}, using pass-through")
-                    converter = None
-                    current_model_name = None
+                    converter, model_name = None, None
+                
+                # 모델 선택 완료
+                current_converter = converter
+                model_initialized = True
+                
+                if model_name:
+                    print(f"[AI Worker] Using model: {model_name}")
+                elif converter is None:
+                    print(f"[AI Worker] No model available, using pass-through")
+            
+            # 이후 청크들은 첫 번째에서 선택한 모델 재사용
+            converter = current_converter
             
             # 모델이 없으면 pass-through
             if converter is None:
@@ -95,14 +95,43 @@ class VoiceService(voice_pb2_grpc.VoiceServiceServicer):
             
             # RVC 변환 수행
             try:
+                # 샘플레이트 검증 (RVC는 16kHz 또는 24kHz 권장)
+                sample_rate = int(chunk.sample_rate)
+                if sample_rate not in [16000, 24000]:
+                    # 첫 번째 경고만 출력 (로그 과다 방지)
+                    if not self._first_sample_rate_warning_logged:
+                        print(f"[WARNING] Sample rate {sample_rate}Hz may not work optimally. RVC expects 16kHz or 24kHz.")
+                        self._first_sample_rate_warning_logged = True
+                
                 out_pcm = await asyncio.to_thread(
                     converter.convert,
                     chunk.pcm,
-                    int(chunk.sample_rate),
+                    sample_rate,
                     int(chunk.channels),
                 )
+                
+                # 변환 성공 확인 (원본과 동일하면 변환이 안 된 것일 수 있음)
+                # 단, 매우 짧은 청크나 무음은 원본과 같을 수 있으므로 경고만 출력
+                if len(chunk.pcm) > 1000 and out_pcm == chunk.pcm:
+                    print(f"[WARNING] Output is identical to input - conversion may have failed or returned original")
+                    
             except Exception as e:
-                print(f"[ERROR] Conversion failed: {e}")
+                # 에러 정보 수집
+                error_type = type(e).__name__
+                error_msg = str(e) if e else ""
+                
+                # 에러 메시지 출력
+                if not error_msg or len(error_msg.strip()) == 0:
+                    print(f"[ERROR] Conversion failed: {error_type} (no message)")
+                else:
+                    print(f"[ERROR] Conversion failed: {error_type}: {error_msg}")
+                
+                # 에러 타입별로 첫 번째 발생 시에만 traceback 출력 (로그 과다 방지)
+                if error_type not in self._logged_error_types:
+                    print(f"[ERROR] First {error_type} traceback:")
+                    traceback.print_exc()
+                    self._logged_error_types.add(error_type)
+                
                 # 변환 실패 시 pass-through
                 out_pcm = chunk.pcm
             
@@ -130,8 +159,14 @@ async def serve(host: str = "0.0.0.0", port: int = 50051) -> None:
     if configs:
         print(f"[AI Worker] Loading {len(configs)} models...")
         await model_manager.load_all_models()
-        loaded_models = list(model_manager.list_models().keys())
-        print(f"[AI Worker] Loaded models: {loaded_models}")
+        models = model_manager.list_models()
+        ready_models = [m["model_name"] for m in models.values() if m["status"] == "READY"]
+        error_models = [m["model_name"] for m in models.values() if m["status"] == "ERROR"]
+        
+        if ready_models:
+            print(f"[AI Worker] Ready models ({len(ready_models)}): {ready_models}")
+        if error_models:
+            print(f"[AI Worker] Failed models ({len(error_models)}): {error_models}")
     else:
         print("[AI Worker] No models configured, running in pass-through mode")
     
