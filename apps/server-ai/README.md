@@ -130,6 +130,8 @@ docker-compose logs -f server-ai
 
 ## 새 모델 추가하기
 
+> 📖 **상세 가이드**: [모델 등록 가이드](./MODEL_REGISTRATION_GUIDE.md) 참고
+
 1. **모델 파일 준비**
    - 학습한 `.pth` 파일을 `{RVC_ASSETS_PATH}/weights/`에 배치
    - 인덱스 파일이 있으면 `{RVC_ASSETS_PATH}/indices/`에 배치
