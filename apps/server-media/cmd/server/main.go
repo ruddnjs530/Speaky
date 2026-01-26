@@ -4,12 +4,17 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
-	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/app"
-	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/config"
+	"time"
+
+	"speaky-media/internal/config"
+	"speaky-media/internal/core"
+	"speaky-media/internal/server"
+	"speaky-media/internal/webrtc"
 )
 
 func main() {
@@ -30,19 +35,53 @@ func main() {
 		"env", cfg.Env,
 		"ai_server", cfg.AIServerAddr,
 		"log_level", cfg.LogLevel,
+		"port", cfg.Port,
 	)
 
-	// 4. Initialize and Run Application
-	application, err := app.New(ctx, cfg)
+	// 4. Initialize Dependencies
+	// WebRTC API
+	api, err := webrtc.NewAPI(cfg)
 	if err != nil {
-		slog.Error("Failed to initialize application", "error", err)
+		slog.Error("Failed to create WebRTC API", "error", err)
 		os.Exit(1)
 	}
 
-	if err := application.Run(ctx); err != nil {
-		slog.Error("Application exited with error", "error", err)
-		os.Exit(1)
+	// Room Manager
+	roomManager := core.NewRoomManager(cfg, api)
+
+	// Signaling Server
+	signaling := server.NewSignalingServer(roomManager)
+
+	// HTTP Handler
+	handler := server.NewHandler(signaling)
+	mux := http.NewServeMux()
+	handler.RegisterRoutes(mux)
+
+	// 5. Start HTTP Server
+	srv := &http.Server{
+		Addr:    ":" + cfg.Port,
+		Handler: mux,
 	}
+
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			slog.Error("HTTP server error", "error", err)
+			os.Exit(1)
+		}
+	}()
+	slog.Info("Server listening", "addr", srv.Addr)
+
+	// 6. Wait for Shutdown
+	<-ctx.Done()
+	slog.Info("Shutting down...")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		slog.Error("Server forced to shutdown", "error", err)
+	}
+	slog.Info("Server exited")
 }
 
 func initLogger(cfg *config.Config) {

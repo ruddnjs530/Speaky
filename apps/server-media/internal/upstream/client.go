@@ -3,128 +3,96 @@ package upstream
 import (
 	"context"
 	"fmt"
-
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"io"
 
 	pb "mediaserver/proto"
 
-	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/config"
-	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/pipeline"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 )
 
-// AudioSender defines the capability to send audio data to an external service
-// and receive processed responses.
-type AudioSender interface {
-	Send(frame *pipeline.AudioFrame) error
-	Receive() (*pipeline.AudioFrame, error)
-	Close() error
+// Client manages the gRPC connection to the AI Server.
+type Client struct {
+	conn   *grpc.ClientConn
+	client pb.VoiceServiceClient
+	addr   string
 }
 
-// GRPCSender implements AudioSender using the VoiceService gRPC stream.
-type GRPCSender struct {
-	conn          *grpc.ClientConn
-	stream        pb.VoiceService_ConvertStreamClient
-	sampleRate    int32
-	channels      int32
-	lastTimestamp uint32 // Tracks the last valid timestamp for local generation
-}
-
-// NewGRPCSender creates a connection to the AI Server and initializes the stream.
-func NewGRPCSender(ctx context.Context, cfg *config.Config) (*GRPCSender, error) {
-	// Establish a gRPC connection
-	// TODO: Update credentials for production security (e.g., use TLS/SSL).
-	conn, err := grpc.NewClient(cfg.AIServerAddr,
+// NewClient creates a new AI Server client.
+// It establishes a gRPC connection to the specified address.
+func NewClient(ctx context.Context, addr string) (*Client, error) {
+	// Create gRPC connection with insecure credentials (for development)
+	// In production, use proper TLS credentials
+	conn, err := grpc.NewClient(
+		addr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to grpc server: %w", err)
+		return nil, fmt.Errorf("%w: %v", ErrConnectionRefused, err)
 	}
 
-	// Initialize the VoiceService client.
-	client := pb.NewVoiceServiceClient(conn)
+	return &Client{
+		conn:   conn,
+		client: pb.NewVoiceServiceClient(conn),
+		addr:   addr,
+	}, nil
+}
 
-	// Open a bidirectional stream for audio conversion.
-	// TODO: Consider using a context with timeout or cancellation for robust stream management.
-	stream, err := client.ConvertStream(ctx)
+// Close closes the underlying gRPC connection.
+func (c *Client) Close() error {
+	if c.conn != nil {
+		return c.conn.Close()
+	}
+	return nil
+}
+
+// Stream wraps the bidirectional gRPC stream for audio conversion.
+type Stream struct {
+	stream pb.VoiceService_ConvertStreamClient
+}
+
+// NewStream creates a new bidirectional stream for audio conversion.
+func (c *Client) NewStream(ctx context.Context) (*Stream, error) {
+	stream, err := c.client.ConvertStream(ctx)
 	if err != nil {
-		conn.Close()
+		// Check if it's a connection error
+		if st, ok := status.FromError(err); ok {
+			if st.Code() == codes.Unavailable {
+				return nil, fmt.Errorf("%w: %v", ErrConnectionRefused, err)
+			}
+		}
 		return nil, fmt.Errorf("failed to create stream: %w", err)
 	}
 
-	return &GRPCSender{
-		conn:       conn,
-		stream:     stream,
-		sampleRate: int32(cfg.AudioSampleRate),
-		channels:   int32(cfg.AudioChannels),
-	}, nil
+	return &Stream{stream: stream}, nil
 }
 
-// Send constructs an AudioChunk and sends it via the gRPC stream.
-func (s *GRPCSender) Send(frame *pipeline.AudioFrame) error {
-	req := &pb.AudioChunk{
-		Pcm:        frame.Data,
-		SampleRate: s.sampleRate,
-		Channels:   s.channels,
-		Timestamp:  frame.Timestamp,
+// Send sends an audio chunk to the AI server.
+func (s *Stream) Send(chunk *pb.AudioChunk) error {
+	if err := s.stream.Send(chunk); err != nil {
+		if err == io.EOF {
+			return fmt.Errorf("%w: %v", ErrStreamBroken, err)
+		}
+		return fmt.Errorf("failed to send audio chunk: %w", err)
 	}
-
-	return s.stream.Send(req)
+	return nil
 }
 
-// Receive reads a processed AudioChunk from the AI server.
-func (s *GRPCSender) Receive() (*pipeline.AudioFrame, error) {
-	resp, err := s.stream.Recv()
+// Recv receives an audio chunk from the AI server.
+func (s *Stream) Recv() (*pb.AudioChunk, error) {
+	chunk, err := s.stream.Recv()
 	if err != nil {
-		return nil, fmt.Errorf("failed to receive from stream: %w", err)
-	}
-
-	ts := resp.Timestamp
-	if ts == 0 {
-		// If server returns 0, generate timestamp locally based on duration.
-		// We assume output is usually 16kHz mono, but we need 48kHz RTP ticks for sync.
-		// Ticks = (bytes / 2 / channels) / sampleRate * 48000
-		// Simplified: ticks = bytes * 24000 / (sampleRate * channels)
-
-		// Avoid division by zero
-		sr := s.sampleRate
-		if sr == 0 {
-			sr = 16000
+		if err == io.EOF {
+			return nil, io.EOF // Normal stream termination
 		}
-		ch := s.channels
-		if ch == 0 {
-			ch = 1
-		}
-
-		durationTicks := uint32(len(resp.Pcm)) * 24000 / uint32(sr*ch)
-
-		// If this is the first packet (lastTimestamp == 0), start at 0 (or random, but 0 is fine for relative)
-		// Actually, we want to increment *after* the first packet?
-		// No, usually RTP starts at random. But for relative sync, 0 is fine.
-		// We need to increment for the *next* packet.
-		// But wait, Sync Loop expects timestamps to increase.
-
-		// Strategy: Use current s.lastTimestamp as the timestamp for THIS packet,
-		// then increment it for the NEXT packet.
-		ts = s.lastTimestamp
-		s.lastTimestamp += durationTicks
-	} else {
-		// Update local tracker if server sends valid TS
-		s.lastTimestamp = ts
+		return nil, fmt.Errorf("%w: %v", ErrStreamBroken, err)
 	}
-
-	return &pipeline.AudioFrame{
-		Data:      resp.Pcm,
-		Timestamp: ts,
-	}, nil
+	return chunk, nil
 }
 
-// Close terminates the stream and the connection.
-func (s *GRPCSender) Close() error {
-	// 스트림 닫기 (더 이상 보낼 데이터가 없음을 알림)
-	if s.stream != nil {
-		s.stream.CloseSend()
-	}
-	// TCP 연결 종료
-	return s.conn.Close()
+// Close closes the stream by sending CloseSend.
+func (s *Stream) Close() error {
+	return s.stream.CloseSend()
 }
