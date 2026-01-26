@@ -16,7 +16,7 @@ func TestSession_New(t *testing.T) {
 	// Create room
 	cfg := &config.Config{}
 	api := &webrtc.API{}
-	room := NewRoom("test-room", cfg, api)
+	room := NewRoom("test-room", cfg, api, nil)
 	defer room.Close()
 
 	// Create peer connection (minimal config for testing)
@@ -49,7 +49,7 @@ func TestSession_New(t *testing.T) {
 func TestSession_Close(t *testing.T) {
 	cfg := &config.Config{}
 	api := &webrtc.API{}
-	room := NewRoom("test-room", cfg, api)
+	room := NewRoom("test-room", cfg, api, nil)
 	defer room.Close()
 
 	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{})
@@ -82,7 +82,7 @@ func TestSession_Close(t *testing.T) {
 func TestSession_ContextInheritance(t *testing.T) {
 	cfg := &config.Config{}
 	api := &webrtc.API{}
-	room := NewRoom("test-room", cfg, api)
+	room := NewRoom("test-room", cfg, api, nil)
 
 	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{})
 	require.NoError(t, err)
@@ -115,7 +115,7 @@ func TestSession_ContextInheritance(t *testing.T) {
 func TestSession_AddLocalTrack(t *testing.T) {
 	cfg := &config.Config{}
 	api := &webrtc.API{}
-	room := NewRoom("test-room", cfg, api)
+	room := NewRoom("test-room", cfg, api, nil)
 	defer room.Close()
 
 	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{})
@@ -149,7 +149,7 @@ func TestSession_AddLocalTrack(t *testing.T) {
 func TestSession_RemoveLocalTrack(t *testing.T) {
 	cfg := &config.Config{}
 	api := &webrtc.API{}
-	room := NewRoom("test-room", cfg, api)
+	room := NewRoom("test-room", cfg, api, nil)
 	defer room.Close()
 
 	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{})

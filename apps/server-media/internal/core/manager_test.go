@@ -15,7 +15,7 @@ import (
 func TestManager_CreateRoom(t *testing.T) {
 	cfg := &config.Config{}
 	api := &webrtc.API{}
-	manager := NewRoomManager(cfg, api)
+	manager := NewRoomManager(cfg, api, nil)
 
 	// Create room
 	room, err := manager.CreateRoom("test-room")
@@ -28,7 +28,7 @@ func TestManager_CreateRoom(t *testing.T) {
 func TestManager_CreateRoom_Duplicate(t *testing.T) {
 	cfg := &config.Config{}
 	api := &webrtc.API{}
-	manager := NewRoomManager(cfg, api)
+	manager := NewRoomManager(cfg, api, nil)
 
 	// Create first room
 	_, err := manager.CreateRoom("test-room")
@@ -44,7 +44,7 @@ func TestManager_CreateRoom_Duplicate(t *testing.T) {
 func TestManager_GetRoom(t *testing.T) {
 	cfg := &config.Config{}
 	api := &webrtc.API{}
-	manager := NewRoomManager(cfg, api)
+	manager := NewRoomManager(cfg, api, nil)
 
 	// Create room
 	created, err := manager.CreateRoom("test-room")
@@ -60,7 +60,7 @@ func TestManager_GetRoom(t *testing.T) {
 func TestManager_GetRoom_NotFound(t *testing.T) {
 	cfg := &config.Config{}
 	api := &webrtc.API{}
-	manager := NewRoomManager(cfg, api)
+	manager := NewRoomManager(cfg, api, nil)
 
 	// Try to get non-existent room
 	_, err := manager.GetRoom("non-existent")
@@ -72,7 +72,7 @@ func TestManager_GetRoom_NotFound(t *testing.T) {
 func TestManager_DeleteRoom(t *testing.T) {
 	cfg := &config.Config{}
 	api := &webrtc.API{}
-	manager := NewRoomManager(cfg, api)
+	manager := NewRoomManager(cfg, api, nil)
 
 	// Create and delete room
 	_, err := manager.CreateRoom("test-room")
@@ -90,7 +90,7 @@ func TestManager_DeleteRoom(t *testing.T) {
 func TestManager_GetOrCreateRoom(t *testing.T) {
 	cfg := &config.Config{}
 	api := &webrtc.API{}
-	manager := NewRoomManager(cfg, api)
+	manager := NewRoomManager(cfg, api, nil)
 
 	// First call should create
 	room1, err := manager.GetOrCreateRoom("test-room")
@@ -107,7 +107,7 @@ func TestManager_GetOrCreateRoom(t *testing.T) {
 func TestManager_Concurrent(t *testing.T) {
 	cfg := &config.Config{}
 	api := &webrtc.API{}
-	manager := NewRoomManager(cfg, api)
+	manager := NewRoomManager(cfg, api, nil)
 
 	const numGoroutines = 100
 	done := make(chan bool, numGoroutines)

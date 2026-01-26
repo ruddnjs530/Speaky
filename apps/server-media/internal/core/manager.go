@@ -7,6 +7,8 @@ import (
 	"speaky-media/internal/config"
 
 	"github.com/pion/webrtc/v4"
+
+	"speaky-media/internal/ai"
 )
 
 // Manager is the global registry for all rooms.
@@ -14,16 +16,18 @@ import (
 type Manager struct {
 	rooms map[string]*Room
 	mu    sync.RWMutex
-	cfg   *config.Config
-	api   *webrtc.API
+	cfg      *config.Config
+	api      *webrtc.API
+	aiClient ai.Client
 }
 
 // NewRoomManager creates a new room manager.
-func NewRoomManager(cfg *config.Config, api *webrtc.API) *Manager {
+func NewRoomManager(cfg *config.Config, api *webrtc.API, aiClient ai.Client) *Manager {
 	return &Manager{
-		rooms: make(map[string]*Room),
-		cfg:   cfg,
-		api:   api,
+		rooms:    make(map[string]*Room),
+		cfg:      cfg,
+		api:      api,
+		aiClient: aiClient,
 	}
 }
 
@@ -37,7 +41,7 @@ func (m *Manager) CreateRoom(roomID string) (*Room, error) {
 		return nil, fmt.Errorf("%w: %s", ErrRoomAlreadyExists, roomID)
 	}
 
-	room := NewRoom(roomID, m.cfg, m.api)
+	room := NewRoom(roomID, m.cfg, m.api, m.aiClient)
 	m.rooms[roomID] = room
 
 	return room, nil
@@ -92,7 +96,7 @@ func (m *Manager) GetOrCreateRoom(roomID string) (*Room, error) {
 		return room, nil
 	}
 
-	room = NewRoom(roomID, m.cfg, m.api)
+	room = NewRoom(roomID, m.cfg, m.api, m.aiClient)
 	m.rooms[roomID] = room
 
 	return room, nil

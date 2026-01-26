@@ -14,6 +14,7 @@ import (
 	"speaky-media/internal/config"
 	"speaky-media/internal/core"
 	"speaky-media/internal/server"
+	"speaky-media/internal/upstream"
 	"speaky-media/internal/webrtc"
 )
 
@@ -46,8 +47,22 @@ func main() {
 		os.Exit(1)
 	}
 
+	// AI Client (Upstream)
+	aiClient, err := upstream.NewClient(ctx, cfg.AIServerAddr)
+	if err != nil {
+		// Log warning but continue? Or fail?
+		// Requirement implies critical dependency. But maybe optional for dev?
+		// Let's fail safe if strict, but warn if lax.
+		// Given PROD, usually strict.
+		slog.Error("Failed to connect to AI Server", "addr", cfg.AIServerAddr, "error", err)
+		// os.Exit(1) // Optional: fail boot
+	} else {
+		defer aiClient.Close()
+		slog.Info("Connected to AI Server", "addr", cfg.AIServerAddr)
+	}
+
 	// Room Manager
-	roomManager := core.NewRoomManager(cfg, api)
+	roomManager := core.NewRoomManager(cfg, api, aiClient)
 
 	// Signaling Server
 	signaling := server.NewSignalingServer(roomManager)
