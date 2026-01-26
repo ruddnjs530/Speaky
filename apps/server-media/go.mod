@@ -11,6 +11,12 @@ require (
 )
 
 require (
+	github.com/hraban/opus v0.0.0-20251117090126-c76ea7e21bf3 // indirect
+	github.com/pion/opus v0.0.0-20260122090349-7342caad2cf7 // indirect
+	github.com/zaf/resample v1.5.0 // indirect
+)
+
+require (
 	codeberg.org/chavacava/garif v0.2.0 // indirect
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/BurntSushi/toml v1.5.0 // indirect
