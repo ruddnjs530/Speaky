@@ -13,6 +13,9 @@ var (
 	// ErrSessionNotFound is returned when requesting a session that does not exist in the room
 	ErrSessionNotFound = errors.New("session not found")
 
+	// ErrSessionAlreadyExists is returned when a user attempts to join a room they're already in
+	ErrSessionAlreadyExists = errors.New("session already exists")
+
 	// ErrSessionClosed is returned when attempting operations on a closed session
 	ErrSessionClosed = errors.New("session closed")
 )

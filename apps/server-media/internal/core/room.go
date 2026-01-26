@@ -2,6 +2,9 @@ package core
 
 import (
 	"context"
+	"fmt"
+	"io"
+	"log/slog"
 	"sync"
 
 	"speaky-media/internal/config"
@@ -23,10 +26,14 @@ type Room struct {
 }
 
 // ActiveTrack stores information about a track currently being broadcast in the room.
+// It manages the list of subscribers for Fan-out distribution.
 type ActiveTrack struct {
-	Remote  *webrtc.TrackRemote
-	OwnerID string
-	Kind    webrtc.RTPCodecType
+	Remote      *webrtc.TrackRemote
+	OwnerID     string
+	Kind        webrtc.RTPCodecType
+	subscribers map[string]*webrtc.TrackLocalStaticRTP // Key: sessionID, Value: local track
+	mu          sync.RWMutex                            // Protects subscribers map
+	cancel      context.CancelFunc                      // To stop processRTP goroutine
 }
 
 // NewRoom creates a new room with the given ID.
@@ -45,10 +52,82 @@ func NewRoom(id string, cfg *config.Config, api *webrtc.API) *Room {
 }
 
 // BroadcastTrack forwards a track from one participant to all others.
-// Full implementation will be added in Step 4.
+// Full implementation will be added in Step 4-4.
 func (r *Room) BroadcastTrack(fromUserID string, track *webrtc.TrackRemote, ctx context.Context) error {
 	// TODO: Implement full SFU broadcast logic
 	return nil
+}
+
+// subscribeToTrack adds a session as a subscriber to an active track.
+// This is used by both Join (late joiner) and BroadcastTrack (new track).
+func (r *Room) subscribeToTrack(session *Session, activeTrack *ActiveTrack) error {
+	// Create local track for this subscriber
+	localTrack, err := webrtc.NewTrackLocalStaticRTP(
+		activeTrack.Remote.Codec().RTPCodecCapability,
+		activeTrack.Remote.ID(),
+		activeTrack.Remote.StreamID(),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create local track: %w", err)
+	}
+
+	// Add track to subscriber's PeerConnection
+	if _, err := session.pc.AddTrack(localTrack); err != nil {
+		return fmt.Errorf("failed to add track to peer connection: %w", err)
+	}
+
+	// Register subscriber in ActiveTrack
+	activeTrack.mu.Lock()
+	activeTrack.subscribers[session.ID] = localTrack
+	activeTrack.mu.Unlock()
+
+	// Store in session for cleanup
+	trackID := fmt.Sprintf("%s-%s", activeTrack.OwnerID, activeTrack.Remote.ID())
+	session.AddLocalTrack(trackID, localTrack)
+
+	return nil
+}
+
+// processRTP is the Single Reader goroutine that fans out RTP packets to all subscribers.
+// CRITICAL: Only ONE processRTP runs per track (not per subscriber) to avoid packet fragmentation.
+func (r *Room) processRTP(ctx context.Context, activeTrack *ActiveTrack) {
+	buf := make([]byte, 1500) // MTU size for RTP packets
+	errCount := 0
+
+	for {
+		select {
+		case <-ctx.Done():
+			return // Track owner left, stop reading
+		default:
+		}
+
+		// Read ONE packet from source track
+		n, _, err := activeTrack.Remote.Read(buf)
+		if err != nil {
+			if err == io.EOF {
+				return // Track ended normally
+			}
+			// Avoid log explosion: only log every 100th error
+			errCount++
+			if errCount%100 == 1 {
+				slog.Error("Track read error", "error", err, "count", errCount)
+			}
+			return
+		}
+
+		errCount = 0 // Reset on successful read
+
+		// Fan-out: Write to ALL subscribers
+		activeTrack.mu.RLock()
+		for sessionID, localTrack := range activeTrack.subscribers {
+			if _, err := localTrack.Write(buf[:n]); err != nil {
+				// Don't log per-packet write errors (too noisy)
+				// Subscriber will be removed when they leave
+				_ = sessionID // Silence unused variable warning
+			}
+		}
+		activeTrack.mu.RUnlock()
+	}
 }
 
 // Close gracefully shuts down the room and cleans up resources.
