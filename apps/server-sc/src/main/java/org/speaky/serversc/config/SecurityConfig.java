@@ -63,7 +63,7 @@ public class SecurityConfig {
             
             // H2 Console 헤더 설정
             .headers(headers -> headers
-                .frameOptions(frame -> frame.disable())  // H2 콘솔 iframe 허용
+                .frameOptions(frame -> frame.sameOrigin())  // H2 콘솔 iframe 허용
             )
             
             // JWT 인증 필터 추가 (H2 콘솔 제외)
