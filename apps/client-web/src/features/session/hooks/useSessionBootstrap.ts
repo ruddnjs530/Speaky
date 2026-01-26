@@ -41,9 +41,7 @@ function normalizeError(e: unknown, fallbackMessage: string): AppError {
 }
 
 /**
- * ✅ 추가: REST bootstrap/join 응답 필수 필드 검증
- * - 백엔드 스펙 논의(필드명 변경 등)와 무관하게, "없으면 진행 불가"인 것만 체크
- * - 누락 시 BOOTSTRAP_SUCCESS를 막고, BOOTSTRAP_FAIL로 보내기 위한 throw
+ * REST bootstrap/join 응답 필수 필드 검증
  */
 function assertBootstrapResponse(res: unknown): asserts res is {
     channelId: string;
@@ -56,7 +54,6 @@ function assertBootstrapResponse(res: unknown): asserts res is {
         throw { code: "REST_ERROR", message: "Invalid bootstrap response (not an object)" };
     }
 
-    // 필수 필드 존재성(타입까지 엄격히)
     if (typeof res.channelId !== "string" || res.channelId.length === 0) {
         throw { code: "REST_ERROR", message: "Invalid bootstrap response (missing channelId)" };
     }
@@ -69,13 +66,10 @@ function assertBootstrapResponse(res: unknown): asserts res is {
     if (typeof res.token !== "string" || res.token.length === 0) {
         throw { code: "REST_ERROR", message: "Invalid bootstrap response (missing token)" };
     }
-    // role은 현재 타입이 Role로 되어 있어서, 여기서는 존재성만 확인(필요 시 enum 파서로 강화 가능)
     if (typeof res.role !== "string") {
         throw { code: "REST_ERROR", message: "Invalid bootstrap response (missing role)" };
     }
 }
-
-// ...생략 (기존 import/유틸 그대로)
 
 export function useSessionBootstrap() {
     const dispatch = useAppDispatch();
@@ -85,33 +79,29 @@ export function useSessionBootstrap() {
         return kind === "Idle" || kind === "Error";
     }
 
-    /** ✅ 신규: 호스트는 channelId 없이 시작 (서버가 토큰으로 채널 결정) */
     async function startHost() {
         if (!canStartBootstrap(state.kind)) return;
 
-        dispatch({ type: "BOOTSTRAP_START" });
+        dispatch({ type: "EV_BOOTSTRAP_START" });
 
         try {
-            // ✅ 여기 API가 필요합니다: channelId 없이 host start
-            // 예: POST /api/live/host/start 같은 엔드포인트
             const res = await sessionApi.startHostLive();
-
             assertBootstrapResponse(res);
 
             dispatch({
-                type: "BOOTSTRAP_SUCCESS",
+                type: "EV_BOOTSTRAPPED",
                 payload: {
                     channelId: res.channelId,
                     sessionId: res.sessionId,
                     role: toRole(res.role),
                     wsUrl: res.wsUrl,
                     signalingToken: res.token,
-                    clientId: getOrCreateClientId(),
+                    clientId: getOrCreateClientId(), // A파트(공통) 제공
                 },
             });
         } catch (e: unknown) {
             dispatch({
-                type: "BOOTSTRAP_FAIL",
+                type: "EV_BOOTSTRAP_FAIL",
                 error: normalizeError(e, "REST bootstrap failed"),
             });
         }
@@ -120,14 +110,14 @@ export function useSessionBootstrap() {
     async function start(channelId: string) {
         if (!canStartBootstrap(state.kind)) return;
 
-        dispatch({ type: "BOOTSTRAP_START" });
+        dispatch({ type: "EV_BOOTSTRAP_START" });
 
         try {
             const res = await sessionApi.startLive(channelId);
             assertBootstrapResponse(res);
 
             dispatch({
-                type: "BOOTSTRAP_SUCCESS",
+                type: "EV_BOOTSTRAPPED",
                 payload: {
                     channelId: res.channelId,
                     sessionId: res.sessionId,
@@ -139,7 +129,7 @@ export function useSessionBootstrap() {
             });
         } catch (e: unknown) {
             dispatch({
-                type: "BOOTSTRAP_FAIL",
+                type: "EV_BOOTSTRAP_FAIL",
                 error: normalizeError(e, "REST bootstrap failed"),
             });
         }
@@ -148,14 +138,14 @@ export function useSessionBootstrap() {
     async function join(channelId: string) {
         if (!canStartBootstrap(state.kind)) return;
 
-        dispatch({ type: "BOOTSTRAP_START" });
+        dispatch({ type: "EV_BOOTSTRAP_START" });
 
         try {
             const res = await sessionApi.joinLive(channelId);
             assertBootstrapResponse(res);
 
             dispatch({
-                type: "BOOTSTRAP_SUCCESS",
+                type: "EV_BOOTSTRAPPED",
                 payload: {
                     channelId: res.channelId,
                     sessionId: res.sessionId,
@@ -167,7 +157,7 @@ export function useSessionBootstrap() {
             });
         } catch (e: unknown) {
             dispatch({
-                type: "BOOTSTRAP_FAIL",
+                type: "EV_BOOTSTRAP_FAIL",
                 error: normalizeError(e, "REST join failed"),
             });
         }
@@ -175,4 +165,3 @@ export function useSessionBootstrap() {
 
     return { startHost, start, join };
 }
-
