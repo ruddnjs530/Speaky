@@ -42,6 +42,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                     FilterChain filterChain) throws ServletException, IOException {
         
         try {
+            String path = request.getRequestURI();
+            if(path.startsWith("/h2-console")){
+                filterChain.doFilter(request, response);
+                return;
+            }
+
             String token = extractToken(request);
             
             if (StringUtils.hasText(token) && jwtTokenProvider.validateToken(token)) {
