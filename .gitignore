@@ -51,3 +51,7 @@ out/
 
 # Proto generated files
 packages/proto/generated/
+docs/BE/$common/jira_backlog_v2.md:Zone.Identifier
+docs/BE/SC/API명세.md:Zone.Identifier
+.gitignore
+
