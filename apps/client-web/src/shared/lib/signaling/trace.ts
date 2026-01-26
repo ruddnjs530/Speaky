@@ -1,4 +1,4 @@
-import type { Envelope } from "./envelope";
+import type { EnvelopeBase } from "./protocol";
 
 export type TraceDir = "in" | "out" | "ws";
 
@@ -45,7 +45,8 @@ function uuidLike(): string {
     return `trace_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 }
 
-function summarizeEnvelope(env: Envelope): string {
+function summarizeEnvelope(env: EnvelopeBase): string {
+
     // payload 요약: SDP는 길이만, ICE는 candidate prefix만
     const p = (env.payload ?? {}) as Record<string, unknown>;
 
@@ -100,7 +101,7 @@ export const signalingTrace = {
         });
     },
 
-    pushIn(env: Envelope) {
+    pushIn(env: EnvelopeBase) {
         push({
             id: uuidLike(),
             dir: "in",
@@ -116,7 +117,7 @@ export const signalingTrace = {
         });
     },
 
-    pushOut(env: Envelope) {
+    pushOut(env: EnvelopeBase) {
         push({
             id: uuidLike(),
             dir: "out",
