@@ -37,7 +37,7 @@ dependencies {
     runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.5'
     
     // Database
-    runtimeOnly 'com.h2database:h2'
+    implementation 'com.h2database:h2'
     
     // Lombok
     compileOnly 'org.projectlombok:lombok'
@@ -47,7 +47,7 @@ dependencies {
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
     
     // Testing
-    testImplementation 'org.springframework.boot:spring-boot-starter-web-test'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.security:spring-security-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
