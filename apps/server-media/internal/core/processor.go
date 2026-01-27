@@ -118,6 +118,7 @@ func (p *AudioProcessor) processInputPacket(stream upstream.VoiceStream, pipePkt
 		SampleRate: 48000,
 		Channels:   1,
 		Timestamp:  pkt.Timestamp,
+		// VoiceModelId: 1, // 1: Korone Voice
 	}
 	return stream.Send(chunk)
 }

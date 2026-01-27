@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net"
@@ -33,7 +34,7 @@ func main() {
 	}
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "50051"
+		port = "8080"
 	}
 
 	// 3. Setup Dependencies
@@ -46,9 +47,24 @@ func main() {
 	// For E2E local verification (host network), default is fine.
 	api := webrtc.NewAPI(webrtc.WithSettingEngine(settingEngine))
 
-	// Room Manager with AudioProcessor enabled (3s delay)
-	voiceProcessor := upstream.NewMockVoiceProcessor()
-	voiceProcessor.SimulateDelay = 3 * time.Second
+	// Room Manager with AudioProcessor enabled (Real AI Client)
+	aiAddr := os.Getenv("AI_SERVER_ADDR")
+	if aiAddr == "" {
+		aiAddr = "localhost:50051"
+	}
+	slog.Info("Connecting to AI Server", "addr", aiAddr)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	voiceProcessor, err := upstream.NewClient(ctx, aiAddr)
+	if err != nil {
+		slog.Error("Failed to connect to AI Server", "error", err)
+		// Fallback to Mock if connection fails? Or fail hard?
+		// For now, let's log and exit to ensure we know it failed.
+		os.Exit(1)
+	}
+
 	manager := core.NewRoomManager(cfg, api, aiClient, voiceProcessor)
 
 	// 4. Setup gRPC Server

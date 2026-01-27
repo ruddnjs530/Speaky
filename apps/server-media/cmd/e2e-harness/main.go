@@ -17,8 +17,8 @@ import (
 
 // Config
 const (
-	gRPCAddr = "localhost:50051"
-	httpPort = "8080"
+	gRPCAddr = "localhost:8080"
+	httpPort = "9090"
 )
 
 func main() {
