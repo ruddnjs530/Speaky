@@ -64,6 +64,32 @@ public class GlobalExceptionHandler {
     }
     
     /**
+     * 세션 상태 변경 예외 처리 (409)
+     * - 잘못된 상태 전환 시도
+     */
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<ApiResponse<Void>> handleIllegalStateException(
+            IllegalStateException ex) {
+        log.warn("잘못된 상태 전환 시도: {}", ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error("CONFLICT", ex.getMessage()));
+    }
+    
+    /**
+     * 잘못된 인자 예외 처리 (400)
+     * - 유효하지 않은 파라미터
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ApiResponse<Void>> handleIllegalArgumentException(
+            IllegalArgumentException ex) {
+        log.warn("잘못된 인자: {}", ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error("BAD_REQUEST", ex.getMessage()));
+    }
+    
+    /**
      * 일반 예외 처리 (500)
      * - 예상치 못한 서버 오류
      */
