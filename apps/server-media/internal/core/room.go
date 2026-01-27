@@ -42,7 +42,7 @@ type ActiveTrack struct {
 	cancel      context.CancelFunc                      // To stop processRTP goroutine
 
 	// Pipeline components
-	audioQueue  *pipeline.Queue
+	audioQueue  *pipeline.Queue[pipeline.RTPPacket]
 	videoBuffer *media_sync.VideoBuffer
 }
 
@@ -101,19 +101,41 @@ func (r *Room) BroadcastTrack(fromUserID string, track *webrtc.TrackRemote, ctx 
 	r.mu.Unlock()
 
 	// 3. Initialize Pipeline Components
+	// 3. Initialize Pipeline Components
 	// Note: We use 100 packet buffer. 20ms audio * 100 = 2s buffer. Video depends on FPS.
+	session := r.sessions[fromUserID]
+
+	// Define Fan-Out Callback (Sending to all subscribers)
+	onFrame := func(data []byte) {
+		activeTrack.mu.RLock()
+		for _, localTrack := range activeTrack.subscribers {
+			if _, err := localTrack.Write(data); err != nil {
+				// Ignore write errors (non-fatal for one subscriber)
+			}
+		}
+		activeTrack.mu.RUnlock()
+	}
+
 	if activeTrack.Kind == webrtc.RTPCodecTypeAudio {
-		activeTrack.audioQueue = pipeline.NewQueue(100, 1500)
+		activeTrack.audioQueue = pipeline.NewQueue[pipeline.RTPPacket](100)
 
-		// Start Audio Pipeline Worker
-		go r.runAudioPipeline(trackCtx, activeTrack)
+		// Start Audio Pump (Async)
+		if session != nil {
+			session.Synchronizer.RunAudioPump(trackCtx, activeTrack.audioQueue, onFrame)
+		} else {
+			slog.Warn("Session not found for track owner, pipeline disabled", "userID", fromUserID)
+		}
+
 	} else if activeTrack.Kind == webrtc.RTPCodecTypeVideo {
-		// Video Buffer with 600ms delay
-		// TODO: GOP awareness in Phase 4.
-		activeTrack.videoBuffer = media_sync.NewVideoBuffer(200, 1500, 600*time.Millisecond)
+		// Video Buffer with 600ms default delay (Adaptive will adjust)
+		activeTrack.videoBuffer = media_sync.NewVideoBuffer(200, 600*time.Millisecond)
 
-		// Start Video Pipeline Worker
-		go r.runVideoPipeline(trackCtx, activeTrack)
+		// Start Video Pump (Async)
+		if session != nil {
+			session.Synchronizer.RunVideoPump(trackCtx, activeTrack.videoBuffer, onFrame)
+		} else {
+			slog.Warn("Session not found for track owner, pipeline disabled", "userID", fromUserID)
+		}
 	}
 
 	// 4. Start Ingress Goroutine (Reads from Remote -> Pushes to Pipeline)
@@ -122,82 +144,7 @@ func (r *Room) BroadcastTrack(fromUserID string, track *webrtc.TrackRemote, ctx 
 	return nil
 }
 
-// runAudioPipeline consumes packets from the queue, processes them (AI), and broadcasts.
-// Currently simpler loopback/fanout for Phase 3F validation (wiring only).
-// Full AI processing integration will be refined.
-func (r *Room) runAudioPipeline(ctx context.Context, activeTrack *ActiveTrack) {
-	// TODO: Integrate actual AI Client here.
-	// For now, simple consume and broadcast to prove architecture.
-	// Real AI integration requires transcoding to 24k PCM, sending to grpc, etc.
-	// This is a placeholder for the worker loop.
 
-	// Wait, Phase 3C completed AI Client. Step 3F is "Integration".
-	// I SHOULD integrate it.
-	// But Transcoding (Step 3B) Opus<->PCM is needed.
-	// Let's implement the basic structure.
-
-	for {
-		// Blocking Pop
-		data, err := activeTrack.audioQueue.Pop(ctx)
-		if err != nil {
-			return // Context cancelled or queue closed
-		}
-
-		// --- AI PROCESSING WOULD GO HERE ---
-		// 1. Depacketize RTP -> Opus
-		// 2. Decode Opus -> PCM 48k
-		// 3. Resample 48k -> 24k
-		// 4. Send to AI Stream
-		// 5. Receive AI PCM
-		// 6. Resample 24k -> 48k
-		// 7. Encode PCM -> Opus
-		// 8. Packetize -> RTP
-		// -----------------------------------
-
-		// For Phase 3 Verification (MVP): Direct Loopback via Pipeline
-		// Just write original data to subscribers to verify pipeline flow.
-		// (Skipping actual AI/Transcoding for strict Step 3F which is "Pipeline Integration")
-		// Ideally we prove the QUEUE works.
-
-		activeTrack.mu.RLock()
-		for _, localTrack := range activeTrack.subscribers {
-			if _, err := localTrack.Write(data); err != nil {
-				// Ignore write errors
-			}
-		}
-		activeTrack.mu.RUnlock()
-	}
-}
-
-// runVideoPipeline consumes from video buffer and broadcasts after delay.
-func (r *Room) runVideoPipeline(ctx context.Context, activeTrack *ActiveTrack) {
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			// Drain all ready packets
-			for {
-				data, ready := activeTrack.videoBuffer.PopReady()
-				if !ready {
-					break // No more ready packets
-				}
-
-				// Broadcast
-				activeTrack.mu.RLock()
-				for _, localTrack := range activeTrack.subscribers {
-					if _, err := localTrack.Write(data); err != nil {
-						// Ignore
-					}
-				}
-				activeTrack.mu.RUnlock()
-			}
-		}
-	}
-}
 
 
 // Join adds a new participant to the room and establishes WebRTC connection.
@@ -373,12 +320,19 @@ func (r *Room) processRTP(ctx context.Context, activeTrack *ActiveTrack) {
 		payload := make([]byte, n)
 		copy(payload, packetData)
 
+		// Create Metadata Packet
+		pkt := pipeline.RTPPacket{
+			Data:        payload,
+			ArrivalTime: time.Now(),
+		}
+
 		if activeTrack.Kind == webrtc.RTPCodecTypeAudio && activeTrack.audioQueue != nil {
-			if err := activeTrack.audioQueue.Push(payload); err != nil {
+			if err := activeTrack.audioQueue.Push(pkt); err != nil {
 				slog.Warn("Audio queue push failed", "error", err)
 			}
 		} else if activeTrack.Kind == webrtc.RTPCodecTypeVideo && activeTrack.videoBuffer != nil {
-			if err := activeTrack.videoBuffer.Push(payload); err != nil {
+			// VideoBuffer now takes RTPPacket
+			if err := activeTrack.videoBuffer.Push(pkt); err != nil {
 				// VideoBuffer logs its own overflow warning
 			}
 		} else {

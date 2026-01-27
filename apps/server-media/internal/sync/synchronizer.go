@@ -2,79 +2,83 @@ package sync
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"speaky-media/internal/pipeline"
 )
 
-// Synchronizer manages the egress of audio and video packets.
+// Synchronizer manages the egress of audio and video packets and adaptive synchronization.
 // It ensures video is delayed effectively to match audio processing latency.
+// It uses callbacks to output data, decoupling it from the transport layer.
 type Synchronizer struct {
-	audioQueue   *pipeline.Queue
-	videoBuffer  *VideoBuffer
+	estimator *LatencyEstimator
 }
 
 // NewSynchronizer creates a new Synchronizer.
-func NewSynchronizer(audioQ *pipeline.Queue, videoQ *VideoBuffer) *Synchronizer {
+func NewSynchronizer() *Synchronizer {
 	return &Synchronizer{
-		audioQueue:  audioQ,
-		videoBuffer: videoQ,
+		estimator: NewLatencyEstimator(0.1), // Alpha 0.1 for stability
 	}
 }
 
-// Run starts the egress loops.
-// writeAudio: callback to send audio RTP
-// writeVideo: callback to send video RTP
-// It blocks until context is cancelled code.
-func (s *Synchronizer) Run(ctx context.Context, writeAudio func([]byte) error, writeVideo func([]byte) error) error {
-	var wg sync.WaitGroup
-	wg.Add(2)
-
-	// 1. Audio Egress Loop
+// RunAudioPump starts the audio consumer loop.
+// It consumes from the audio queue, measures "Processing Latency" (Time - ArrivalTime),
+// feeds the estimator, and outputs via onFrame.
+func (s *Synchronizer) RunAudioPump(ctx context.Context, queue *pipeline.Queue[pipeline.RTPPacket], onFrame func([]byte)) {
 	go func() {
-		defer wg.Done()
 		for {
-			// Blocking pop
-			packet, err := s.audioQueue.Pop(ctx)
+			packet, err := queue.Pop(ctx)
 			if err != nil {
 				return // Context cancelled or queue closed
 			}
 
-			if err := writeAudio(packet); err != nil {
-				// Log error?
-				continue
-			}
+			// Measure Latency (Simulating Audio Processing Duration)
+			// In real transcoding, this loop runs AFTER transcoding/AI.
+			// "Packet Arrival" was when it entered the system.
+			// "Now" is when we are about to play it out.
+			// Difference is total pipeline latency.
+			latency := time.Since(packet.ArrivalTime)
+
+			// Update the estimator
+			s.estimator.Update(latency)
+
+			// Output payload
+			onFrame(packet.Data)
 		}
 	}()
+}
 
-	// 2. Video Egress Loop
+// RunVideoPump starts the video consumer loop.
+// It polls the VideoBuffer, updates its target delay from the estimator, and outputs frames.
+func (s *Synchronizer) RunVideoPump(ctx context.Context, buffer *VideoBuffer, onFrame func([]byte)) {
 	go func() {
-		defer wg.Done()
-		ticker := time.NewTicker(10 * time.Millisecond) // Poll interval
-		defer ticker.Stop()
-
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case <-ticker.C:
-				// Drain all ready packets
-				for {
-					packet, ready := s.videoBuffer.PopReady()
-					if !ready {
-						break
-					}
-
-					if err := writeVideo(packet); err != nil {
-						continue
-					}
-				}
+			default:
 			}
+
+			// 1. Update Target Delay from Audio Latency
+			avgLat := s.estimator.GetAverage()
+
+			// Safety: If audio pipeline hasn't established a latency yet,
+			// avgLat will be 0 or small. VideoBuffer handles min delay naturally.
+			if avgLat > 0 {
+				buffer.SetDelay(avgLat)
+			}
+
+			// 2. Drain Ready Packets
+			for {
+				packetData, ready := buffer.PopReady()
+				if !ready {
+					break
+				}
+				onFrame(packetData)
+			}
+
+			// Poll interval
+			time.Sleep(10 * time.Millisecond)
 		}
 	}()
-
-	// Wait for both to finish (which happens on ctx cancel)
-	wg.Wait()
-	return nil
 }

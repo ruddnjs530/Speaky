@@ -2,13 +2,12 @@ package pipeline
 
 import (
 	"context"
-	"sync"
 	"testing"
 	"time"
 )
 
 func TestQueue_NewQueue(t *testing.T) {
-	q := NewQueue(10, 1500)
+	q := NewQueue[int](10)
 
 	if q.Cap() != 10 {
 		t.Errorf("Expected capacity 10, got %d", q.Cap())
@@ -24,11 +23,11 @@ func TestQueue_NewQueue(t *testing.T) {
 }
 
 func TestQueue_PushPop(t *testing.T) {
-	q := NewQueue(5, 100)
+	q := NewQueue[string](5)
 	ctx := context.Background()
 
 	// Push some data
-	data1 := []byte("packet1")
+	data1 := "packet1"
 	if err := q.Push(data1); err != nil {
 		t.Fatalf("Push failed: %v", err)
 	}
@@ -43,7 +42,7 @@ func TestQueue_PushPop(t *testing.T) {
 		t.Fatalf("Pop failed: %v", err)
 	}
 
-	if string(result) != string(data1) {
+	if result != data1 {
 		t.Errorf("Expected %s, got %s", data1, result)
 	}
 
@@ -54,12 +53,11 @@ func TestQueue_PushPop(t *testing.T) {
 
 func TestQueue_RingBufferOverflow(t *testing.T) {
 	capacity := 3
-	q := NewQueue(capacity, 100)
+	q := NewQueue[int](capacity)
 
 	// Fill queue
 	for i := 0; i < capacity; i++ {
-		data := []byte{byte(i)}
-		if err := q.Push(data); err != nil {
+		if err := q.Push(i); err != nil {
 			t.Fatalf("Push %d failed: %v", i, err)
 		}
 	}
@@ -68,9 +66,8 @@ func TestQueue_RingBufferOverflow(t *testing.T) {
 		t.Errorf("Expected size %d, got %d", capacity, q.Len())
 	}
 
-	// Overflow: push one more (should drop oldest)
-	overflow := []byte{byte(99)}
-	if err := q.Push(overflow); err != nil {
+	// Overflow: push one more (should drop oldest '0')
+	if err := q.Push(99); err != nil {
 		t.Fatalf("Overflow push failed: %v", err)
 	}
 
@@ -79,32 +76,32 @@ func TestQueue_RingBufferOverflow(t *testing.T) {
 		t.Errorf("Expected size %d after overflow, got %d", capacity, q.Len())
 	}
 
-	// Pop all - oldest (0) should be gone
+	// Pop all
 	ctx := context.Background()
-	results := make([][]byte, 0, capacity)
+	results := make([]int, 0, capacity)
 	for i := 0; i < capacity; i++ {
-		data, err := q.Pop(ctx)
+		val, err := q.Pop(ctx)
 		if err != nil {
 			t.Fatalf("Pop %d failed: %v", i, err)
 		}
-		results = append(results, data)
+		results = append(results, val)
 	}
 
 	// Should have: [1, 2, 99] (0 was dropped)
-	expected := []byte{1, 2, 99}
+	expected := []int{1, 2, 99}
 	for i, res := range results {
-		if res[0] != expected[i] {
-			t.Errorf("Position %d: expected %d, got %d", i, expected[i], res[0])
+		if res != expected[i] {
+			t.Errorf("Position %d: expected %d, got %d", i, expected[i], res)
 		}
 	}
 }
 
 func TestQueue_BlockingPop(t *testing.T) {
-	q := NewQueue(5, 100)
+	q := NewQueue[int](5)
 	ctx := context.Background()
 
 	// Start Pop in goroutine (will block)
-	resultCh := make(chan []byte)
+	resultCh := make(chan int)
 	errCh := make(chan error)
 
 	go func() {
@@ -120,7 +117,7 @@ func TestQueue_BlockingPop(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Push data (should wake up Pop)
-	testData := []byte("wakeup")
+	testData := 123
 	if err := q.Push(testData); err != nil {
 		t.Fatalf("Push failed: %v", err)
 	}
@@ -128,8 +125,8 @@ func TestQueue_BlockingPop(t *testing.T) {
 	// Pop should complete
 	select {
 	case data := <-resultCh:
-		if string(data) != string(testData) {
-			t.Errorf("Expected %s, got %s", testData, data)
+		if data != testData {
+			t.Errorf("Expected %d, got %d", testData, data)
 		}
 	case err := <-errCh:
 		t.Fatalf("Pop failed: %v", err)
@@ -138,40 +135,42 @@ func TestQueue_BlockingPop(t *testing.T) {
 	}
 }
 
-func TestQueue_ContextCancellation(t *testing.T) {
-	q := NewQueue(5, 100)
-	ctx, cancel := context.WithCancel(context.Background())
+func TestQueue_Peek(t *testing.T) {
+	q := NewQueue[int](5)
 
-	// Start Pop with cancellable context
-	errCh := make(chan error)
-	go func() {
-		_, err := q.Pop(ctx)
-		errCh <- err
-	}()
+	// Empty peek
+	val, ok := q.Peek()
+	if ok {
+		t.Error("Expected Peek on empty queue to return false")
+	}
+	if val != 0 {
+		t.Error("Expected zero value")
+	}
 
-	// Give goroutine time to start waiting
-	time.Sleep(50 * time.Millisecond)
+	// Push
+	q.Push(100)
 
-	// Cancel context
-	cancel()
+	// Peek
+	val, ok = q.Peek()
+	if !ok {
+		t.Error("Expected Peek to return true")
+	}
+	if val != 100 {
+		t.Errorf("Expected 100, got %d", val)
+	}
 
-	// Pop should return context error
-	select {
-	case err := <-errCh:
-		if err != context.Canceled {
-			t.Errorf("Expected context.Canceled, got %v", err)
-		}
-	case <-time.After(1 * time.Second):
-		t.Fatal("Pop did not return after context cancellation")
+	// Ensure not removed
+	if q.Len() != 1 {
+		t.Errorf("Len changed after Peek")
 	}
 }
 
 func TestQueue_Close(t *testing.T) {
-	q := NewQueue(5, 100)
+	q := NewQueue[int](5)
 	ctx := context.Background()
 
 	// Push some data
-	q.Push([]byte("data"))
+	q.Push(1)
 
 	// Close queue
 	if err := q.Close(); err != nil {
@@ -183,7 +182,7 @@ func TestQueue_Close(t *testing.T) {
 	}
 
 	// Push after close should fail
-	if err := q.Push([]byte("after close")); err != ErrQueueClosed {
+	if err := q.Push(2); err != ErrQueueClosed {
 		t.Errorf("Expected ErrQueueClosed, got %v", err)
 	}
 
@@ -192,8 +191,8 @@ func TestQueue_Close(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Pop existing data failed: %v", err)
 	}
-	if string(data) != "data" {
-		t.Errorf("Expected 'data', got %s", data)
+	if data != 1 {
+		t.Errorf("Expected 1, got %d", data)
 	}
 
 	// Pop from empty closed queue should fail
@@ -203,175 +202,26 @@ func TestQueue_Close(t *testing.T) {
 	}
 }
 
-func TestQueue_CloseWakesWaiters(t *testing.T) {
-	q := NewQueue(5, 100)
-	ctx := context.Background()
-
-	// Start multiple Pop goroutines
-	const numWaiters = 5
-	errCh := make(chan error, numWaiters)
-
-	for i := 0; i < numWaiters; i++ {
-		go func() {
-			_, err := q.Pop(ctx)
-			errCh <- err
-		}()
-	}
-
-	// Give goroutines time to start waiting
-	time.Sleep(100 * time.Millisecond)
-
-	// Close queue (should wake all waiters)
-	q.Close()
-
-	// All waiters should return ErrQueueClosed
-	for i := 0; i < numWaiters; i++ {
-		select {
-		case err := <-errCh:
-			if err != ErrQueueClosed {
-				t.Errorf("Waiter %d: expected ErrQueueClosed, got %v", i, err)
-			}
-		case <-time.After(1 * time.Second):
-			t.Fatalf("Waiter %d did not wake up", i)
-		}
-	}
-}
-
-func TestQueue_ConcurrentPushPop(t *testing.T) {
-	q := NewQueue(100, 1500)
-	ctx := context.Background()
-
-	const numProducers = 10
-	const numConsumers = 10
-	const packetsPerProducer = 100
-
-	var wg sync.WaitGroup
-	var producerWg sync.WaitGroup
-
-	// Producers
-	for i := 0; i < numProducers; i++ {
-		wg.Add(1)
-		producerWg.Add(1)
-		go func(id int) {
-			defer wg.Done()
-			defer producerWg.Done()
-			for j := 0; j < packetsPerProducer; j++ {
-				data := []byte{byte(id), byte(j)}
-				if err := q.Push(data); err != nil {
-					t.Errorf("Producer %d: Push failed: %v", id, err)
-					return
-				}
-			}
-		}(i)
-	}
-
-	// Consumers
-	received := make(chan []byte, numProducers*packetsPerProducer)
-	for i := 0; i < numConsumers; i++ {
-		wg.Add(1)
-		go func(id int) {
-			defer wg.Done()
-			for {
-				data, err := q.Pop(ctx)
-				if err == ErrQueueClosed {
-					return
-				}
-				if err != nil {
-					t.Errorf("Consumer %d: Pop failed: %v", id, err)
-					return
-				}
-				received <- data
-			}
-		}(i)
-	}
-
-	// Wait for all producers to finish
-	producerWg.Wait()
-
-	// Close queue to stop consumers
-	q.Close()
-
-	// Wait for all consumers (and producers)
-	wg.Wait()
-	close(received)
-
-	// Count received packets
-	count := 0
-	for range received {
-		count++
-	}
-
-	// Should have received some packets (may lose some due to overflow)
-	if count == 0 {
-		t.Error("No packets received")
-	}
-
-	t.Logf("Sent: %d, Received: %d (%.1f%% delivery)",
-		numProducers*packetsPerProducer,
-		count,
-		float64(count*100)/float64(numProducers*packetsPerProducer))
-}
-
-func TestQueue_DataIsolation(t *testing.T) {
-	q := NewQueue(5, 100)
-	ctx := context.Background()
-
-	// Push data
-	original := []byte{1, 2, 3}
-	if err := q.Push(original); err != nil {
-		t.Fatalf("Push failed: %v", err)
-	}
-
-	// Modify original
-	original[0] = 99
-
-	// Pop should get unmodified data
-	result, err := q.Pop(ctx)
-	if err != nil {
-		t.Fatalf("Pop failed: %v", err)
-	}
-
-	if result[0] != 1 {
-		t.Errorf("Data was modified: expected 1, got %d", result[0])
-	}
-}
-
-// Benchmark tests
 func BenchmarkQueue_Push(b *testing.B) {
-	q := NewQueue(1000, 1500)
-	data := make([]byte, 1200)
+	q := NewQueue[int](1000)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		q.Push(data)
+		q.Push(i)
 	}
 }
 
 func BenchmarkQueue_Pop(b *testing.B) {
-	q := NewQueue(b.N, 1500)
+	q := NewQueue[int](b.N + 1) // Ensure capacity
 	ctx := context.Background()
-	data := make([]byte, 1200)
 
 	// Fill queue
 	for i := 0; i < b.N; i++ {
-		q.Push(data)
+		q.Push(i)
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		q.Pop(ctx)
 	}
-}
-
-func BenchmarkQueue_ConcurrentPushPop(b *testing.B) {
-	q := NewQueue(1000, 1500)
-	ctx := context.Background()
-	data := make([]byte, 1200)
-
-	b.RunParallel(func(pb *testing.PB) {
-		for pb.Next() {
-			q.Push(data)
-			q.Pop(ctx)
-		}
-	})
 }

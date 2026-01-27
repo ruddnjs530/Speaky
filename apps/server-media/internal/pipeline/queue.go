@@ -11,55 +11,43 @@ var (
 	ErrQueueClosed = errors.New("queue is closed")
 	// ErrQueueEmpty is returned when popping from an empty queue (non-blocking mode)
 	ErrQueueEmpty = errors.New("queue is empty")
-	// ErrPacketTooLarge is returned when pushing a packet larger than MaxSize
-	ErrPacketTooLarge = errors.New("packet too large")
 )
 
-// Queue is a thread-safe bounded ring buffer for RTP packets.
+// Queue is a thread-safe bounded ring buffer for generic items.
 // It implements a circular buffer with the following properties:
-// - Push is non-blocking: if full, it overwrites the oldest packet (FIFO eviction)
-// - Pop is blocking: waits for data or context cancellation
-// - Closing the queue wakes up all waiting Pop() calls
-type Queue struct {
-	buf      [][]byte    // Circular buffer of packet data
-	capacity int         // Maximum number of packets
-	maxSize  int         // Maximum size per packet
+// - Push is non-blocking: if full, it overwrites the oldest item (FIFO eviction).
+// - Pop is blocking: waits for data or context cancellation.
+// - Closing the queue wakes up all waiting Pop() calls.
+type Queue[T any] struct {
+	buf      []T         // Circular buffer
+	capacity int         // Maximum number of items
 	head     int         // Read position
 	tail     int         // Write position
-	size     int         // Current number of packets
+	size     int         // Current number of items
 	closed   bool        // Queue closed flag
 	mu       sync.Mutex  // Protects all fields
 	notEmpty *sync.Cond  // Signals when queue becomes non-empty
 }
 
-// NewQueue creates a new Queue with specified capacity and max packet size.
-// capacity: Maximum number of packets the queue can hold
-// maxPacketSize: Maximum size of each packet in bytes (typically 1500 for RTP)
-func NewQueue(capacity int, maxPacketSize int) *Queue {
-	q := &Queue{
-		buf:      make([][]byte, capacity),
+// NewQueue creates a new generic Queue with specified capacity.
+func NewQueue[T any](capacity int) *Queue[T] {
+	q := &Queue[T]{
+		buf:      make([]T, capacity),
 		capacity: capacity,
-		maxSize:  maxPacketSize,
 		head:     0,
 		tail:     0,
 		size:     0,
 		closed:   false,
 	}
 	q.notEmpty = sync.NewCond(&q.mu)
-
-	// Pre-allocate buffers to reduce GC pressure
-	for i := range q.buf {
-		q.buf[i] = make([]byte, 0, maxPacketSize)
-	}
-
 	return q
 }
 
-// Push adds a packet to the queue.
-// If the queue is full, it overwrites the oldest packet (ring buffer behavior).
-// Returns ErrQueueClosed if the queue has been closed, or ErrPacketTooLarge if data exceeds maxPacketSize.
+// Push adds an item to the queue.
+// If the queue is full, it overwrites the oldest item (ring buffer behavior).
+// Returns ErrQueueClosed if the queue has been closed.
 // This operation never blocks.
-func (q *Queue) Push(data []byte) error {
+func (q *Queue[T]) Push(item T) error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
@@ -67,12 +55,8 @@ func (q *Queue) Push(data []byte) error {
 		return ErrQueueClosed
 	}
 
-	if len(data) > q.maxSize {
-		return ErrPacketTooLarge
-	}
-
-	// Copy data to buffer at tail position
-	q.buf[q.tail] = append(q.buf[q.tail][:0], data...)
+	// Insert at tail
+	q.buf[q.tail] = item
 
 	// Advance tail
 	q.tail = (q.tail + 1) % q.capacity
@@ -90,35 +74,31 @@ func (q *Queue) Push(data []byte) error {
 	return nil
 }
 
-// Pop removes and returns a packet from the queue.
+// Pop removes and returns an item from the queue.
 // It blocks until:
-// - A packet is available, or
+// - An item is available, or
 // - The context is cancelled, or
 // - The queue is closed AND empty
-//
-// Returns:
-// - data: The packet data (caller must copy if needed for long-term storage)
-// - error: ErrQueueClosed if closed and empty, context error if cancelled, nil on success
-func (q *Queue) Pop(ctx context.Context) ([]byte, error) {
+func (q *Queue[T]) Pop(ctx context.Context) (T, error) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
+	var zero T // Zero value for error returns
+
 	// Wait for data or termination
 	for q.size == 0 && !q.closed {
-		// Check context before waiting
+		// Check context
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return zero, ctx.Err()
 		default:
 		}
 
-		// Wait for signal (releases lock, reacquires on wake)
-		// We need to handle spurious wakeups
 		done := make(chan struct{})
 		go func() {
 			select {
 			case <-ctx.Done():
-				q.notEmpty.Signal() // Wake up waiting goroutine
+				q.notEmpty.Signal()
 			case <-done:
 			}
 		}()
@@ -126,51 +106,59 @@ func (q *Queue) Pop(ctx context.Context) ([]byte, error) {
 		q.notEmpty.Wait()
 		close(done)
 
-		// Re-check context after waking
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return zero, ctx.Err()
 		default:
 		}
 	}
 
-	// If queue is empty (either closed or not), return appropriate error
 	if q.size == 0 {
 		if q.closed {
-			return nil, ErrQueueClosed
+			return zero, ErrQueueClosed
 		}
-		// Should not reach here due to loop condition, but safety check
-		return nil, ErrQueueEmpty
+		return zero, ErrQueueEmpty
 	}
 
-	// Pop from head (queue has data)
-	data := q.buf[q.head]
+	// Pop from head
+	item := q.buf[q.head]
+	// Optional: zero out the buffer slot to avoid leaks if T contains pointers
+	// q.buf[q.head] = zero
+	// (Go doesn't really need this unless capacity is huge and T is large)
+
 	q.head = (q.head + 1) % q.capacity
 	q.size--
 
-	// Return a copy to avoid race conditions
-	result := make([]byte, len(data))
-	copy(result, data)
-
-	return result, nil
+	return item, nil
 }
 
-// Len returns the current number of packets in the queue.
-func (q *Queue) Len() int {
+// Peek returns the item at the head of the queue without removing it.
+// Returns matched item and true if queue is not empty, otherwise zero value and false.
+func (q *Queue[T]) Peek() (T, bool) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	var zero T
+	if q.size == 0 {
+		return zero, false
+	}
+	return q.buf[q.head], true
+}
+
+// Len returns the current number of items.
+func (q *Queue[T]) Len() int {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	return q.size
 }
 
 // Cap returns the queue capacity.
-func (q *Queue) Cap() int {
+func (q *Queue[T]) Cap() int {
 	return q.capacity
 }
 
 // Close closes the queue and wakes up all waiting Pop() calls.
-// After closing, Push() returns ErrQueueClosed and Pop() returns ErrQueueClosed
-// once the queue is drained.
-func (q *Queue) Close() error {
+func (q *Queue[T]) Close() error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
@@ -179,13 +167,12 @@ func (q *Queue) Close() error {
 	}
 
 	q.closed = true
-	q.notEmpty.Broadcast() // Wake all waiting Pop() calls
-
+	q.notEmpty.Broadcast()
 	return nil
 }
 
 // IsClosed returns true if the queue has been closed.
-func (q *Queue) IsClosed() bool {
+func (q *Queue[T]) IsClosed() bool {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	return q.closed

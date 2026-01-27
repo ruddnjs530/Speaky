@@ -7,18 +7,22 @@ import (
 	"sync"
 
 	"github.com/pion/webrtc/v4"
+
+	// "speaky-media/internal/pipeline" // Not used directly in Session yet, but imported
+	media_sync "speaky-media/internal/sync"
 )
 
 // Session wraps a webrtc.PeerConnection with user context.
 // It manages the lifecycle of a single participant in a room.
 type Session struct {
-	ID          string // User/Session ID
-	pc          *webrtc.PeerConnection
-	room        *Room // Back-reference for track forwarding
-	localTracks map[string]*webrtc.TrackLocalStaticRTP
-	mu          sync.Mutex
-	ctx         context.Context
-	cancel      context.CancelFunc
+	ID           string
+	pc           *webrtc.PeerConnection
+	room         *Room
+	localTracks  map[string]*webrtc.TrackLocalStaticRTP
+	mu           sync.Mutex
+	ctx          context.Context
+	cancel       context.CancelFunc
+	Synchronizer *media_sync.Synchronizer // Manages AV sync for this session's ingest
 }
 
 // NewSession creates a new session for a participant.
@@ -27,12 +31,13 @@ func NewSession(id string, room *Room, pc *webrtc.PeerConnection) *Session {
 	ctx, cancel := context.WithCancel(room.ctx)
 
 	session := &Session{
-		ID:          id,
-		pc:          pc,
-		room:        room,
-		localTracks: make(map[string]*webrtc.TrackLocalStaticRTP),
-		ctx:         ctx,
-		cancel:      cancel,
+		ID:           id,
+		pc:           pc,
+		room:         room,
+		localTracks:  make(map[string]*webrtc.TrackLocalStaticRTP),
+		ctx:          ctx,
+		cancel:       cancel,
+		Synchronizer: media_sync.NewSynchronizer(),
 	}
 
 	// Register OnTrack handler to forward incoming tracks to the room
