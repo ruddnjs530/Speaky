@@ -30,6 +30,9 @@ class SessionServiceTest {
     @Mock
     private SessionRepository sessionRepository;
     
+    @Mock
+    private SessionEventPublisher eventPublisher;
+    
     @InjectMocks
     private SessionService sessionService;
     

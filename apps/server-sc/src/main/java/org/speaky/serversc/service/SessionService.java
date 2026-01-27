@@ -3,7 +3,9 @@ package org.speaky.serversc.service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.speaky.serversc.domain.SessionEntity;
+import org.speaky.serversc.domain.SessionEventType;
 import org.speaky.serversc.domain.SessionStatus;
+import org.speaky.serversc.dto.SessionEventPayload;
 import org.speaky.serversc.repository.SessionRepository;
 import org.springframework.stereotype.Service;
 
@@ -23,6 +25,7 @@ import java.util.UUID;
 public class SessionService {
     
     private final SessionRepository sessionRepository;
+    private final SessionEventPublisher eventPublisher;
     
     /**
      * 새 방송 세션 생성
@@ -46,6 +49,16 @@ public class SessionService {
                 .build();
         
         sessionRepository.save(session);
+        
+        // WebSocket 이벤트 발행
+        eventPublisher.publishSessionEvent(
+            SessionEventPayload.builder()
+                .eventType(SessionEventType.SESSION_CREATED)
+                .sessionId(session.getSessionId())
+                .timestamp(now)
+                .sessionData(session)
+                .build()
+        );
         
         log.info("Created new session: sessionId={}, hostUserId={}, title={}", 
                 sessionId, hostUserId, title);
@@ -114,6 +127,16 @@ public class SessionService {
         
         sessionRepository.save(session);
         
+        // WebSocket 이벤트 발행
+        eventPublisher.publishSessionEvent(
+            SessionEventPayload.builder()
+                .eventType(SessionEventType.SESSION_STARTED)
+                .sessionId(sessionId)
+                .timestamp(session.getStartedAt())
+                .sessionData(session)
+                .build()
+        );
+        
         log.info("Broadcast started: sessionId={}, mediaServerId={}, pipelineId={}", 
                 sessionId, mediaServerId, pipelineId);
         
@@ -142,6 +165,16 @@ public class SessionService {
         
         sessionRepository.save(session);
         
+        // WebSocket 이벤트 발행
+        eventPublisher.publishSessionEvent(
+            SessionEventPayload.builder()
+                .eventType(SessionEventType.SESSION_ENDED)
+                .sessionId(sessionId)
+                .timestamp(session.getEndedAt())
+                .sessionData(session)
+                .build()
+        );
+        
         log.info("Broadcast ended: sessionId={}, reason={}", sessionId, endedReason);
         
         return Optional.of(session);
@@ -168,6 +201,16 @@ public class SessionService {
         session.setEndedReason(failureReason);
         
         sessionRepository.save(session);
+        
+        // WebSocket 이벤트 발행
+        eventPublisher.publishSessionEvent(
+            SessionEventPayload.builder()
+                .eventType(SessionEventType.SESSION_FAILED)
+                .sessionId(sessionId)
+                .timestamp(session.getEndedAt())
+                .sessionData(session)
+                .build()
+        );
         
         log.error("Broadcast failed: sessionId={}, reason={}", sessionId, failureReason);
         
