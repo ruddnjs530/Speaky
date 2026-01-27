@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebRTC A/V Sync Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #fff;
+        }
+
+        h1 {
+            text-align: center;
+            color: #4CAF50;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .panel {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        }
+
+        h2 {
+            margin-top: 0;
+            color: #64B5F6;
+        }
+
+        video {
+            width: 100%;
+            background: #000;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #45a049;
+        }
+
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            background: #333;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+
+        .info {
+            color: #FFD54F;
+            margin: 10px 0;
+            padding: 10px;
+            background: #3a3a00;
+            border-radius: 4px;
+        }
+
+        input {
+            padding: 8px;
+            margin: 5px 0;
+            width: 200px;
+            border-radius: 4px;
+            border: 1px solid #555;
+            background: #333;
+            color: #fff;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>🎥 WebRTC A/V Sync Test</h1>
+
+    <div class="info">
+        <strong>Test Instructions:</strong><br>
+        1. Host: Click "Start Host" → Allow camera/mic → Clap your hands<br>
+        2. Guest: Click "Start Guest" → Watch for lip-sync<br>
+        3. Verify: Audio and video should be synchronized (no delay)
+    </div>
+
+    <div class="container">
+        <!-- Host Panel -->
+        <div class="panel">
+            <h2>🎤 Host (Broadcaster)</h2>
+            <input type="text" id="roomId" placeholder="Room ID (Empty = Auto)" value="">
+            <input type="text" id="hostId" placeholder="User ID" value="host-1"><br>
+            <button id="startHost">Start Host</button>
+            <button id="stopHost" disabled>Stop Host</button>
+            <video id="localVideo" autoplay muted playsinline></video>
+            <div class="status" id="hostStatus">Status: Ready</div>
+        </div>
+
+        <!-- Guest Panel -->
+        <div class="panel">
+            <h2>👥 Guest (Viewer)</h2>
+            <input type="text" id="guestRoomId" placeholder="Room ID" value="test-room">
+            <input type="text" id="guestId" placeholder="User ID" value="guest-1"><br>
+            <button id="startGuest">Start Guest</button>
+            <button id="stopGuest" disabled>Stop Guest</button>
+            <video id="remoteVideo" autoplay playsinline controls></video>
+            <div class="status" id="guestStatus">Status: Ready</div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8081';
+
+        let hostPC = null;
+        let guestPC = null;
+        let localStream = null;
+
+        // Host Functions
+        document.getElementById('startHost').onclick = async () => {
+            try {
+                // Check if getUserMedia is available
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    throw new Error('getUserMedia is not supported. Please use HTTPS or localhost.');
+                }
+
+                updateStatus('hostStatus', 'Requesting camera/mic...');
+
+                // Get user media
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    video: true,
+                    audio: true
+                });
+
+                document.getElementById('localVideo').srcObject = localStream;
+                updateStatus('hostStatus', 'Media acquired. Creating peer connection...');
+
+                // Create peer connection
+                hostPC = new RTCPeerConnection({
+                    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+                });
+
+                // Add tracks
+                localStream.getTracks().forEach(track => {
+                    hostPC.addTrack(track, localStream);
+                });
+
+                // Create offer
+                const offer = await hostPC.createOffer();
+                await hostPC.setLocalDescription(offer);
+                updateStatus('hostStatus', 'Offer created. Waiting for ICE...');
+
+                // Wait for ICE gathering
+                await new Promise(resolve => {
+                    if (hostPC.iceGatheringState === 'complete') {
+                        resolve();
+                    } else {
+                        hostPC.addEventListener('icegatheringstatechange', () => {
+                            if (hostPC.iceGatheringState === 'complete') {
+                                resolve();
+                            }
+                        });
+                    }
+                });
+
+                updateStatus('hostStatus', 'Sending offer to server...');
+
+                // Send to server
+                const response = await fetch(`${API_URL}/join`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        room_id: document.getElementById('roomId').value,
+                        user_id: document.getElementById('hostId').value,
+                        sdp: hostPC.localDescription.sdp,
+                        role: 'host'
+                    })
+                });
+
+                const data = await response.json();
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                // Update Room ID if we created one
+                if (data.room_id) {
+                    document.getElementById('roomId').value = data.room_id;
+                    updateStatus('hostStatus', `✅ Connected! Room: ${data.room_id}`);
+                } else {
+                    updateStatus('hostStatus', '✅ Connected! Streaming...');
+                }
+
+                // Set answer
+                await hostPC.setRemoteDescription({
+                    type: 'answer',
+                    sdp: data.sdp
+                });
+
+                document.getElementById('startHost').disabled = true;
+                document.getElementById('stopHost').disabled = false;
+
+            } catch (err) {
+                updateStatus('hostStatus', `❌ Error: ${err.message}`);
+                console.error(err);
+            }
+        };
+
+        document.getElementById('stopHost').onclick = () => {
+            if (hostPC) {
+                hostPC.close();
+                hostPC = null;
+            }
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+            }
+            document.getElementById('localVideo').srcObject = null;
+            updateStatus('hostStatus', 'Stopped');
+            document.getElementById('startHost').disabled = false;
+            document.getElementById('stopHost').disabled = true;
+        };
+
+        // Guest Functions
+        document.getElementById('startGuest').onclick = async () => {
+            try {
+                updateStatus('guestStatus', 'Creating peer connection...');
+
+                // Create peer connection
+                guestPC = new RTCPeerConnection({
+                    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+                });
+
+                // Handle incoming tracks
+                guestPC.ontrack = (event) => {
+                    console.log('Received track:', event.track.kind);
+                    const remoteVideo = document.getElementById('remoteVideo');
+                    if (!remoteVideo.srcObject) {
+                        remoteVideo.srcObject = new MediaStream();
+                    }
+                    remoteVideo.srcObject.addTrack(event.track);
+                    updateStatus('guestStatus', `✅ Receiving ${event.track.kind}`);
+                };
+
+                // Create offer (Guest also creates offer for simplicity)
+                const offer = await guestPC.createOffer({
+                    offerToReceiveAudio: true,
+                    offerToReceiveVideo: true
+                });
+                await guestPC.setLocalDescription(offer);
+                updateStatus('guestStatus', 'Offer created. Waiting for ICE...');
+
+                // Wait for ICE gathering
+                await new Promise(resolve => {
+                    if (guestPC.iceGatheringState === 'complete') {
+                        resolve();
+                    } else {
+                        guestPC.addEventListener('icegatheringstatechange', () => {
+                            if (guestPC.iceGatheringState === 'complete') {
+                                resolve();
+                            }
+                        });
+                    }
+                });
+
+                updateStatus('guestStatus', 'Sending offer to server...');
+
+                // Send to server
+                const response = await fetch(`${API_URL}/join`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        room_id: document.getElementById('guestRoomId').value,
+                        user_id: document.getElementById('guestId').value,
+                        sdp: guestPC.localDescription.sdp,
+                        role: 'guest'
+                    })
+                });
+
+                const data = await response.json();
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                // Set answer
+                await guestPC.setRemoteDescription({
+                    type: 'answer',
+                    sdp: data.sdp
+                });
+
+                updateStatus('guestStatus', '✅ Connected! Waiting for media...');
+                document.getElementById('startGuest').disabled = true;
+                document.getElementById('stopGuest').disabled = false;
+
+            } catch (err) {
+                updateStatus('guestStatus', `❌ Error: ${err.message}`);
+                console.error(err);
+            }
+        };
+
+        document.getElementById('stopGuest').onclick = () => {
+            if (guestPC) {
+                guestPC.close();
+                guestPC = null;
+            }
+            document.getElementById('remoteVideo').srcObject = null;
+            updateStatus('guestStatus', 'Stopped');
+            document.getElementById('startGuest').disabled = false;
+            document.getElementById('stopGuest').disabled = true;
+        };
+
+        function updateStatus(elementId, message) {
+            document.getElementById(elementId).textContent = `Status: ${message}`;
+        }
+    </script>
+</body>
+
+</html>

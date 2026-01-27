@@ -1,7 +1,7 @@
 import { useAppStateValue } from "../../state/useAppState";
 import type { AppStateKind } from "../../state/appState.types";
-import ConnectionBadge, { type ConnectionStatus } from "../components/ConnectionBadge";
-import HealthPanel, { type HealthItem, type HealthState } from "../components/HealthPanel";
+import ConnectionBadge, { type ConnectionStatus } from "../../../../shared/ui/ConnectionBadge";
+import HealthPanel, { type HealthItem, type HealthState } from "../../../../shared/ui/HealthPanel";
 
 function statusFromKind(kind: AppStateKind): ConnectionStatus {
     switch (kind) {

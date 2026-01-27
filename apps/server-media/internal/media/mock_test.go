@@ -116,9 +116,10 @@ func (m *MockTranscoder) Close() error {
 
 // MockSender implements upstream.AudioSender interface for testing.
 type MockSender struct {
-	mu       sync.Mutex
-	SendFunc func(*pipeline.AudioFrame) error
-	CloseFunc func() error
+	mu          sync.Mutex
+	SendFunc    func(*pipeline.AudioFrame) error
+	ReceiveFunc func() (*pipeline.AudioFrame, error)
+	CloseFunc   func() error
 	
 	SentData []*pipeline.AudioFrame
 }
@@ -131,6 +132,14 @@ func (m *MockSender) Send(frame *pipeline.AudioFrame) error {
 		return m.SendFunc(frame)
 	}
 	return nil
+}
+
+func (m *MockSender) Receive() (*pipeline.AudioFrame, error) {
+	if m.ReceiveFunc != nil {
+		return m.ReceiveFunc()
+	}
+	// Default: return nil to simulate no response
+	return nil, io.EOF
 }
 
 func (m *MockSender) Close() error {

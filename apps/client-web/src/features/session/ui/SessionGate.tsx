@@ -4,11 +4,14 @@ import { IdlePanel } from "./panels/IdlePanel";
 import { LoadingPanel } from "./panels/LoadingPanel";
 import { ReadyPanel } from "./panels/ReadyPanel";
 import { ErrorPanel } from "./panels/ErrorPanel";
+import { DebugPanel } from "./panels/DebugPanel";
 
 import "./SessionGate.css";
 
 export function SessionGate({ children }: { children: ReactNode }) {
     const state = useAppStateValue();
+
+    const isDev = import.meta.env.DEV;
 
     const showIdle = state.kind === "Idle";
     const showReady = state.kind === "SessionReady";
@@ -19,24 +22,26 @@ export function SessionGate({ children }: { children: ReactNode }) {
         state.kind === "Reconnecting";
     const showError = state.kind === "Error";
 
-    const shouldShowOverlay = showIdle || showReady || showLoading || showError;
+    // ✅ IdlePanel은 개발 전용으로만 허용
+    const shouldShowOverlay =
+        (isDev && showIdle) || showReady || showLoading || showError;
 
     return (
         <>
-            {/* 실제 페이지는 항상 렌더링 */}
             {children}
 
-            {/* 상태 안내 오버레이 */}
             {shouldShowOverlay && (
                 <div className="sessionGateOverlay">
                     <div className="sessionGatePanel">
-                        {showIdle && <IdlePanel />}
+                        {isDev && showIdle && <IdlePanel />}
                         {showReady && <ReadyPanel />}
                         {showLoading && <LoadingPanel />}
                         {showError && <ErrorPanel />}
                     </div>
                 </div>
             )}
+
+            {isDev && <DebugPanel />}{/* ✅ 추가 */}
         </>
     );
 }

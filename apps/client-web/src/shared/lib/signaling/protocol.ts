@@ -1,0 +1,102 @@
+export type Role = "HOST" | "GUEST" | "SC";
+
+export type MsgType =
+    | "SYS_ATTACH"
+    | "SYS_ACK"
+    | "SYS_PING"
+    | "SYS_PONG"
+    | "SYS_ERROR"
+    | "SIG_OFFER"
+    | "SIG_ANSWER"
+    | "SIG_ICE"
+    | "SIG_HANGUP";
+
+export type EnvelopeBase = {
+    v: 1;
+    type: MsgType;
+    requestId: string;
+    ts: number;
+    channelId: string;
+    sessionId: string;
+    from: {
+        role: Role;
+        clientId: string;
+    };
+    payload: unknown;
+};
+
+export type SysAttach = EnvelopeBase & {
+    type: "SYS_ATTACH";
+    payload: { resume?: boolean };
+};
+
+export type SysAck = EnvelopeBase & {
+    type: "SYS_ACK";
+    payload: { status: "OK" };
+};
+
+export type SysPing = EnvelopeBase & {
+    type: "SYS_PING";
+    payload: { seq: number };
+};
+
+export type SysPong = EnvelopeBase & {
+    type: "SYS_PONG";
+    payload: { seq: number };
+};
+
+export type SysErrorCode =
+    | "UNAUTHORIZED"
+    | "INVALID_CLIENT_ID"
+    | "INVALID_STATE"
+    | "SESSION_NOT_ACTIVE"
+    | "DUPLICATE_HOST"
+    | "MEDIA_UNAVAILABLE"
+    | "RATE_LIMITED";
+
+export type SysError = EnvelopeBase & {
+    type: "SYS_ERROR";
+    payload: { code: SysErrorCode | string; msg?: string };
+};
+
+export type SigOffer = EnvelopeBase & {
+    type: "SIG_OFFER";
+    payload: { sdpType: "offer"; sdp: string };
+};
+
+export type SigAnswer = EnvelopeBase & {
+    type: "SIG_ANSWER";
+    payload: { sdpType: "answer"; sdp: string };
+};
+
+export type SigIce = EnvelopeBase & {
+    type: "SIG_ICE";
+    payload: { candidate: string; sdpMid?: string | null; sdpMLineIndex?: number | null };
+};
+
+export type SigHangup = EnvelopeBase & {
+    type: "SIG_HANGUP";
+    payload: { reason?: string };
+};
+
+export type AnyInbound =
+    | SysAck
+    | SysPing
+    | SysPong
+    | SysError
+    | SigAnswer
+    | SigIce;
+
+export type AnyOutbound =
+    | SysAttach
+    | SysPong
+    | SigOffer
+    | SigIce
+    | SigHangup;
+
+export type SessionContext = {
+    channelId: string;
+    sessionId: string;
+    role: Exclude<Role, "SC">; // HOST | GUEST
+    clientId: string;
+};

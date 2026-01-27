@@ -1,8 +1,8 @@
 import { useNavigate } from "react-router-dom";
 
 import Button from "../../../../shared/ui/Button";
-import ConnectionBadge from "../components/ConnectionBadge";
-import HealthPanel, { type HealthItem } from "../components/HealthPanel";
+import ConnectionBadge from "../../../../shared/ui/ConnectionBadge";
+import HealthPanel, { type HealthItem } from "../../../../shared/ui/HealthPanel";
 import { useAppDispatch } from "../../state/useAppState";
 
 export function ReadyPanel() {

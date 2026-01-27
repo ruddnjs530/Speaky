@@ -1,7 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import { clearAccessToken } from "../../../../shared/lib/authToken";
 import { useAppDispatch, useAppStateValue } from "../../state/useAppState";
-import ErrorDialog from "../components/ErrorDialog";
+import ErrorDialog from "../ErrorDialog";
 import type { SysErrorActionType } from "../../errors/sysErrorUx";
 
 export function ErrorPanel() {

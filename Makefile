@@ -162,7 +162,7 @@ proto: proto-image
 		-e GOPATH=//tmp/go \
 		-e GOCACHE=//tmp/gocache \
 		monorepo-proto-builder \
-		./scripts/gen-proto.sh
+		bash scripts/gen-proto.sh
 	@echo "$(COLOR_GREEN)✅ Proto files generated$(COLOR_RESET)"
 
 proto-check:

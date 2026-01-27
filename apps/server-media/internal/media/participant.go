@@ -13,11 +13,18 @@ import (
 type Participant struct {
 	ID string
 
-	// Media Components
+	// Ingestion (Host → Server)
 	Receiver   mediaWebrtc.Receiver
 	Transcoder pipeline.Transcoder
-	Sender     upstream.AudioSender
 	VideoQueue *pipeline.VideoQueue
+
+	// AI Processing
+	Sender         upstream.AudioSender // Sends to AI
+	AIResponseChan chan *pipeline.AudioFrame
+
+	// Egress (Server → Guest)
+	OpusEncoder *pipeline.OpusEncoder
+	SFUSender   mediaWebrtc.Sender
 
 	// Lifecycle Management
 	// CancelFunc shuts down all goroutines (Pump, Receiver Loop) for this participant.
@@ -38,6 +45,19 @@ func (p *Participant) Close() {
 		if err := p.Sender.Close(); err != nil {
 			// Log error
 		}
+	}
+	if p.OpusEncoder != nil {
+		if err := p.OpusEncoder.Close(); err != nil {
+			// Log error
+		}
+	}
+	if p.SFUSender != nil {
+		if err := p.SFUSender.Close(); err != nil {
+			// Log error
+		}
+	}
+	if p.AIResponseChan != nil {
+		close(p.AIResponseChan)
 	}
 	// Transcoder channels are cleaned up by GC when writers stop
 }

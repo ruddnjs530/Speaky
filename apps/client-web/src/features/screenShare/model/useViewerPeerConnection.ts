@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Envelope } from '../../../shared/lib/signaling/envelope';
 import { SignalingClient } from '../../../shared/lib/signaling/SignalingClient';
+import { applySignalingEnvelope } from './applySignaling';
+
 
 type Status = 'idle' | 'connecting' | 'connected' | 'error';
 
@@ -15,15 +17,14 @@ type Args = {
 type SysAttachPayload = { resume?: boolean };
 
 type SigOfferPayload = { sdpType: 'offer'; sdp: string };
-type SigAnswerPayload = { sdpType: 'answer'; sdp: string };
 type SigIcePayload = {
   candidate: string;
   sdpMid: string | null;
   sdpMLineIndex: number | null;
 };
 
-type SysErrorPayload = { code: string; msg?: string };
-
+// NOTE(Day4): 현재는 useScreenShare 통합 구현을 사용 중이라 미사용.
+// 향후 signaling/webrtc 책임 분리 시(Host/Viewer 분리) 재사용 예정.
 export function useViewerPeerConnection({
   wsUrl,
   token,
@@ -88,61 +89,32 @@ export function useViewerPeerConnection({
   }, [channelId, sessionId]);
 
   const handleEnvelope = useCallback(
-    async (env: Envelope) => {
-      if (env.channelId !== channelId) return;
-      if (env.sessionId !== sessionId) return;
-
-      const pc = pcRef.current;
-      if (!pc) return;
-
-      if (env.type === 'SYS_ERROR') {
-        const p = env.payload as SysErrorPayload | undefined;
-        setStatus('error');
-        setError(p?.msg ? `${p.code}: ${p.msg}` : p?.code ?? 'SYS_ERROR');
-        return;
-      }
-
-      if (env.type === 'SIG_ANSWER') {
-        const p = env.payload as SigAnswerPayload | undefined;
-        if (!p?.sdp) return;
+      async (env: Envelope) => {
+        const pc = pcRef.current;
+        if (!pc) return;
 
         try {
-          await pc.setRemoteDescription({ type: p.sdpType, sdp: p.sdp });
-          remoteDescSetRef.current = true;
-          await flushPendingRemoteIce();
-          setStatus('connected');
+          await applySignalingEnvelope(env, {
+            channelId,
+            sessionId,
+            pc,
+            remoteDescSetRef,
+            pendingRemoteIceRef,
+            flushPendingRemoteIce,
+            onSysError: (msg) => {
+              setStatus('error');
+              setError(msg);
+            },
+            onConnected: () => setStatus('connected'),
+          });
         } catch {
           setStatus('error');
-          setError('setRemoteDescription 실패');
+          setError('시그널링 처리 실패');
         }
-        return;
-      }
-
-      if (env.type === 'SIG_ICE') {
-        const p = env.payload as SigIcePayload | undefined;
-        if (!p?.candidate) return;
-
-        const ice: RTCIceCandidateInit = {
-          candidate: p.candidate,
-          sdpMid: p.sdpMid ?? undefined,
-          sdpMLineIndex: p.sdpMLineIndex ?? undefined,
-        };
-
-        // Answer 전이면 큐잉
-        if (!remoteDescSetRef.current) {
-          pendingRemoteIceRef.current.push(ice);
-          return;
-        }
-
-        try {
-          await pc.addIceCandidate(ice);
-        } catch {
-          // ignore
-        }
-      }
-    },
-    [channelId, sessionId, flushPendingRemoteIce]
+      },
+      [channelId, sessionId, flushPendingRemoteIce]
   );
+
 
   const buildPeerConnection = useCallback(() => {
     const pc = new RTCPeerConnection(
@@ -267,6 +239,12 @@ export function useViewerPeerConnection({
 
     sigRef.current = sig;
     try {
+      sig.setContext({
+        channelId,
+        sessionId,
+        from: { role: 'GUEST' },
+      });
+
       sig.connect(wsUrl, token);
     } catch {
       setStatus('error');

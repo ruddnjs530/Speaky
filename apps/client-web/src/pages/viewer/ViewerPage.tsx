@@ -1,94 +1,209 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useReducer, useState } from 'react';
 import { useParams } from 'react-router-dom';
 
 import ViewerMediaPanel from '../../features/media/ui/ViewerMediaPanel';
-import AudioControl from '../../features/media/ui/AudioControl';
-import ReconnectBanner from '../../features/media/ui/ReconnectBanner';
 
 import Card from '../../shared/ui/Card';
 import Button from '../../shared/ui/Button';
 
 import { useScreenShare } from '../../features/screenShare/model/useScreenShare';
-import { fetchRoomPhase, type RoomPhase } from '../../features/screenShare/api/roomStatus';
+import { sessionApi } from '../../features/session/api/sessionApi';
+
+type JoinUiState =
+    | { kind: 'idle' }
+    | { kind: 'joining' }
+    | { kind: 'joined' }
+    | { kind: 'notActive' }
+    | { kind: 'unauthorized' }
+    | { kind: 'error'; message: string };
+
+type JoinAction =
+    | { type: 'JOIN_START' }
+    | { type: 'JOINED' }
+    | { type: 'NOT_ACTIVE' }
+    | { type: 'UNAUTHORIZED' }
+    | { type: 'ERROR'; message: string };
+
+function joinReducer(_state: JoinUiState, action: JoinAction): JoinUiState {
+  switch (action.type) {
+    case 'JOIN_START':
+      return { kind: 'joining' };
+    case 'JOINED':
+      return { kind: 'joined' };
+    case 'NOT_ACTIVE':
+      return { kind: 'notActive' };
+    case 'UNAUTHORIZED':
+      return { kind: 'unauthorized' };
+    case 'ERROR':
+      return { kind: 'error', message: action.message };
+    default:
+      return { kind: 'idle' };
+  }
+}
+
+function getErrorCode(e: unknown): string | undefined {
+  if (typeof e === 'object' && e !== null && 'code' in e) {
+    const code = (e as { code?: unknown }).code;
+    return typeof code === 'string' ? code : undefined;
+  }
+  return undefined;
+}
+
+function getErrorMessage(e: unknown): string | undefined {
+  if (typeof e === 'object' && e !== null && 'message' in e) {
+    const msg = (e as { message?: unknown }).message;
+    return typeof msg === 'string' ? msg : undefined;
+  }
+  return undefined;
+}
 
 export default function ViewerPage() {
   const { roomId } = useParams<{ roomId: string }>();
-  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const channelId = roomId ?? '';
 
   const { remoteStream, status, error, connect } = useScreenShare();
 
-  // viewer 화면 분기 상태
-  const [phase, setPhase] = useState<RoomPhase>('waiting');
+  // 초기 mount에서 joining 상태로 시작 (effect에서 동기 setState를 피하기 위함)
+  const [joinUi, dispatch] = useReducer(
+      joinReducer,
+      channelId ? ({ kind: 'joining' } as JoinUiState) : ({ kind: 'idle' } as JoinUiState)
+  );
 
-  // 방 상태 폴링 (waiting -> live 감지)
+  // effect 트리거용 attempt 카운터
+  const [attempt, setAttempt] = useState(() => (channelId ? 1 : 0));
+
+  /**
+   * 재시도(=reconnect): UI 상태 전환 + attempt 증가
+   * - 여기서 상태를 바꾸므로, effect에서는 동기 setState를 하지 않습니다.
+   */
+  const startJoin = useCallback(() => {
+    if (!channelId) return;
+    dispatch({ type: 'JOIN_START' });
+    setAttempt((a) => a + 1);
+  }, [channelId]);
+
+  /**
+   * 네트워크 호출은 effect에서 수행하되,
+   * effect 시작 시점에는 setState/dispatch를 동기로 호출하지 않습니다.
+   */
   useEffect(() => {
-    if (!roomId) return;
+    if (!channelId) return;
+    if (attempt === 0) return;
 
     let alive = true;
-    const tick = async () => {
-      const p = await fetchRoomPhase(roomId).catch(() => 'error' as RoomPhase);
-      if (!alive) return;
-      setPhase(p);
-    };
 
-    void tick();
-    const t = window.setInterval(tick, 2000);
+    (async () => {
+      try {
+        const res = await sessionApi.joinLive(channelId);
+        if (!alive) return;
+
+        // 여기부터는 await 이후이므로 "동기 setState in effect"로 잡히지 않습니다.
+        dispatch({ type: 'JOINED' });
+
+        await connect({
+          role: 'viewer',
+          wsUrl: res.wsUrl,
+          token: res.token,
+          channelId: res.channelId,
+          sessionId: res.sessionId,
+        });
+      } catch (e) {
+        if (!alive) return;
+
+        const code = getErrorCode(e);
+        const msg = getErrorMessage(e) ?? '시청 연결에 실패했습니다.';
+
+        if (code === 'SESSION_NOT_ACTIVE') {
+          dispatch({ type: 'NOT_ACTIVE' });
+          return;
+        }
+        if (code === 'UNAUTHORIZED') {
+          dispatch({ type: 'UNAUTHORIZED' });
+          return;
+        }
+
+        dispatch({ type: 'ERROR', message: msg });
+      }
+    })();
+
     return () => {
       alive = false;
-      window.clearInterval(t);
     };
-  }, [roomId]);
+  }, [channelId, attempt, connect]);
 
-  // live로 바뀌면 자동 connect
-  useEffect(() => {
-    if (!roomId) return;
-    if (phase !== 'live') return;
-    if (status === 'connected' || status === 'connecting') return;
+  const reload = useCallback(() => window.location.reload(), []);
 
-    void connect({ role: 'viewer', roomId });
-  }, [phase, roomId, status, connect]);
+  // ---- 화면 분기 (REST join 결과 기준) ----
+  if (!channelId) {
+    return (
+        <div style={{ padding: 24 }}>
+          <Card className="p-3">
+            <h2>잘못된 접근</h2>
+            <p>channelId(roomId)가 없습니다.</p>
+          </Card>
+        </div>
+    );
+  }
 
-  // 수동 시작 버튼도 남겨두기
-  const handleStart = () => {
-    if (!roomId) return;
-    void connect({ role: 'viewer', roomId });
-  };
+  if (joinUi.kind === 'notActive') {
+    return (
+        <div style={{ padding: 24 }}>
+          <Card className="p-3">
+            <h2>방송이 아직 시작되지 않았거나 종료되었습니다.</h2>
+            <p>채널: {channelId}</p>
+            <Button onClick={startJoin}>다시 시도</Button>
+            <Button onClick={reload}>새로고침</Button>
+          </Card>
+        </div>
+    );
+  }
 
+  if (joinUi.kind === 'unauthorized') {
+    return (
+        <div style={{ padding: 24 }}>
+          <Card className="p-3">
+            <h2>로그인이 필요합니다.</h2>
+            <p>채널: {channelId}</p>
+            <Button onClick={() => (window.location.href = '/login')}>로그인</Button>
+          </Card>
+        </div>
+    );
+  }
+
+  if (joinUi.kind === 'error') {
+    return (
+        <div style={{ padding: 24 }}>
+          <Card className="p-3">
+            <h2>오류</h2>
+            <p>{joinUi.message}</p>
+            <Button onClick={startJoin}>다시 시도</Button>
+            <Button onClick={reload}>새로고침</Button>
+          </Card>
+        </div>
+    );
+  }
+
+  // ---- 정상 화면 ----
   return (
-    <div style={{ padding: 24, display: 'grid', gap: 12 }}>
-      <h1>Viewer</h1>
+      <div style={{ padding: 24, display: 'grid', gap: 12 }}>
+        <h1>Viewer</h1>
 
-      <ReconnectBanner status={status as any} onRetry={() => window.location.reload()} />
+        <Card className="p-3">
+          <p>channelId: {channelId}</p>
+          <p>연결 상태: {status}</p>
+          {joinUi.kind === 'joining' && <p>세션 확인 중...</p>}
+          {error && <p style={{ color: 'crimson' }}>{error}</p>}
+        </Card>
 
-      <Card className="p-3">
-        <p>roomId: {roomId}</p>
-        <p>방 상태: {phase}</p>
-        <p>연결 상태: {status}</p>
-        {error && <p style={{ color: 'crimson' }}>{error}</p>}
-
-        {/* waiting일 때는 버튼 보여주고, live면 자동으로 붙도록 */}
-        {phase === 'waiting' && (
-          <p style={{ marginTop: 8 }}>호스트가 아직 방송을 시작하지 않았어요. 시작되면 자동으로 연결할게요.</p>
-        )}
-
-        <Button onClick={handleStart} disabled={!roomId || status === 'connecting'}>
-          시청 시작(수동)
-        </Button>
-      </Card>
-
-      <div className="viewer-media">
-        {/* autoplay 처리는 ViewerMediaPanel 안에서 */}
-        <ViewerMediaPanel
-          status={status}
-          stream={remoteStream}
-          muted={false}
-          mediaRef={videoRef}          // ref 내려주기(패널이 video에 연결)
-          phase={phase}               // 패널에서 waiting/ended 문구도 가능
-          onRetry={() => window.location.reload()}
-        />
-
-        <AudioControl mediaRef={videoRef} />
+        <div className="viewer-media">
+          <ViewerMediaPanel
+              status={status}
+              stream={remoteStream}
+              muted={false}
+              onRetry={startJoin}          // ✅ reconnect
+              onReload={reload}            // ✅ fallback
+          />
+        </div>
       </div>
-    </div>
   );
 }

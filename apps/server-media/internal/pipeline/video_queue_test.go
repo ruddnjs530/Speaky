@@ -13,27 +13,27 @@ func TestVideoQueue_PushPop_SinglePacket(t *testing.T) {
 	vq := NewVideoQueue()
 	ts := uint32(1000)
 	packet := &rtp.Packet{
-		Header: rtp.Header{Timestamp: ts, SequenceNumber: 1},
+		Header:  rtp.Header{Timestamp: ts, SequenceNumber: 1},
 		Payload: []byte{0x01},
 	}
 
 	vq.Push(packet)
 
 	// Action: Pop
-	popped := vq.Pop(ts)
+	popped := vq.PopUntil(ts)
 
 	// Assert
 	assert.Len(t, popped, 1)
 	assert.Equal(t, packet, popped[0])
 
 	// Verify buffer is empty
-	assert.Nil(t, vq.Pop(ts))
+	assert.Nil(t, vq.PopUntil(ts))
 }
 
 func TestVideoQueue_PushPop_Fragmentation(t *testing.T) {
 	vq := NewVideoQueue()
 	ts := uint32(2000)
-	
+
 	// Create fragments sharing the same timestamp
 	p1 := &rtp.Packet{Header: rtp.Header{Timestamp: ts, SequenceNumber: 1, Marker: false}, Payload: []byte{0xA1}}
 	p2 := &rtp.Packet{Header: rtp.Header{Timestamp: ts, SequenceNumber: 2, Marker: false}, Payload: []byte{0xA2}}
@@ -45,26 +45,26 @@ func TestVideoQueue_PushPop_Fragmentation(t *testing.T) {
 	vq.Push(p3)
 
 	// Action: Pop
-	popped := vq.Pop(ts)
+	popped := vq.PopUntil(ts)
 
 	// Assert: Should return all 3 packets
 	assert.Len(t, popped, 3, "Should pop all fragments for the timestamp")
 	assert.Equal(t, p1, popped[0])
 	assert.Equal(t, p2, popped[1])
 	assert.Equal(t, p3, popped[2])
-	
+
 	// Verify cleanup
-	assert.Nil(t, vq.Pop(ts))
+	assert.Nil(t, vq.PopUntil(ts))
 }
 
 func TestVideoQueue_Pop_NotFound(t *testing.T) {
 	vq := NewVideoQueue()
-	assert.Nil(t, vq.Pop(9999))
+	assert.Nil(t, vq.PopUntil(9999))
 }
 
 func TestVideoQueue_Prune(t *testing.T) {
 	vq := NewVideoQueue()
-	
+
 	// Push packets with widely increasing timestamps
 	vq.Push(&rtp.Packet{Header: rtp.Header{Timestamp: 100}})
 	vq.Push(&rtp.Packet{Header: rtp.Header{Timestamp: 200}})
@@ -77,13 +77,13 @@ func TestVideoQueue_Prune(t *testing.T) {
 	vq.Prune(300)
 
 	// Assert
-	assert.Nil(t, vq.Pop(100), "Should be pruned")
-	assert.Nil(t, vq.Pop(200), "Should be pruned")
-	
-	p300 := vq.Pop(300)
+	assert.Nil(t, vq.PopUntil(100), "Should be pruned")
+	assert.Nil(t, vq.PopUntil(200), "Should be pruned")
+
+	p300 := vq.PopUntil(300)
 	assert.Len(t, p300, 1, "Should remain (not older than 300)")
-	
-	p500 := vq.Pop(500)
+
+	p500 := vq.PopUntil(500)
 	assert.Len(t, p500, 1, "Should remain")
 }
 
@@ -91,7 +91,7 @@ func TestVideoQueue_Concurrency(t *testing.T) {
 	vq := NewVideoQueue()
 	ts := uint32(1000)
 	wg := sync.WaitGroup{}
-	
+
 	// Concurrent Push
 	for i := 0; i < 50; i++ {
 		wg.Add(1)
@@ -106,9 +106,9 @@ func TestVideoQueue_Concurrency(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		time.Sleep(1 * time.Millisecond)
-		vq.Pop(ts) // Just ensure no panic
+		vq.PopUntil(ts) // Just ensure no panic
 	}()
-	
+
 	// Concurrent Prune
 	wg.Add(1)
 	go func() {
@@ -130,8 +130,8 @@ func TestVideoQueue_Push_OutOfOrder(t *testing.T) {
 	vq.Push(p2)
 	vq.Push(p1)
 
-	popped := vq.Pop(ts)
-	
+	popped := vq.PopUntil(ts)
+
 	// VideoQueue is a simple storage - it doesn't sort.
 	// Downstream (Decoder/Jitter Buffer) handles reordering.
 	// We just verify both packets are present.
@@ -146,27 +146,21 @@ func TestVideoQueue_Prune_Rollover(t *testing.T) {
 	// Scenario: Timestamp wraps around from max uint32 to 0
 	// oldPacket: near MaxUint32 (very old in circular time)
 	// newPacket: 100 (recent after rollover)
-	
+
 	oldTS := uint32(0xFFFFFFFF - 100) // ~4,294,967,195
 	newTS := uint32(100)
 
 	vq.Push(&rtp.Packet{Header: rtp.Header{Timestamp: oldTS}})
 	vq.Push(&rtp.Packet{Header: rtp.Header{Timestamp: newTS}})
 
-	// Current Prune implementation uses simple comparison (ts < olderThan).
-	// This is acceptable for MVP with short sessions.
-	// For production: need RTP-aware comparison (diff > 2^31).
-	
-	// Test current behavior: Prune with threshold = 50
-	// oldTS (4.2B) > 50, so it won't be pruned with simple comparison.
-	// This is a KNOWN LIMITATION for MVP.
+	// Prune with threshold = 50
+	// oldTS is OLDER than 50 (signed diff = oldTS - 50 = huge negative)
+	// newTS is NEWER than 50 (signed diff = newTS - 50 = 50, positive)
 	vq.Prune(50)
-	
-	// Verify oldTS is NOT pruned (current simple implementation)
-	assert.NotNil(t, vq.Pop(oldTS), "Simple Prune doesn't handle rollover (MVP limitation)")
-	
+
+	// Verify oldTS is pruned (rollover-aware comparison)
+	assert.Nil(t, vq.PopUntil(oldTS), "Old packet should be pruned (rollover handled)")
+
 	// newTS should remain
-	assert.NotNil(t, vq.Pop(newTS))
-	
-	// TODO (Production): Implement RTP-aware Prune with rollover logic
+	assert.NotNil(t, vq.PopUntil(newTS), "Recent packet should remain")
 }

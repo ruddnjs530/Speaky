@@ -6,25 +6,31 @@ export type BootstrapPayload = {
     role: Role;
     wsUrl: string;
     signalingToken: string;
-    clientId: string;
+    clientId: string; // A파트에서 생성한 ID 주입
 };
 
 export type AppEvent =
-// REST bootstrap (Day1)
-    | { type: "BOOTSTRAP_START" }
-    | { type: "BOOTSTRAP_SUCCESS"; payload: BootstrapPayload }
-    | { type: "BOOTSTRAP_FAIL"; error: AppError }
+    // 1. Bootstrap (REST)
+    | { type: "EV_BOOTSTRAP_START" } // UI 로딩 시작
+    | { type: "EV_BOOTSTRAPPED"; payload: BootstrapPayload }
+    | { type: "EV_BOOTSTRAP_FAIL"; error: AppError }
 
-    // WS lifecycle (Day2에서 실제 연결 붙일 예정)
-    | { type: "WS_CONNECT_START" }
-    | { type: "WS_CONNECTED" }
-    | { type: "WS_ATTACH_SUCCESS" }
+    // 2. WebSocket Lifecycle
+    | { type: "EV_WS_CONNECTING" }   // [Internal] WS 연결 시도 시작
+    | { type: "EV_WS_CONNECTED" }    // [Internal] WS.onopen 발생
+    | { type: "EV_ATTACHED_OK" }     // [Server: SYS_ACK] 로부터 매핑. 시그널링 준비 완료
 
-    // PC lifecycle (Day2)
-    | { type: "PC_CONNECT_START" }
-    | { type: "PC_CONNECTED" }
+    // 3. WebRTC Signaling (Server -> Client)
+    // FE-A의 SignalingClient가 이 메시지들을 수신하면 dispatch(EV_...) 해야 함
+    | { type: "EV_GOT_ANSWER"; sdp: string }                 // [Server: SIG_ANSWER] payload.sdp -> sdp
+    | { type: "EV_GOT_ICE"; candidate: RTCIceCandidateInit } // [Server: SIG_ICE] payload.candidate -> candidate
 
-    // 공통 에러/복구
-    | { type: "SYS_ERROR"; error: AppError }
-    | { type: "RETRY" }
-    | { type: "RESET" };
+    // 4. WebRTC Lifecycle (Client Internal)
+    | { type: "EV_PC_CONNECTING" }   // [Internal] Negotiation 시작 (Offer 생성 직전)
+    | { type: "EV_PC_CONNECTED" }    // [Internal] PC.connectionState === 'connected'
+
+    // 5. Common / Error
+    | { type: "EV_ERROR"; error: AppError } // [Server: SYS_ERROR] payload -> error 변환해서 dispatch
+    | { type: "EV_PING"; seq: number }      // [Server: SYS_PING] payload.seq -> seq (선택사항)
+    | { type: "EV_RETRY" }                  // [User Action] 재시도 버튼 클릭
+    | { type: "EV_RESET" };                 // [Internal] 초기화
