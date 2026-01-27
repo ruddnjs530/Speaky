@@ -45,6 +45,38 @@ class VoiceService(voice_pb2_grpc.VoiceServiceServicer):
         
         # 그 외는 LOADING
         return voice_pb2.StatusResponse(status="LOADING")
+    
+    async def ListModels(self, request: voice_pb2.ListModelsRequest, context: grpc.aio.ServicerContext):
+        """로딩 성공한 모델 목록만 반환 (READY 상태만)
+        
+        Returns:
+            ListModelsResponse: READY 상태인 모델들의 목록
+        """
+        all_models = self.model_manager.list_models()
+        
+        # READY 상태인 모델만 필터링
+        ready_models = [
+            model_data
+            for model_data in all_models.values()
+            if model_data["status"] == "READY"
+        ]
+        
+        # VoiceModel 메시지로 변환
+        voice_models = []
+        for model_data in ready_models:
+            voice_model_id = model_data.get("voice_model_id")
+            # voice_model_id가 None이면 제외
+            if voice_model_id is None:
+                continue
+            
+            voice_models.append(
+                voice_pb2.VoiceModel(
+                    model_name=model_data["model_name"],
+                    voice_model_id=voice_model_id,
+                )
+            )
+        
+        return voice_pb2.ListModelsResponse(models=voice_models)
 
     async def ConvertStream(
         self,
