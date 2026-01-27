@@ -6,7 +6,9 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/pion/rtcp"
 	"github.com/pion/webrtc/v4"
+	"time"
 
 	// "speaky-media/internal/pipeline" // Not used directly in Session yet, but imported
 	media_sync "speaky-media/internal/sync"
@@ -54,6 +56,25 @@ func NewSession(id string, room *Room, pc *webrtc.PeerConnection) *Session {
 		if err := room.BroadcastTrack(id, track, session.ctx); err != nil {
 			slog.Error("Failed to broadcast track", "error", err)
 		}
+
+		// PLI Strategy: Send Picture Loss Indication every 3 seconds
+		// This ensures keyframes are generated even if packet loss occurs or new subscriber joins.
+		if track.Kind() == webrtc.RTPCodecTypeVideo {
+			go func() {
+				ticker := time.NewTicker(3 * time.Second)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-session.ctx.Done():
+						return
+					case <-ticker.C:
+						if rtcpErr := pc.WriteRTCP([]rtcp.Packet{&rtcp.PictureLossIndication{MediaSSRC: uint32(track.SSRC())}}); rtcpErr != nil {
+							// Non-fatal, just log debug
+						}
+					}
+				}
+			}()
+		}
 	})
 
 	// Register ICE connection state handler
@@ -89,12 +110,25 @@ func (s *Session) HandleOffer(offerSDP string) (string, error) {
 		return "", fmt.Errorf("failed to create answer: %w", err)
 	}
 
+	// Create a channel to wait for ICE gathering to complete (One-Shot Signaling)
+	gatherComplete := webrtc.GatheringCompletePromise(s.pc)
+
 	// Set local description (answer)
 	if err := s.pc.SetLocalDescription(answer); err != nil {
 		return "", fmt.Errorf("failed to set local description: %w", err)
 	}
 
-	return answer.SDP, nil
+	// Wait for gathering completion or context timeout
+	select {
+	case <-gatherComplete:
+		slog.Info("ICE Gathering complete", "sessionID", s.ID)
+	case <-s.ctx.Done():
+		return "", fmt.Errorf("session context cancelled during ICE gathering")
+	}
+
+	// Return the *updated* LocalDescription which now contains ALL candidates
+	finalAnswer := s.pc.LocalDescription()
+	return finalAnswer.SDP, nil
 }
 
 // AddICECandidate adds an ICE candidate to the peer connection.

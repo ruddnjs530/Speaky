@@ -10,6 +10,8 @@ import (
 
 	"speaky-media/internal/config"
 
+	"github.com/pion/rtcp"
+	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4"
 
 	"speaky-media/internal/ai"
@@ -31,15 +33,22 @@ type Room struct {
 	aiClient     ai.Client
 }
 
+// Subscriber represents a participant subscribed to a track.
+type Subscriber struct {
+	Track       *webrtc.TrackLocalStaticRTP
+	SSRC        uint32
+	PayloadType uint8
+}
+
 // ActiveTrack stores information about a track currently being broadcast in the room.
 // It manages the list of subscribers for Fan-out distribution.
 type ActiveTrack struct {
 	Remote      *webrtc.TrackRemote
 	OwnerID     string
 	Kind        webrtc.RTPCodecType
-	subscribers map[string]*webrtc.TrackLocalStaticRTP // Key: sessionID, Value: local track
-	mu          sync.RWMutex                            // Protects subscribers map
-	cancel      context.CancelFunc                      // To stop processRTP goroutine
+	subscribers map[string]*Subscriber // Key: sessionID, Value: Subscriber info
+	mu          sync.RWMutex            // Protects subscribers map
+	cancel      context.CancelFunc      // To stop processRTP goroutine
 
 	// Pipeline components
 	audioQueue  *pipeline.Queue[pipeline.RTPPacket]
@@ -77,7 +86,7 @@ func (r *Room) BroadcastTrack(fromUserID string, track *webrtc.TrackRemote, ctx 
 		Remote:      track,
 		OwnerID:     fromUserID,
 		Kind:        track.Kind(),
-		subscribers: make(map[string]*webrtc.TrackLocalStaticRTP),
+		subscribers: make(map[string]*Subscriber),
 		cancel:      cancel,
 	}
 	r.activeTracks[trackID] = activeTrack
@@ -107,13 +116,36 @@ func (r *Room) BroadcastTrack(fromUserID string, track *webrtc.TrackRemote, ctx 
 
 	// Define Fan-Out Callback (Sending to all subscribers)
 	onFrame := func(data []byte) {
+		// 1. Unmarshal to access/modify header
+		pkt := &rtp.Packet{}
+		if err := pkt.Unmarshal(data); err != nil {
+			slog.Error("Failed to unmarshal RTP packet in onFrame", "error", err)
+			return
+		}
+
 		activeTrack.mu.RLock()
-		for _, localTrack := range activeTrack.subscribers {
-			if _, err := localTrack.Write(data); err != nil {
-				// Ignore write errors (non-fatal for one subscriber)
+		defer activeTrack.mu.RUnlock() // Defer for safety
+
+		for _, sub := range activeTrack.subscribers { // Iterate subs
+			// 2. Rewrite Header to match Local Track's negotiated parameters
+			// Payload Type
+			// pkt.Header.PayloadType = sub.PayloadType
+			pkt.Header.PayloadType = sub.PayloadType
+			// SSRC
+			pkt.Header.SSRC = sub.SSRC
+
+			pkt.Header.PayloadType = sub.PayloadType
+			pkt.Header.SSRC = sub.SSRC
+
+			// 3. Strip Extensions and Write modified packet
+			// Extensions might have different ID mappings between Ingress and Egress sessions.
+			// Sending wrong ID can break decoding. Safe to strip for basic AV.
+			pkt.Header.Extensions = []rtp.Extension{}
+
+			if err := sub.Track.WriteRTP(pkt); err != nil {
+				slog.Error("Failed to write to local track", "error", err)
 			}
 		}
-		activeTrack.mu.RUnlock()
 	}
 
 	if activeTrack.Kind == webrtc.RTPCodecTypeAudio {
@@ -265,14 +297,55 @@ func (r *Room) subscribeToTrack(session *Session, activeTrack *ActiveTrack) erro
 	}
 
 	// Add track to subscriber's PeerConnection
-	if _, err := session.pc.AddTrack(localTrack); err != nil {
+	sender, err := session.pc.AddTrack(localTrack)
+	if err != nil {
 		return fmt.Errorf("failed to add track to peer connection: %w", err)
 	}
 
+	// Capture Negotiated SSRC and Payload Type
+	params := sender.GetParameters()
+	if len(params.Encodings) == 0 {
+		return fmt.Errorf("no encodings in sender parameters")
+	}
+	ssrc := uint32(params.Encodings[0].SSRC)
+
+	// We assume one codec per track for now (match the capability)
+	if len(params.Codecs) == 0 {
+		return fmt.Errorf("no codecs in sender parameters")
+	}
+	payloadType := uint8(params.Codecs[0].PayloadType)
+
+	slog.Debug("Subscribed with parameters",
+		"sessionID", session.ID,
+		"ssrc", ssrc,
+		"pt", payloadType,
+		"trackID", localTrack.ID(),
+	)
+
 	// Register subscriber in ActiveTrack
 	activeTrack.mu.Lock()
-	activeTrack.subscribers[session.ID] = localTrack
+	activeTrack.subscribers[session.ID] = &Subscriber{
+		Track:       localTrack,
+		SSRC:        ssrc,
+		PayloadType: payloadType,
+	}
 	activeTrack.mu.Unlock()
+
+	// Request Keyframe immediately for new subscriber
+	if activeTrack.Kind == webrtc.RTPCodecTypeVideo {
+		go func() {
+			// Find owner session to send PLI
+			if ownerSession, ok := r.GetSession(activeTrack.OwnerID); ok {
+				if err := ownerSession.pc.WriteRTCP([]rtcp.Packet{
+					&rtcp.PictureLossIndication{MediaSSRC: uint32(activeTrack.Remote.SSRC())},
+				}); err != nil {
+					slog.Warn("Failed to send initial PLI", "error", err)
+				} else {
+					slog.Info("Sent initial PLI for new subscriber", "ownerID", activeTrack.OwnerID)
+				}
+			}
+		}()
+	}
 
 	// Store in session for cleanup
 	trackID := fmt.Sprintf("%s-%s", activeTrack.OwnerID, activeTrack.Remote.ID())
@@ -284,7 +357,6 @@ func (r *Room) subscribeToTrack(session *Session, activeTrack *ActiveTrack) erro
 // processRTP is the Single Reader goroutine that fans out RTP packets to all subscribers.
 // CRITICAL: Only ONE processRTP runs per track (not per subscriber) to avoid packet fragmentation.
 func (r *Room) processRTP(ctx context.Context, activeTrack *ActiveTrack) {
-	buf := make([]byte, 1500) // MTU size for RTP packets
 	errCount := 0
 
 	for {
@@ -294,8 +366,8 @@ func (r *Room) processRTP(ctx context.Context, activeTrack *ActiveTrack) {
 		default:
 		}
 
-		// Read ONE packet from source track
-		n, _, err := activeTrack.Remote.Read(buf)
+		// Read RTP Packet (Header + Payload)
+		rtpPacket, _, err := activeTrack.Remote.ReadRTP()
 		if err != nil {
 			if err == io.EOF {
 				return // Track ended normally
@@ -310,15 +382,13 @@ func (r *Room) processRTP(ctx context.Context, activeTrack *ActiveTrack) {
 
 		errCount = 0 // Reset on successful read
 
-		// Pipeline Ingress: Push to Queue/Buffer
-		// The workers (runAudioPipeline/runVideoPipeline) handle the Fan-Out.
-		packetData := buf[:n] // Slice it now
-
-		// Copy data because internal buffer is reused?
-		// Pion Read(buf) fills buf.
-		// If we push slice, we must copy because buf is overwritten next loop.
-		payload := make([]byte, n)
-		copy(payload, packetData)
+		// Marshal packet to bytes for pipeline storage
+		// This preserves Header (SSRC, Timestamp, Sequence)
+		payload, err := rtpPacket.Marshal()
+		if err != nil {
+			slog.Error("Failed to marshal RTP packet", "error", err)
+			continue
+		}
 
 		// Create Metadata Packet
 		pkt := pipeline.RTPPacket{
@@ -338,8 +408,16 @@ func (r *Room) processRTP(ctx context.Context, activeTrack *ActiveTrack) {
 		} else {
 			// Fallback: Direct Fan-out if no pipeline (safety)
 			activeTrack.mu.RLock()
-			for _, localTrack := range activeTrack.subscribers {
-				localTrack.Write(payload)
+			for _, sub := range activeTrack.subscribers {
+				// Fallback needs manual Write which might fail if we stripped header?
+				// But fallback is only for non-pipeline.
+				// Since we have Header+Payload in payload var (from Marshal), Write() works but double header?
+				// Write expects Payload only usually? No, Write expects Payload (RTP payload) only if we let it Packetize?
+				// Pion TrackLocalStaticRTP.Write(b) treats b as RTP Payload?
+				// checks: "Write writes a RTP packet... If the passed data is not a valid RTP packet... it returns error"?
+				// No, Read manual says: "Write writes a RTP packet to the track".
+				// So if payload is marshaled RTP, Write(payload) is correct?
+				sub.Track.Write(payload)
 			}
 			activeTrack.mu.RUnlock()
 		}
@@ -360,6 +438,14 @@ func (r *Room) Close() error {
 	}
 
 	return nil
+}
+
+// GetSession retrieves a session by userID.
+func (r *Room) GetSession(userID string) (*Session, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	session, exists := r.sessions[userID]
+	return session, exists
 }
 
 // TODO: Implement remaining Room methods (will be added in next step)

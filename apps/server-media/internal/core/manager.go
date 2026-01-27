@@ -101,3 +101,20 @@ func (m *Manager) GetOrCreateRoom(roomID string) (*Room, error) {
 
 	return room, nil
 }
+// Join delegates to Room.Join.
+func (m *Manager) Join(roomID, userID, offerSDP string) (string, error) {
+	room, err := m.GetRoom(roomID)
+	if err != nil {
+		return "", err
+	}
+	return room.Join(userID, offerSDP)
+}
+
+// Leave delegates to Room.Leave.
+func (m *Manager) Leave(roomID, userID string) error {
+	room, err := m.GetRoom(roomID)
+	if err != nil {
+		return err
+	}
+	return room.Leave(userID)
+}

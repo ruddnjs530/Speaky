@@ -14,6 +14,11 @@ type MockClient struct {
 	StreamFunc func(context.Context) (Stream, error)
 }
 
+// NewMockClient creates a new MockClient.
+func NewMockClient() *MockClient {
+	return &MockClient{}
+}
+
 func (m *MockClient) NewStream(ctx context.Context) (Stream, error) {
 	if m.StreamFunc != nil {
 		return m.StreamFunc(ctx)
