@@ -9,6 +9,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.speaky.serversc.domain.SessionEntity;
 import org.speaky.serversc.domain.SessionStatus;
+import org.speaky.serversc.exception.SessionNotFoundException;
 import org.speaky.serversc.repository.SessionRepository;
 
 import java.time.LocalDateTime;
@@ -16,6 +17,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
@@ -78,14 +80,14 @@ class SessionServiceTest {
         when(sessionRepository.findById(sessionId)).thenReturn(Optional.of(session));
         
         // When
-        Optional<SessionEntity> result = sessionService.startBroadcast(sessionId, mediaServerId, pipelineId);
+        SessionEntity result = sessionService.startBroadcast(sessionId, mediaServerId, pipelineId);
         
         // Then
-        assertThat(result).isPresent();
-        assertThat(result.get().getStatus()).isEqualTo(SessionStatus.LIVE);
-        assertThat(result.get().getStartedAt()).isNotNull();
-        assertThat(result.get().getMediaServerId()).isEqualTo(mediaServerId);
-        assertThat(result.get().getPipelineId()).isEqualTo(pipelineId);
+        assertThat(result).isNotNull();
+        assertThat(result.getStatus()).isEqualTo(SessionStatus.LIVE);
+        assertThat(result.getStartedAt()).isNotNull();
+        assertThat(result.getMediaServerId()).isEqualTo(mediaServerId);
+        assertThat(result.getPipelineId()).isEqualTo(pipelineId);
         
         verify(sessionRepository, times(1)).save(session);
     }
@@ -102,11 +104,11 @@ class SessionServiceTest {
         
         when(sessionRepository.findById(sessionId)).thenReturn(Optional.of(session));
         
-        // When
-        Optional<SessionEntity> result = sessionService.startBroadcast(sessionId, "media-1", "pipeline-1");
+        // When & Then
+        assertThatThrownBy(() -> sessionService.startBroadcast(sessionId, "media-1", "pipeline-1"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Cannot start broadcast");
         
-        // Then
-        assertThat(result).isEmpty();
         verify(sessionRepository, never()).save(any());
     }
     
@@ -125,13 +127,13 @@ class SessionServiceTest {
         when(sessionRepository.findById(sessionId)).thenReturn(Optional.of(session));
         
         // When
-        Optional<SessionEntity> result = sessionService.endBroadcast(sessionId, endedReason);
+        SessionEntity result = sessionService.endBroadcast(sessionId, endedReason);
         
         // Then
-        assertThat(result).isPresent();
-        assertThat(result.get().getStatus()).isEqualTo(SessionStatus.ENDED);
-        assertThat(result.get().getEndedAt()).isNotNull();
-        assertThat(result.get().getEndedReason()).isEqualTo(endedReason);
+        assertThat(result).isNotNull();
+        assertThat(result.getStatus()).isEqualTo(SessionStatus.ENDED);
+        assertThat(result.getEndedAt()).isNotNull();
+        assertThat(result.getEndedReason()).isEqualTo(endedReason);
         
         verify(sessionRepository, times(1)).save(session);
     }
@@ -151,13 +153,13 @@ class SessionServiceTest {
         when(sessionRepository.findById(sessionId)).thenReturn(Optional.of(session));
         
         // When
-        Optional<SessionEntity> result = sessionService.failBroadcast(sessionId, failureReason);
+        SessionEntity result = sessionService.failBroadcast(sessionId, failureReason);
         
         // Then
-        assertThat(result).isPresent();
-        assertThat(result.get().getStatus()).isEqualTo(SessionStatus.FAILED);
-        assertThat(result.get().getEndedAt()).isNotNull();
-        assertThat(result.get().getEndedReason()).isEqualTo(failureReason);
+        assertThat(result).isNotNull();
+        assertThat(result.getStatus()).isEqualTo(SessionStatus.FAILED);
+        assertThat(result.getEndedAt()).isNotNull();
+        assertThat(result.getEndedReason()).isEqualTo(failureReason);
         
         verify(sessionRepository, times(1)).save(session);
     }

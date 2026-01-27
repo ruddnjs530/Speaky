@@ -9,6 +9,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.speaky.serversc.domain.SessionEntity;
 import org.speaky.serversc.domain.SessionStatus;
 import org.speaky.serversc.dto.*;
+import org.speaky.serversc.exception.SessionNotFoundException;
 import org.speaky.serversc.service.SessionService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -18,6 +19,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -84,12 +86,10 @@ class SessionControllerTest {
         // Given
         when(sessionService.getSession("any")).thenReturn(Optional.empty());
         
-        // When
-        ResponseEntity<SessionResponse> response = sessionController.getSession("any");
-        
-        // Then
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
-        assertThat(response.getBody()).isNull();
+        // When & Then
+        assertThatThrownBy(() -> sessionController.getSession("any"))
+                .isInstanceOf(SessionNotFoundException.class)
+                .hasMessageContaining("Session not found: any");
     }
     
     @Test
@@ -136,7 +136,7 @@ class SessionControllerTest {
         SessionEntity session = createTestSession("session-1", 1L, 100L, "Test");
         session.setStatus(SessionStatus.LIVE);
         
-        when(sessionService.startBroadcast("session-1", "server-1", "pipe-1")).thenReturn(Optional.of(session));
+        when(sessionService.startBroadcast("session-1", "server-1", "pipe-1")).thenReturn(session);
         
         // When
         ResponseEntity<SessionResponse> response = sessionController.startBroadcast("session-1", request);
@@ -156,7 +156,7 @@ class SessionControllerTest {
         SessionEntity session = createTestSession("session-1", 1L, 100L, "Test");
         session.setStatus(SessionStatus.ENDED);
         
-        when(sessionService.endBroadcast("session-1", "End reason")).thenReturn(Optional.of(session));
+        when(sessionService.endBroadcast("session-1", "End reason")).thenReturn(session);
         
         // When
         ResponseEntity<SessionResponse> response = sessionController.endBroadcast("session-1", request);
