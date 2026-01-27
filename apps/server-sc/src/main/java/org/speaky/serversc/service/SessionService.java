@@ -6,6 +6,7 @@ import org.speaky.serversc.domain.SessionEntity;
 import org.speaky.serversc.domain.SessionEventType;
 import org.speaky.serversc.domain.SessionStatus;
 import org.speaky.serversc.dto.SessionEventPayload;
+import org.speaky.serversc.exception.SessionNotFoundException;
 import org.speaky.serversc.repository.SessionRepository;
 import org.springframework.stereotype.Service;
 
@@ -102,22 +103,17 @@ public class SessionService {
      * @param sessionId 세션 ID
      * @param mediaServerId 미디어 서버 ID
      * @param pipelineId 파이프라인 ID
-     * @return 업데이트된 세션 (없으면 Optional.empty())
+     * @return 업데이트된 세션
+     * @throws SessionNotFoundException 세션을 찾을 수 없는 경우
      */
-    public Optional<SessionEntity> startBroadcast(String sessionId, String mediaServerId, String pipelineId) {
-        Optional<SessionEntity> sessionOpt = sessionRepository.findById(sessionId);
-        
-        if (sessionOpt.isEmpty()) {
-            log.warn("Session not found for broadcast start: sessionId={}", sessionId);
-            return Optional.empty();
-        }
-        
-        SessionEntity session = sessionOpt.get();
+    public SessionEntity startBroadcast(String sessionId, String mediaServerId, String pipelineId) {
+        SessionEntity session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new SessionNotFoundException(sessionId));
         
         if (session.getStatus() != SessionStatus.STARTING) {
-            log.warn("Cannot start broadcast: session is not in STARTING state. sessionId={}, currentStatus={}", 
-                    sessionId, session.getStatus());
-            return Optional.empty();
+            throw new IllegalStateException(
+                String.format("Cannot start broadcast: session is not in STARTING state (current: %s)", 
+                    session.getStatus()));
         }
         
         session.setStatus(SessionStatus.LIVE);
@@ -140,7 +136,7 @@ public class SessionService {
         log.info("Broadcast started: sessionId={}, mediaServerId={}, pipelineId={}", 
                 sessionId, mediaServerId, pipelineId);
         
-        return Optional.of(session);
+        return session;
     }
     
     /**
@@ -148,17 +144,13 @@ public class SessionService {
      * 
      * @param sessionId 세션 ID
      * @param endedReason 종료 사유
-     * @return 업데이트된 세션 (없으면 Optional.empty())
+     * @return 업데이트된 세션
+     * @throws SessionNotFoundException 세션을 찾을 수 없는 경우
      */
-    public Optional<SessionEntity> endBroadcast(String sessionId, String endedReason) {
-        Optional<SessionEntity> sessionOpt = sessionRepository.findById(sessionId);
+    public SessionEntity endBroadcast(String sessionId, String endedReason) {
+        SessionEntity session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new SessionNotFoundException(sessionId));
         
-        if (sessionOpt.isEmpty()) {
-            log.warn("Session not found for broadcast end: sessionId={}", sessionId);
-            return Optional.empty();
-        }
-        
-        SessionEntity session = sessionOpt.get();
         session.setStatus(SessionStatus.ENDED);
         session.setEndedAt(LocalDateTime.now());
         session.setEndedReason(endedReason);
@@ -177,7 +169,7 @@ public class SessionService {
         
         log.info("Broadcast ended: sessionId={}, reason={}", sessionId, endedReason);
         
-        return Optional.of(session);
+        return session;
     }
     
     /**
@@ -185,17 +177,13 @@ public class SessionService {
      * 
      * @param sessionId 세션 ID
      * @param failureReason 실패 사유
-     * @return 업데이트된 세션 (없으면 Optional.empty())
+     * @return 업데이트된 세션
+     * @throws SessionNotFoundException 세션을 찾을 수 없는 경우
      */
-    public Optional<SessionEntity> failBroadcast(String sessionId, String failureReason) {
-        Optional<SessionEntity> sessionOpt = sessionRepository.findById(sessionId);
+    public SessionEntity failBroadcast(String sessionId, String failureReason) {
+        SessionEntity session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new SessionNotFoundException(sessionId));
         
-        if (sessionOpt.isEmpty()) {
-            log.warn("Session not found for broadcast failure: sessionId={}", sessionId);
-            return Optional.empty();
-        }
-        
-        SessionEntity session = sessionOpt.get();
         session.setStatus(SessionStatus.FAILED);
         session.setEndedAt(LocalDateTime.now());
         session.setEndedReason(failureReason);
@@ -214,7 +202,7 @@ public class SessionService {
         
         log.error("Broadcast failed: sessionId={}, reason={}", sessionId, failureReason);
         
-        return Optional.of(session);
+        return session;
     }
     
     /**
