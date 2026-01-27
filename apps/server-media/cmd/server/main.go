@@ -1,80 +1,81 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
-	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/app"
-	"lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media/internal/config"
+
+	"speaky-media/internal/ai"
+	"speaky-media/internal/config"
+	"speaky-media/internal/core"
+	impl "speaky-media/internal/grpc"
+
+	"google.golang.org/grpc"
+	"github.com/pion/webrtc/v4"
+
+	pb "mediaserver/proto"
 )
 
 func main() {
-	// 1. Load Configuration
-	cfg := config.Load()
-	if err := cfg.Validate(); err != nil {
-		panic(fmt.Sprintf("Invalid configuration: %v", err))
-	}
-
-	// 2. Initialize Logger (slog)
-	initLogger(cfg)
-
-	// 3. Create Root Context for Graceful Shutdown
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-
-	slog.Info("Starting Media Server...",
-		"env", cfg.Env,
-		"ai_server", cfg.AIServerAddr,
-		"log_level", cfg.LogLevel,
-	)
-
-	// 4. Initialize and Run Application
-	application, err := app.New(ctx, cfg)
-	if err != nil {
-		slog.Error("Failed to initialize application", "error", err)
-		os.Exit(1)
-	}
-
-	if err := application.Run(ctx); err != nil {
-		slog.Error("Application exited with error", "error", err)
-		os.Exit(1)
-	}
-}
-
-func initLogger(cfg *config.Config) {
-	// Parse LOG_LEVEL
-	var level slog.Level
-	switch strings.ToUpper(cfg.LogLevel) {
-	case "DEBUG":
-		level = slog.LevelDebug
-	case "WARN":
-		level = slog.LevelWarn
-	case "ERROR":
-		level = slog.LevelError
-	default:
-		level = slog.LevelInfo // Default
-	}
-
-	// Helper to create options
-	opts := &slog.HandlerOptions{
-		Level: level,
-	}
-
-	// Determine Handler based on GO_ENV
-	var handler slog.Handler
-
-	if strings.ToLower(cfg.Env) == "prod" {
-		handler = slog.NewJSONHandler(os.Stdout, opts)
-	} else {
-		// Default to local/text for readability
-		handler = slog.NewTextHandler(os.Stdout, opts)
-	}
-
-	// Set Default Logger
-	logger := slog.New(handler)
+	// 1. Setup Logger
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	slog.SetDefault(logger)
+
+	// 2. Load Config
+	cfg := &config.Config{
+		// Defaults or Load from Env
+	}
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "50051"
+	}
+
+	// 3. Setup Dependencies
+	// AI Client (Mock for Phase 4)
+	aiClient := ai.NewMockClient()
+
+	// WebRTC API (Standard settings)
+	settingEngine := webrtc.SettingEngine{}
+	// For Docker/NAT traversal, usually strictly host networking or specific Public IP config is needed.
+	// For E2E local verification (host network), default is fine.
+	api := webrtc.NewAPI(webrtc.WithSettingEngine(settingEngine))
+
+	// Room Manager
+	manager := core.NewRoomManager(cfg, api, aiClient)
+
+	// 4. Setup gRPC Server
+	lis, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%s", port))
+	if err != nil {
+		slog.Error("Failed to listen", "error", err)
+		os.Exit(1)
+	}
+
+	grpcServer := grpc.NewServer()
+	mediaService := impl.NewServer(manager)
+
+	// Register Proto Service
+	pb.RegisterControlServiceServer(grpcServer, mediaService)
+
+	// 5. Start Server (Blocking)
+	go func() {
+		slog.Info("Starting gRPC Server", "port", port)
+		if err := grpcServer.Serve(lis); err != nil {
+			slog.Error("gRPC Server failed", "error", err)
+			os.Exit(1)
+		}
+	}()
+
+	// 6. Graceful Shutdown
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	slog.Info("Shutting down server...")
+	grpcServer.GracefulStop()
+
+	// TODO: Clean up Manager resources (loop over rooms -> close)
+	slog.Info("Server stopped")
 }

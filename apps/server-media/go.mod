@@ -1,15 +1,19 @@
-module lab.ssafy.com/s14-webmobile1-sub1/S14P11B103/apps/server-media
+module speaky-media
 
 go 1.25.5
 
 replace mediaserver/proto => ../../packages/proto/generated/go
 
 require (
-	github.com/hraban/opus v0.0.0-20251117090126-c76ea7e21bf3
 	github.com/pion/webrtc/v4 v4.2.3
 	github.com/stretchr/testify v1.11.1
-	github.com/zaf/resample v1.5.0
 	google.golang.org/grpc v1.78.0
+)
+
+require (
+	github.com/hraban/opus v0.0.0-20251117090126-c76ea7e21bf3 // indirect
+	github.com/pion/opus v0.0.0-20260122090349-7342caad2cf7 // indirect
+	github.com/zaf/resample v1.5.0 // indirect
 )
 
 require (
@@ -42,7 +46,7 @@ require (
 	github.com/goccy/go-yaml v1.18.0 // indirect
 	github.com/gohugoio/hugo v0.149.1 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
-	github.com/google/uuid v1.6.0
+	github.com/google/uuid v1.6.0 // indirect
 	github.com/hashicorp/go-version v1.7.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/kaptinlin/go-i18n v0.1.7 // indirect
@@ -71,12 +75,12 @@ require (
 	github.com/pion/datachannel v1.6.0 // indirect
 	github.com/pion/dtls/v3 v3.0.10 // indirect
 	github.com/pion/ice/v4 v4.2.0 // indirect
-	github.com/pion/interceptor v0.1.43 // indirect
+	github.com/pion/interceptor v0.1.43
 	github.com/pion/logging v0.2.4 // indirect
 	github.com/pion/mdns/v2 v2.1.0 // indirect
 	github.com/pion/randutil v0.1.0 // indirect
-	github.com/pion/rtcp v1.2.16
-	github.com/pion/rtp v1.10.0
+	github.com/pion/rtcp v1.2.16 // indirect
+	github.com/pion/rtp v1.10.0 // indirect
 	github.com/pion/sctp v1.9.2 // indirect
 	github.com/pion/sdp/v3 v3.0.17 // indirect
 	github.com/pion/srtp/v3 v3.0.10 // indirect

@@ -1,74 +1,120 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 )
 
-// Config holds all application configuration.
+// Config holds all configuration for the server.
 type Config struct {
-	Env          string // local, prod
-	LogLevel     string // DEBUG, INFO, WARN, ERROR
-	Port         string // HTTP/gRPC server port (e.g. "8080")
-	AIServerAddr string // AI server address (e.g. "localhost:50051")
+	// General
+	GoEnv    string // "local" or "prod"
+	LogLevel string // "DEBUG", "INFO", "WARN", "ERROR"
+	Port     string // HTTP/gRPC server port (e.g., "8080")
 
-	// WebRTC UDP Port Range
-	WebRTCMinPort uint16
-	WebRTCMaxPort uint16
+	// AI Server (Upstream)
+	AIServerAddr string // gRPC address for AI Server (e.g., "localhost:50051")
 
-	// Audio Configuration
-	AudioSampleRate int // Target Sample Rate (e.g. 16000)
-	AudioChannels   int // Target Channels (e.g. 1)
-	PCMBufferSize   int // PCM Channel Buffer Size (e.g. 50)
+	// WebRTC Network
+	WebRTCMinPort uint16 // UDP Min Port (e.g., 50000)
+	WebRTCMaxPort uint16 // UDP Max Port (e.g., 50050)
+	PublicIP      string // Server Public IP for ICE Candidates (CRITICAL for NAT traversal)
 
 	// WebRTC ICE Servers
 	STUNServer     string
 	TURNServer     string
 	TURNUsername   string
 	TURNCredential string
+
+	// Audio Processing (AI Sync & Transcoding)
+	// AudioSampleRate is the target sample rate required by the AI Server (e.g., 24000).
+	// WebRTC input (48000Hz) will be resampled to this rate.
+	AudioSampleRate    int
+	AudioChannels      int // Target Channels (default: 1)
+	PCMBufferSize      int // Internal buffer size for PCM channel (default: 100)
+	AudioFrameDuration int // Audio Frame Duration in ms (default: 20)
 }
 
-// Load reads configuration from environment variables with default fallback.
-func Load() *Config {
-	return &Config{
-		Env:             getEnv("GO_ENV", "local"),
-		LogLevel:        getEnv("LOG_LEVEL", "INFO"),
-		Port:            getEnv("PORT", "8080"),
-		AIServerAddr:    getEnv("AI_SERVER_ADDR", "localhost:50051"),
-		AudioSampleRate: getEnvAsInt("AUDIO_SAMPLE_RATE", 16000),
-		AudioChannels:   getEnvAsInt("AUDIO_CHANNELS", 1),
-		PCMBufferSize:   getEnvAsInt("PCM_BUFFER_SIZE", 50),
-		WebRTCMinPort:   getEnvAsUint16("WEBRTC_MIN_PORT", 50000),
-		WebRTCMaxPort:   getEnvAsUint16("WEBRTC_MAX_PORT", 50010),
-		STUNServer:      getEnv("STUN_SERVER", "stun:stun.l.google.com:19302"),
-		TURNServer:      getEnv("TURN_SERVER", ""),
-		TURNUsername:    getEnv("TURN_USERNAME", ""),
-		TURNCredential:  getEnv("TURN_CREDENTIAL", ""),
+// Load reads configuration from environment variables and validates them.
+func Load() (*Config, error) {
+	cfg := &Config{
+		// General
+		GoEnv:    getEnv("GO_ENV", "local"),
+		LogLevel: getEnv("LOG_LEVEL", "INFO"),
+		Port:     getEnv("PORT", "8080"),
+
+		// AI Server
+		AIServerAddr: getEnv("AI_SERVER_ADDR", "localhost:50051"),
+
+		// WebRTC Network
+		WebRTCMinPort: uint16(getEnvAsInt("WEBRTC_MIN_PORT", 50000)),
+		WebRTCMaxPort: uint16(getEnvAsInt("WEBRTC_MAX_PORT", 50050)),
+		PublicIP:      getEnv("PUBLIC_IP", ""),
+
+		// ICE Servers
+		STUNServer:     getEnv("STUN_SERVER", "stun:stun.l.google.com:19302"),
+		TURNServer:     getEnv("TURN_SERVER", ""),
+		TURNUsername:   getEnv("TURN_USERNAME", ""),
+		TURNCredential: getEnv("TURN_CREDENTIAL", ""),
+
+		// Audio
+		AudioSampleRate:    getEnvAsInt("AUDIO_SAMPLE_RATE", 24000),
+		AudioChannels:      getEnvAsInt("AUDIO_CHANNELS", 1),
+		PCMBufferSize:      getEnvAsInt("PCM_BUFFER_SIZE", 100),
+		AudioFrameDuration: getEnvAsInt("AUDIO_FRAME_DURATION", 20),
 	}
+
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
+
+	return cfg, nil
 }
 
-// Validate checks for configuration errors.
+// Validate checks if the configuration is valid.
 func (c *Config) Validate() error {
-	if c.WebRTCMinPort >= c.WebRTCMaxPort {
-		return fmt.Errorf("WebRTCMinPort (%d) must be less than WebRTCMaxPort (%d)", c.WebRTCMinPort, c.WebRTCMaxPort)
-	}
 	if c.AIServerAddr == "" {
-		return fmt.Errorf("AIServerAddr cannot be empty")
+		return errors.New("AI_SERVER_ADDR is required")
 	}
-	if c.AudioSampleRate <= 0 {
-		return fmt.Errorf("AudioSampleRate must be positive")
+
+	// Port validation
+	if c.Port != "" {
+		p, err := strconv.Atoi(c.Port)
+		if err != nil || p < 1 || p > 65535 {
+			return fmt.Errorf("PORT must be a valid number between 1-65535, got: %s", c.Port)
+		}
 	}
-	if c.AudioChannels <= 0 {
-		return fmt.Errorf("AudioChannels must be positive")
+
+	// WebRTC Port Range validation
+	if c.WebRTCMinPort >= c.WebRTCMaxPort {
+		return fmt.Errorf("WEBRTC_MIN_PORT (%d) must be less than WEBRTC_MAX_PORT (%d)", c.WebRTCMinPort, c.WebRTCMaxPort)
 	}
-	if c.PCMBufferSize <= 0 {
-		return fmt.Errorf("PCMBufferSize must be positive")
+
+	// Public IP validation
+	if c.PublicIP == "" {
+		if c.IsProd() {
+			return errors.New("PUBLIC_IP is strictly required in production environment")
+		}
+		// In local, we can warn but proceed
+		fmt.Println("⚠️ WARNING: PUBLIC_IP is not set. WebRTC connection might fail if client is not on localhost.")
 	}
+
+	// Audio validation
+	if c.AudioSampleRate != 24000 && c.AudioSampleRate != 48000 {
+		return fmt.Errorf("AUDIO_SAMPLE_RATE must be 24000 or 48000, got: %d", c.AudioSampleRate)
+	}
+	if c.AudioFrameDuration <= 0 {
+		return errors.New("AUDIO_FRAME_DURATION must be positive")
+	}
+
 	return nil
 }
 
-// getEnv retrieves environment variable or returns default value.
+// Helper functions
+
 func getEnv(key, fallback string) string {
 	if value, exists := os.LookupEnv(key); exists {
 		return value
@@ -76,22 +122,24 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
-// getEnvAsInt retrieves environment variable as int or returns default value.
 func getEnvAsInt(key string, fallback int) int {
-	if valueStr, exists := os.LookupEnv(key); exists {
-		if value, err := strconv.Atoi(valueStr); err == nil {
-			return value
-		}
+	valueStr := getEnv(key, "")
+	if valueStr == "" {
+		return fallback
 	}
-	return fallback
+	value, err := strconv.Atoi(valueStr)
+	if err != nil {
+		return fallback
+	}
+	return value
 }
 
-// getEnvAsUint16 retrieves environment variable as uint16 or returns default value.
-func getEnvAsUint16(key string, fallback uint16) uint16 {
-	if valueStr, exists := os.LookupEnv(key); exists {
-		if value, err := strconv.ParseUint(valueStr, 10, 16); err == nil {
-			return uint16(value)
-		}
-	}
-	return fallback
+// IsProd returns true if running in production environment.
+func (c *Config) IsProd() bool {
+	return strings.ToLower(c.GoEnv) == "prod"
+}
+
+// IsLocal returns true if running in local environment.
+func (c *Config) IsLocal() bool {
+	return strings.ToLower(c.GoEnv) == "local"
 }
