@@ -3,8 +3,10 @@ package org.speaky.serversc.controller;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.speaky.serversc.domain.SessionEntity;
 import org.speaky.serversc.domain.SessionStatus;
 import org.speaky.serversc.dto.*;
+import org.speaky.serversc.exception.SessionNotFoundException;
 import org.speaky.serversc.service.SessionService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -57,10 +59,10 @@ public class SessionController {
     public ResponseEntity<SessionResponse> getSession(
             @PathVariable String sessionId) {
         
-        return sessionService.getSession(sessionId)
-                .map(SessionResponse::from)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+        SessionEntity session = sessionService.getSession(sessionId)
+                .orElseThrow(() -> new org.speaky.serversc.exception.SessionNotFoundException(sessionId));
+        
+        return ResponseEntity.ok(SessionResponse.from(session));
     }
     
     /**
@@ -110,14 +112,13 @@ public class SessionController {
         log.info("Starting broadcast: sessionId={}, mediaServerId={}", 
                 sessionId, request.getMediaServerId());
         
-        return sessionService.startBroadcast(
-                        sessionId,
-                        request.getMediaServerId(),
-                        request.getPipelineId()
-                )
-                .map(SessionResponse::from)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+        SessionEntity session = sessionService.startBroadcast(
+                sessionId,
+                request.getMediaServerId(),
+                request.getPipelineId()
+        );
+        
+        return ResponseEntity.ok(SessionResponse.from(session));
     }
     
     /**
@@ -133,10 +134,8 @@ public class SessionController {
         log.info("Ending broadcast: sessionId={}, reason={}", 
                 sessionId, request.getReason());
         
-        return sessionService.endBroadcast(sessionId, request.getReason())
-                .map(SessionResponse::from)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+        SessionEntity session = sessionService.endBroadcast(sessionId, request.getReason());
+        return ResponseEntity.ok(SessionResponse.from(session));
     }
     
     /**
@@ -152,10 +151,8 @@ public class SessionController {
         log.error("Broadcast failed: sessionId={}, reason={}", 
                 sessionId, request.getReason());
         
-        return sessionService.failBroadcast(sessionId, request.getReason())
-                .map(SessionResponse::from)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+        SessionEntity session = sessionService.failBroadcast(sessionId, request.getReason());
+        return ResponseEntity.ok(SessionResponse.from(session));
     }
     
     /**
