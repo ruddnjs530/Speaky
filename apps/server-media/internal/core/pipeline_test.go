@@ -10,7 +10,6 @@ import (
 	"speaky-media/internal/pipeline"
 	media_sync "speaky-media/internal/sync"
 
-
 	"github.com/pion/webrtc/v4"
 	"github.com/stretchr/testify/require"
 )
@@ -26,7 +25,7 @@ func TestPhase3_Pipeline_AudioFlow(t *testing.T) {
 	mockAI := &ai.MockClient{}
 
 	// Create Room
-	room := NewRoom("pipeline-test-room", cfg, api, mockAI)
+	room := NewRoom("pipeline-test-room", cfg, api, mockAI, nil)
 	defer room.Close()
 
 	// 2a. Setup Synchronizer (Mock Session context)
@@ -36,9 +35,9 @@ func TestPhase3_Pipeline_AudioFlow(t *testing.T) {
 	activeTrack := &ActiveTrack{
 		OwnerID:     "host",
 		Kind:        webrtc.RTPCodecTypeAudio,
-		subscribers: make(map[string]*webrtc.TrackLocalStaticRTP),
+		subscribers: make(map[string]*Subscriber),
 		// Manual Pipeline Setup
-		audioQueue:  pipeline.NewQueue[pipeline.RTPPacket](10),
+		audioQueue: pipeline.NewQueue[pipeline.RTPPacket](10),
 	}
 
 	// 3. Start the consumer worker via Synchronizer

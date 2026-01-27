@@ -2,6 +2,7 @@ package sync
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"speaky-media/internal/pipeline"
@@ -25,6 +26,7 @@ func NewSynchronizer() *Synchronizer {
 // It consumes from the audio queue, measures "Processing Latency" (Time - ArrivalTime),
 // feeds the estimator, and outputs via onFrame.
 func (s *Synchronizer) RunAudioPump(ctx context.Context, queue *pipeline.Queue[pipeline.RTPPacket], onFrame func([]byte)) {
+	slog.Info("Sync: AudioPump Started")
 	go func() {
 		for {
 			packet, err := queue.Pop(ctx)
@@ -44,6 +46,10 @@ func (s *Synchronizer) RunAudioPump(ctx context.Context, queue *pipeline.Queue[p
 
 			// Output payload
 			onFrame(packet.Data)
+
+			// Log occasionally
+			// Output payload
+			onFrame(packet.Data)
 		}
 	}()
 }
@@ -51,7 +57,18 @@ func (s *Synchronizer) RunAudioPump(ctx context.Context, queue *pipeline.Queue[p
 // RunVideoPump starts the video consumer loop.
 // It polls the VideoBuffer, updates its target delay from the estimator, and outputs frames.
 func (s *Synchronizer) RunVideoPump(ctx context.Context, buffer *VideoBuffer, onFrame func([]byte)) {
+	slog.Info("Sync: VideoPump Started")
 	go func() {
+		// Wait for Audio to establish latency baseline (Sync Start)
+		// Fallback to immediate start if audio is missing/broken (> 5s)
+		slog.Info("Sync: VideoPump Waiting for Audio Latency...")
+		timeoutCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+
+		_ = s.estimator.WaitReady(timeoutCtx) // Ignore error, just proceed on timeout
+		slog.Info("Sync: VideoPump Resuming (Audio Ready or Timeout)")
+
+		count := 0
 		for {
 			select {
 			case <-ctx.Done():
@@ -69,12 +86,19 @@ func (s *Synchronizer) RunVideoPump(ctx context.Context, buffer *VideoBuffer, on
 			}
 
 			// 2. Drain Ready Packets
+			drained := 0
 			for {
 				packetData, ready := buffer.PopReady()
 				if !ready {
 					break
 				}
 				onFrame(packetData)
+				drained++
+			}
+
+			// Warn if buffer is getting dangerously full (e.g. > 1500 used out of 2000)
+			if buffer.Len() > 1500 && count%200 == 0 {
+				slog.Warn("Sync: Video Buffer High", "len", buffer.Len())
 			}
 
 			// Poll interval

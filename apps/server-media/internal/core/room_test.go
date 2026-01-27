@@ -18,7 +18,7 @@ func TestRoom_New(t *testing.T) {
 	cfg := &config.Config{}
 	api := &webrtc.API{}
 
-	room := NewRoom("test-room", cfg, api, nil)
+	room := NewRoom("test-room", cfg, api, nil, nil)
 
 	// Verify room is created
 	require.NotNil(t, room)
@@ -42,7 +42,7 @@ func TestRoom_Close(t *testing.T) {
 	cfg := &config.Config{}
 	api := &webrtc.API{}
 
-	room := NewRoom("test-room", cfg, api, nil)
+	room := NewRoom("test-room", cfg, api, nil, nil)
 
 	// Verify context is not canceled initially
 	select {
@@ -74,7 +74,7 @@ func TestRoom_Close_Idempotent(t *testing.T) {
 	cfg := &config.Config{}
 	api := &webrtc.API{}
 
-	room := NewRoom("test-room", cfg, api, nil)
+	room := NewRoom("test-room", cfg, api, nil, nil)
 
 	// Close multiple times
 	err1 := room.Close()
@@ -99,7 +99,7 @@ func TestRoom_Close_Idempotent(t *testing.T) {
 func TestRoom_Join_SingleUser(t *testing.T) {
 	cfg := &config.Config{}
 	api := &webrtc.API{}
-	room := NewRoom("test-room", cfg, api, nil)
+	room := NewRoom("test-room", cfg, api, nil, nil)
 	defer room.Close()
 
 	// Note: Real SDP exchange requires complex setup
@@ -111,7 +111,7 @@ func TestRoom_Join_SingleUser(t *testing.T) {
 func TestRoom_Join_Duplicate(t *testing.T) {
 	cfg := &config.Config{}
 	api := &webrtc.API{}
-	room := NewRoom("test-room", cfg, api, nil)
+	room := NewRoom("test-room", cfg, api, nil, nil)
 	defer room.Close()
 
 	// Manually add a session to simulate existing user
@@ -134,7 +134,7 @@ func TestRoom_Join_Duplicate(t *testing.T) {
 func TestRoom_Leave(t *testing.T) {
 	cfg := &config.Config{}
 	api := &webrtc.API{}
-	room := NewRoom("test-room", cfg, api, nil)
+	room := NewRoom("test-room", cfg, api, nil, nil)
 	defer room.Close()
 
 	// Manually add a session
@@ -161,7 +161,7 @@ func TestRoom_Leave(t *testing.T) {
 func TestRoom_Leave_NotFound(t *testing.T) {
 	cfg := &config.Config{}
 	api := &webrtc.API{}
-	room := NewRoom("test-room", cfg, api, nil)
+	room := NewRoom("test-room", cfg, api, nil, nil)
 	defer room.Close()
 
 	err := room.Leave("non-existent")
@@ -173,7 +173,7 @@ func TestRoom_Leave_NotFound(t *testing.T) {
 func TestRoom_Concurrency(t *testing.T) {
 	cfg := &config.Config{}
 	api := &webrtc.API{}
-	room := NewRoom("test-room", cfg, api, nil)
+	room := NewRoom("test-room", cfg, api, nil, nil)
 	defer room.Close()
 
 	const numGoroutines = 100
@@ -217,4 +217,3 @@ func TestRoom_Concurrency(t *testing.T) {
 
 	assert.Equal(t, 0, sessionCount, "all sessions should be removed")
 }
-

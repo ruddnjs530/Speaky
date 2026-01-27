@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"context"
 	"log/slog"
 	"sync"
 	"time"
@@ -13,6 +14,8 @@ type LatencyEstimator struct {
 	alpha        float64       // Smoothing factor (0.0 < alpha <= 1.0)
 	avgLatency   time.Duration // Current smoothed average
 	initialValue bool          // True if we haven't received any samples yet
+	readyChan    chan struct{} // Closed when first sample arrives
+	once         sync.Once     // Ensures channel closed once
 }
 
 // NewLatencyEstimator creates an estimator with the given smoothing factor.
@@ -24,6 +27,7 @@ func NewLatencyEstimator(alpha float64) *LatencyEstimator {
 	return &LatencyEstimator{
 		alpha:        alpha,
 		initialValue: true,
+		readyChan:    make(chan struct{}),
 	}
 }
 
@@ -35,6 +39,9 @@ func (l *LatencyEstimator) Update(measured time.Duration) {
 	if l.initialValue {
 		l.avgLatency = measured
 		l.initialValue = false
+		l.once.Do(func() {
+			close(l.readyChan)
+		})
 		return
 	}
 
@@ -57,6 +64,18 @@ func (l *LatencyEstimator) Reset() {
 	defer l.mu.Unlock()
 	l.avgLatency = 0
 	l.initialValue = true
+	l.once = sync.Once{}
+	l.readyChan = make(chan struct{})
+}
+
+// WaitReady blocks until the first latency sample is received or ctx is cancelled.
+func (l *LatencyEstimator) WaitReady(ctx context.Context) error {
+	select {
+	case <-l.readyChan:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // LogDebug logs the current state if it deviates significantly or periodically.

@@ -53,6 +53,11 @@ func (vb *VideoBuffer) PopReady() ([]byte, bool) {
 	// 2. Check age
 	age := time.Since(packet.ArrivalTime)
 	if age < vb.delay {
+		// Log occasionally (every ~1s if polled at 10ms)
+		// We can't easily count here without state.
+		// Use a minimal check or rely on caller to log?
+		// Let's just remove the internal log spam or make it conditional on a very specific modulus of something?
+		// Better: Don't log here. Let caller log if buffer is growing too large.
 		return nil, false
 	}
 

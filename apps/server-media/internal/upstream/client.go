@@ -54,7 +54,7 @@ type Stream struct {
 }
 
 // NewStream creates a new bidirectional stream for audio conversion.
-func (c *Client) NewStream(ctx context.Context) (*Stream, error) {
+func (c *Client) NewStream(ctx context.Context) (VoiceStream, error) {
 	stream, err := c.client.ConvertStream(ctx)
 	if err != nil {
 		// Check if it's a connection error

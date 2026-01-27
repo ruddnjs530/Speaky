@@ -12,9 +12,12 @@ import (
 	"speaky-media/internal/config"
 	"speaky-media/internal/core"
 	impl "speaky-media/internal/grpc"
+	"speaky-media/internal/upstream"
 
-	"google.golang.org/grpc"
+	"time"
+
 	"github.com/pion/webrtc/v4"
+	"google.golang.org/grpc"
 
 	pb "mediaserver/proto"
 )
@@ -43,8 +46,10 @@ func main() {
 	// For E2E local verification (host network), default is fine.
 	api := webrtc.NewAPI(webrtc.WithSettingEngine(settingEngine))
 
-	// Room Manager
-	manager := core.NewRoomManager(cfg, api, aiClient)
+	// Room Manager with AudioProcessor enabled (3s delay)
+	voiceProcessor := upstream.NewMockVoiceProcessor()
+	voiceProcessor.SimulateDelay = 3 * time.Second
+	manager := core.NewRoomManager(cfg, api, aiClient, voiceProcessor)
 
 	// 4. Setup gRPC Server
 	lis, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%s", port))

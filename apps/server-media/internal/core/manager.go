@@ -9,25 +9,28 @@ import (
 	"github.com/pion/webrtc/v4"
 
 	"speaky-media/internal/ai"
+	"speaky-media/internal/upstream"
 )
 
 // Manager is the global registry for all rooms.
 // It manages room lifecycle and provides thread-safe access.
 type Manager struct {
-	rooms map[string]*Room
-	mu    sync.RWMutex
-	cfg      *config.Config
-	api      *webrtc.API
-	aiClient ai.Client
+	rooms          map[string]*Room
+	mu             sync.RWMutex
+	cfg            *config.Config
+	api            *webrtc.API
+	aiClient       ai.Client
+	voiceProcessor upstream.VoiceProcessor
 }
 
 // NewRoomManager creates a new room manager.
-func NewRoomManager(cfg *config.Config, api *webrtc.API, aiClient ai.Client) *Manager {
+func NewRoomManager(cfg *config.Config, api *webrtc.API, aiClient ai.Client, voiceProcessor upstream.VoiceProcessor) *Manager {
 	return &Manager{
-		rooms:    make(map[string]*Room),
-		cfg:      cfg,
-		api:      api,
-		aiClient: aiClient,
+		rooms:          make(map[string]*Room),
+		cfg:            cfg,
+		api:            api,
+		aiClient:       aiClient,
+		voiceProcessor: voiceProcessor,
 	}
 }
 
@@ -41,7 +44,7 @@ func (m *Manager) CreateRoom(roomID string) (*Room, error) {
 		return nil, fmt.Errorf("%w: %s", ErrRoomAlreadyExists, roomID)
 	}
 
-	room := NewRoom(roomID, m.cfg, m.api, m.aiClient)
+	room := NewRoom(roomID, m.cfg, m.api, m.aiClient, m.voiceProcessor)
 	m.rooms[roomID] = room
 
 	return room, nil
@@ -96,11 +99,12 @@ func (m *Manager) GetOrCreateRoom(roomID string) (*Room, error) {
 		return room, nil
 	}
 
-	room = NewRoom(roomID, m.cfg, m.api, m.aiClient)
+	room = NewRoom(roomID, m.cfg, m.api, m.aiClient, m.voiceProcessor)
 	m.rooms[roomID] = room
 
 	return room, nil
 }
+
 // Join delegates to Room.Join.
 func (m *Manager) Join(roomID, userID, offerSDP string) (string, error) {
 	room, err := m.GetRoom(roomID)
