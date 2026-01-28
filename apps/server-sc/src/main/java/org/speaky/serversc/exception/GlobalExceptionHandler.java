@@ -90,6 +90,32 @@ public class GlobalExceptionHandler {
     }
     
     /**
+     * 세션 NotFoundException 처리 (404)
+     * - 세션 ID로 조회 실패
+     */
+    @ExceptionHandler(SessionNotFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> handleSessionNotFoundException(
+            SessionNotFoundException ex) {
+        log.warn("세션을 찾을 수 없음: {}", ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.error("SESSION_NOT_FOUND", ex.getMessage()));
+    }
+    
+    /**
+     * 잘못된 세션 상태 예외 처리 (400)
+     * - 비즈니스 규칙 위반 (예: STARTING 아닌 세션에 startBroadcast 호출)
+     */
+    @ExceptionHandler(InvalidSessionStateException.class)
+    public ResponseEntity<ApiResponse<Void>> handleInvalidSessionStateException(
+            InvalidSessionStateException ex) {
+        log.warn("잘못된 세션 상태: {}", ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error("INVALID_SESSION_STATE", ex.getMessage()));
+    }
+    
+    /**
      * 일반 예외 처리 (500)
      * - 예상치 못한 서버 오류
      */
