@@ -251,6 +251,7 @@ class RVCConverter:
 
         # 3) add context for smoother streaming
         with self._lock:
+            ctx_len_16k = int(self._ctx_16k.shape[0])  # ✅ 추가
             if self._ctx_16k.size > 0:
                 audio_16k = np.concatenate([self._ctx_16k, x16], axis=0)
             else:
@@ -303,15 +304,20 @@ class RVCConverter:
         # 5) Extract valid tail (in target sample_rate domain)
         # Input 'x16' is 16k domain. Output 'out16_i16' is in 'sample_rate' domain.
         # Calculate expected output length based on input duration equality
-        expected_out_samples = int(x16.shape[0] * sample_rate / 16000)
+        expected_out_samples = int(round(x16.shape[0] * sample_rate / 16000))
+        ctx_len_out = int(round(ctx_len_16k * sample_rate / 16000))
+        start = ctx_len_out
+        end = start + expected_out_samples
 
-        if out16_i16.shape[0] >= expected_out_samples:
-            tail_raw = out16_i16[-expected_out_samples:]
+        if out16_i16.shape[0] >= end:
+            tail_raw = out16_i16[start:end]
+        elif out16_i16.shape[0] > start:
+            tail_raw = out16_i16[start:]
+            if tail_raw.shape[0] < expected_out_samples:
+                tail_raw = np.pad(tail_raw, (0, expected_out_samples - tail_raw.shape[0]), mode="constant")
         else:
-            # Pad if output is shorter than expected (rare, but good for safety)
-            pad_len = expected_out_samples - out16_i16.shape[0]
-            pad = np.zeros((pad_len,), dtype=out16_i16.dtype)
-            tail_raw = np.concatenate([pad, out16_i16], axis=0)
+            tail_raw = np.zeros((expected_out_samples,), dtype=np.int16)
+
 
         # 6) Final Safety Check & Type Conversion
         # Ensure we return valid Int16 bytes
