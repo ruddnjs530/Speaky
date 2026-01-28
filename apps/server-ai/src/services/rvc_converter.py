@@ -193,49 +193,15 @@ class RVCConverter:
                 config.device = "cpu"
                 config.is_half = False
 
-            #로그 찍기
-            # print("[RVC] requested self.device =", self.device)
-            # print("[RVC] config.device =", config.device, "is_half =", config.is_half, "cuda_available =", torch.cuda.is_available())
-            # #####
             vc = VC(config)
             
-            # #로그 찍기
-            # print("[RVC] VC created. config.device =", config.device)
-            ###############
-
             # Load generator/discriminator checkpoint and init pipeline/net_g
             sid = self.model_path.name
             vc.get_vc(sid)
 
-
-            ###로그 찍기
-            # try:
-            #     print("[RVC] net_g device after get_vc =", next(vc.net_g.parameters()).device)
-            # except Exception as e:
-            #     print("[RVC] net_g device check failed:", e)
-
-            #################
-
             # Load HuBERT
-            #
-            # NOTE: On newer PyTorch versions (2.6+), `torch.load` changed defaults
-            # related to `weights_only` / safe unpickling. Some fairseq checkpoints
-            # (like HuBERT) embed objects such as `fairseq.data.dictionary.Dictionary`,
-            # which can trigger:
-            #   _pickle.UnpicklingError: Weights only load failed ...
-            #
-            # RVC WebUI upstream may or may not have patched this depending on the
-            # commit you use. We add a small compatibility retry here.
             try:
                 vc.hubert_model = load_hubert(config)
-
-                # 로그 찍기
-                # try:
-                #     print("[RVC] hubert device =", next(vc.hubert_model.parameters()).device)
-                # except Exception as e:
-                #     print("[RVC] hubert device check failed:", e)
-                ##################################
-
             except Exception as e:
                 msg = str(e)
                 if ("Weights only load failed" in msg) or ("add_safe_globals" in msg) or ("safe_globals" in msg):
@@ -246,7 +212,6 @@ class RVCConverter:
                         if hasattr(torch, "serialization") and hasattr(torch.serialization, "add_safe_globals"):
                             torch.serialization.add_safe_globals([Dictionary])
                     except Exception:
-                        # If this fails, we still re-raise the original load error below.
                         pass
                     vc.hubert_model = load_hubert(config)
                 else:
@@ -298,7 +263,6 @@ class RVCConverter:
                 self._ctx_16k = np.zeros((0,), dtype=np.float32)
 
         # 4) Run RVC
-        #    pipeline returns int16 audio at resample_sr (>=16000) if set; we use 16k to simplify chunk alignment.
         f0_method = self._f0_method
         if f0_method == "rmvpe":
             # rmvpe weights must exist; otherwise fallback
@@ -310,25 +274,6 @@ class RVCConverter:
         file_index = self._index_path
         index_rate = self._index_rate if (file_index and Path(file_index).exists()) else 0.0
         file_index = file_index if index_rate > 0 else ""
-
-        # RVC pipeline call
-
-        # 로그 찍기
-        # if not hasattr(self, "_printed_runtime_device"):
-        #     self._printed_runtime_device = True
-        #     print("[RVC] runtime torch.cuda.is_available() =", torch.cuda.is_available())
-        #     print("[RVC] runtime config.device =", getattr(self._config, "device", None))
-        #     try:
-        #         print("[RVC] runtime net_g device =", next(self._vc.net_g.parameters()).device)
-        #     except Exception as e:
-        #         print("[RVC] runtime net_g device check failed:", e)
-        #     try:
-        #         print("[RVC] runtime hubert device =", next(self._vc.hubert_model.parameters()).device)
-        #     except Exception as e:
-        #         print("[RVC] runtime hubert device check failed:", e)
-
-        #######################
-
 
         with torch.no_grad():
             out16_i16 = self._vc.pipeline.pipeline(
@@ -345,28 +290,45 @@ class RVCConverter:
                 self._vc.if_f0,
                 0,          # filter_radius
                 self._vc.tgt_sr,
-                16000,      # resample_sr
+                sample_rate,      # Request output at TARGET sample rate directly (e.g. 48000)
                 self._rms_mix_rate,
                 self._vc.version,
                 self._protect,
             )
+        
+        if out16_i16 is None:
+             print("[ERROR] RVC pipeline returned None")
+             return pcm_bytes # Fallback
 
-        # 5) take only the tail corresponding to the newest chunk length (16k domain)
-        need = x16.shape[0]
-        if out16_i16.shape[0] >= need:
-            tail16_i16 = out16_i16[-need:]
+        # 5) Extract valid tail (in target sample_rate domain)
+        # Input 'x16' is 16k domain. Output 'out16_i16' is in 'sample_rate' domain.
+        # Calculate expected output length based on input duration equality
+        expected_out_samples = int(x16.shape[0] * sample_rate / 16000)
+
+        if out16_i16.shape[0] >= expected_out_samples:
+            tail_raw = out16_i16[-expected_out_samples:]
         else:
-            pad = np.zeros((need - out16_i16.shape[0],), dtype=np.int16)
-            tail16_i16 = np.concatenate([pad, out16_i16], axis=0)
+            # Pad if output is shorter than expected (rare, but good for safety)
+            pad_len = expected_out_samples - out16_i16.shape[0]
+            pad = np.zeros((pad_len,), dtype=out16_i16.dtype)
+            tail_raw = np.concatenate([pad, out16_i16], axis=0)
 
-        # 6) resample tail back to input sr and match exact byte-size
-        tail16 = (tail16_i16.astype(np.float32) / 32768.0)
-        y = _resample(tail16, orig_sr=16000, target_sr=sample_rate)
+        # 6) Final Safety Check & Type Conversion
+        # Ensure we return valid Int16 bytes
+        if tail_raw.dtype == np.int16:
+            # Already int16, assumed normalized by pipeline
+            pass 
+        else:
+            # If pipeline returned float (unlikely given typical RVC implementation, but handling for robustness)
+            tail_raw = np.clip(tail_raw, -1.0, 1.0)
+            tail_raw = (tail_raw * 32767.0).astype(np.int16)
+        
+        # 7) Output Size Matching
+        # Streaming expects 1:1 input/output length to prevent drift.
+        # We calculated expected_out_samples, but exact rounding might off-by-one with in_samples.
+        if tail_raw.shape[0] > in_samples:
+             tail_raw = tail_raw[:in_samples]
+        elif tail_raw.shape[0] < in_samples:
+             tail_raw = np.pad(tail_raw, (0, in_samples - tail_raw.shape[0]), mode="constant")
 
-        # enforce sample count == original
-        if y.shape[0] > in_samples:
-            y = y[:in_samples]
-        elif y.shape[0] < in_samples:
-            y = np.pad(y, (0, in_samples - y.shape[0]), mode="constant")
-
-        return _float32_to_pcm16le(y)
+        return tail_raw.tobytes()
