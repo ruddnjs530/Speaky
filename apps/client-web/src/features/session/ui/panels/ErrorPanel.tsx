@@ -14,11 +14,11 @@ export function ErrorPanel() {
     const handleAction = (type: SysErrorActionType) => {
         switch (type) {
             case "retry":
-                dispatch({ type: "RETRY" });
+                dispatch({ type: "EV_RETRY" });
                 return;
 
             case "reset":
-                dispatch({ type: "RESET" });
+                dispatch({ type: "EV_RESET" });
                 return;
 
             case "login":
@@ -34,7 +34,7 @@ export function ErrorPanel() {
 
             default:
                 // 타입상 도달하지 않지만, 안전장치
-                dispatch({ type: "RESET" });
+                dispatch({ type: "EV_RESET" });
         }
     };
 
@@ -45,7 +45,7 @@ export function ErrorPanel() {
                 <h2>Error</h2>
                 <p>오류 정보가 없습니다. 초기화 후 다시 시도해 주세요.</p>
                 <div style={{ display: "flex", gap: 8 }}>
-                    <button onClick={() => dispatch({ type: "RESET" })}>Reset</button>
+                    <button onClick={() => dispatch({ type: "EV_RESET" })}>Reset</button>
                     <button onClick={() => navigate("/")}>Exit</button>
                 </div>
             </div>

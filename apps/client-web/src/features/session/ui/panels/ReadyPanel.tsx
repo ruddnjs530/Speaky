@@ -41,7 +41,7 @@ export function ReadyPanel() {
          * TODO(중요):
          * 현재 AppState 머신에서 사용 중인 이벤트명 다시 한번 확인
          */
-        dispatch({ type: "WS_CONNECT_START" });
+        dispatch({ type: "EV_WS_CONNECTING" });
     };
 
     const onExit = () => {

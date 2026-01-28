@@ -1,8 +1,6 @@
 import type { Envelope } from '../../../shared/lib/signaling/envelope';
-import type { SendOpts } from '../../../shared/lib/signaling/SignalingClient';
 import { SignalingClient } from '../../../shared/lib/signaling/SignalingClient';
 
-type SigOfferPayload = { sdpType: 'offer'; sdp: string };
 type SigAnswerPayload = { sdpType: 'answer'; sdp: string };
 type SigIcePayload = {
   candidate: string;
@@ -12,7 +10,7 @@ type SigIcePayload = {
 
 type HostPeerControllerArgs = {
   signaling: SignalingClient;
-  sendOpts: SendOpts; // { channelId, sessionId, from:{role:'HOST', ...} }
+  // sendOpts 제거
   rtcConfig: RTCConfiguration;
   getLocalStream: () => MediaStream | null;
 
@@ -112,9 +110,8 @@ export class HostPeerController {
     pc.onicecandidate = (ev) => {
       if (!ev.candidate) return;
 
-      this.args.signaling.sendMessage<SigIcePayload>(
+      this.args.signaling.sendTyped(
         'SIG_ICE',
-        this.args.sendOpts,
         {
           candidate: ev.candidate.candidate,
           sdpMid: ev.candidate.sdpMid,
@@ -154,9 +151,8 @@ export class HostPeerController {
       await pc.setLocalDescription(offer);
 
       // SIG_OFFER
-      this.args.signaling.sendMessage<SigOfferPayload>(
+      this.args.signaling.sendTyped(
         'SIG_OFFER',
-        this.args.sendOpts,
         {
           sdpType: 'offer',
           sdp: pc.localDescription?.sdp ?? '',
