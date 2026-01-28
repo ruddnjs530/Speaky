@@ -59,8 +59,7 @@ public class SessionController {
     public ResponseEntity<SessionResponse> getSession(
             @PathVariable String sessionId) {
         
-        SessionEntity session = sessionService.getSession(sessionId)
-                .orElseThrow(() -> new org.speaky.serversc.exception.SessionNotFoundException(sessionId));
+        SessionEntity session = sessionService.getSession(sessionId);
         
         return ResponseEntity.ok(SessionResponse.from(session));
     }
