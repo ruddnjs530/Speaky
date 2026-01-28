@@ -14,9 +14,8 @@ type Args = {
   rtcConfig?: RTCConfiguration;
 };
 
-type SysAttachPayload = { resume?: boolean };
-
-type SigOfferPayload = { sdpType: 'offer'; sdp: string };
+// SysAttachPayload 제거됨
+// SigOfferPayload 제거됨
 type SigIcePayload = {
   candidate: string;
   sdpMid: string | null;
@@ -76,11 +75,7 @@ export function useViewerPeerConnection({
 
     for (const ice of list) {
       try {
-        sig.sendMessage<SigIcePayload>(
-          'SIG_ICE',
-          { channelId, sessionId, from: { role: 'GUEST' } },
-          ice
-        );
+        sig.sendTyped('SIG_ICE', ice);
       } catch {
         // ignore
       }
@@ -89,30 +84,30 @@ export function useViewerPeerConnection({
   }, [channelId, sessionId]);
 
   const handleEnvelope = useCallback(
-      async (env: Envelope) => {
-        const pc = pcRef.current;
-        if (!pc) return;
+    async (env: Envelope) => {
+      const pc = pcRef.current;
+      if (!pc) return;
 
-        try {
-          await applySignalingEnvelope(env, {
-            channelId,
-            sessionId,
-            pc,
-            remoteDescSetRef,
-            pendingRemoteIceRef,
-            flushPendingRemoteIce,
-            onSysError: (msg) => {
-              setStatus('error');
-              setError(msg);
-            },
-            onConnected: () => setStatus('connected'),
-          });
-        } catch {
-          setStatus('error');
-          setError('시그널링 처리 실패');
-        }
-      },
-      [channelId, sessionId, flushPendingRemoteIce]
+      try {
+        await applySignalingEnvelope(env, {
+          channelId,
+          sessionId,
+          pc,
+          remoteDescSetRef,
+          pendingRemoteIceRef,
+          flushPendingRemoteIce,
+          onSysError: (msg) => {
+            setStatus('error');
+            setError(msg);
+          },
+          onConnected: () => setStatus('connected'),
+        });
+      } catch {
+        setStatus('error');
+        setError('시그널링 처리 실패');
+      }
+    },
+    [channelId, sessionId, flushPendingRemoteIce]
   );
 
 
@@ -157,11 +152,7 @@ export function useViewerPeerConnection({
       }
 
       try {
-        sigRef.current?.sendMessage<SigIcePayload>(
-          'SIG_ICE',
-          { channelId, sessionId, from: { role: 'GUEST' } },
-          icePayload
-        );
+        sigRef.current?.sendTyped('SIG_ICE', icePayload);
       } catch {
         // ignore
       }
@@ -186,11 +177,7 @@ export function useViewerPeerConnection({
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
-    sig.sendMessage<SigOfferPayload>(
-      'SIG_OFFER',
-      { channelId, sessionId, from: { role: 'GUEST' } },
-      { sdpType: 'offer', sdp: pc.localDescription?.sdp ?? '' }
-    );
+    sig.sendTyped('SIG_OFFER', { sdpType: 'offer', sdp: pc.localDescription?.sdp ?? '' });
   }, [channelId, sessionId]);
 
   const start = useCallback(async () => {
@@ -205,46 +192,44 @@ export function useViewerPeerConnection({
     pendingLocalIceRef.current = [];
 
     // WS 연결, onOpen에서부터 “first message = SYS_ATTACH” 보장
-    const sig = new SignalingClient({
-      onOpen: async () => {
-        wsReadyRef.current = true;
+    const sig = new SignalingClient(
+      {
+        channelId,
+        sessionId,
+        role: 'GUEST',
+        clientId: Math.random().toString(36).slice(2),
+      },
+      {
+        onOpen: async () => {
+          wsReadyRef.current = true;
 
-        try {
-          // 반드시 첫 메시지: SYS_ATTACH
-          sig.sendMessage<SysAttachPayload>(
-            'SYS_ATTACH',
-            { channelId, sessionId, from: { role: 'GUEST' } },
-            { resume: false }
-          );
+          try {
+            // 반드시 첫 메시지: SYS_ATTACH
+            sig.sendTyped('SYS_ATTACH', { resume: false });
 
-          // WS 준비가 끝났으니, 그동안 모인 로컬 ICE flush
-          flushPendingLocalIce();
+            // WS 준비가 끝났으니, 그동안 모인 로컬 ICE flush
+            flushPendingLocalIce();
 
-          // PC 만들고 Offer 전송
-          buildPeerConnection();
-          await sendOffer();
-        } catch {
+            // PC 만들고 Offer 전송
+            buildPeerConnection();
+            await sendOffer();
+          } catch {
+            setStatus('error');
+            setError('WS attach / offer 파이프라인 실패');
+          }
+        },
+        onMessage: handleEnvelope,
+        onClose: () => {
+        },
+        onError: () => {
           setStatus('error');
-          setError('WS attach / offer 파이프라인 실패');
-        }
-      },
-      onMessage: handleEnvelope,
-      onClose: () => {
-      },
-      onError: () => {
-        setStatus('error');
-        setError('WebSocket error');
-      },
-    });
+          setError('WebSocket error');
+        },
+      }
+    );
 
     sigRef.current = sig;
     try {
-      sig.setContext({
-        channelId,
-        sessionId,
-        from: { role: 'GUEST' },
-      });
-
       sig.connect(wsUrl, token);
     } catch {
       setStatus('error');

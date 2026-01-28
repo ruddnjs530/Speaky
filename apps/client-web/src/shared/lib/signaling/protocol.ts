@@ -91,6 +91,7 @@ export type AnyOutbound =
     | SysAttach
     | SysPong
     | SigOffer
+    | SigAnswer
     | SigIce
     | SigHangup;
 

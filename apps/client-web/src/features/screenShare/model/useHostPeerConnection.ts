@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Envelope } from '../../../shared/lib/signaling/envelope';
 import { SignalingClient } from '../../../shared/lib/signaling/SignalingClient';
-import type { SendOpts } from '../../../shared/lib/signaling/SignalingClient';
 import { HostPeerController } from '../api/HostPeerController';
 
 type Status = 'idle' | 'connecting' | 'connected' | 'error';
@@ -15,7 +14,7 @@ type Args = {
   rtcConfig?: RTCConfiguration;
 };
 
-type SysAttachPayload = { resume?: boolean };
+// SysAttachPayload 제거됨
 type SysErrorPayload = { code: string; msg?: string };
 
 export function useHostPeerConnection({
@@ -32,19 +31,8 @@ export function useHostPeerConnection({
   const sigRef = useRef<SignalingClient | null>(null);
   const hostCtrlRef = useRef<HostPeerController | null>(null);
 
-  // sendOpts는 props 변경(특히 channelId/sessionId)에도 안전하게 최신화
-  const sendOptsRef = useRef<SendOpts>({
-    channelId,
-    sessionId,
-    from: { role: 'HOST' },
-  });
-
   useEffect(() => {
-    sendOptsRef.current = {
-      channelId,
-      sessionId,
-      from: { role: 'HOST' },
-    };
+    // channelId, sessionId 변경 시 로직 (현재는 sendOptsRef 제어용이었으므로 빈 로직, 필요 시 추가)
   }, [channelId, sessionId]);
 
   const handleEnvelope = useCallback(
@@ -88,26 +76,27 @@ export function useHostPeerConnection({
     sigRef.current?.close();
     sigRef.current = null;
 
-    const sig = new SignalingClient({
-      onMessage: handleEnvelope,
-      onOpen: () => {
-        // WS open 자체가 connected는 아니므로 status는 유지
+    const sig = new SignalingClient(
+      {
+        channelId,
+        sessionId,
+        role: 'HOST',
+        clientId: Math.random().toString(36).slice(2),
       },
-      onClose: () => {
-        // 끊겼다면 컨트롤러가 PC를 재협상/재생성하는 동안 connecting 유지
-        if (status !== 'idle') setStatus('connecting');
-      },
-      onError: () => {
-        // onClose에서 재연결이 일어나므로 여기서 즉시 error로 내리지 않음(필요 시 정책 변경)
-      },
-    });
-
-    // 자동 SYS_* 컨텍스트(재연결 시 resume attach 등)에 사용
-    sig.setContext({
-      channelId,
-      sessionId,
-      from: { role: 'HOST' },
-    });
+      {
+        onMessage: handleEnvelope,
+        onOpen: () => {
+          // WS open 자체가 connected는 아니므로 status는 유지
+        },
+        onClose: () => {
+          // 끊겼다면 컨트롤러가 PC를 재협상/재생성하는 동안 connecting 유지
+          if (status !== 'idle') setStatus('connecting');
+        },
+        onError: () => {
+          // onClose에서 재연결이 일어나므로 여기서 즉시 error로 내리지 않음(필요 시 정책 변경)
+        },
+      }
+    );
 
     try {
       sig.connect(wsUrl, token);
@@ -121,11 +110,7 @@ export function useHostPeerConnection({
 
     // 최초 attach (resume:false) — 기존 흐름 유지
     try {
-      sig.sendMessage<SysAttachPayload>(
-        'SYS_ATTACH',
-        { channelId, sessionId, from: { role: 'HOST' } },
-        { resume: false },
-      );
+      sig.sendTyped('SYS_ATTACH', { resume: false });
     } catch {
       setStatus('error');
       setError('SYS_ATTACH 전송 실패');
@@ -135,7 +120,6 @@ export function useHostPeerConnection({
     // HostPeerController 생성/시작
     const ctrl = new HostPeerController({
       signaling: sig,
-      sendOpts: sendOptsRef.current,
       rtcConfig: rtcConfig ?? { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] },
       getLocalStream: () => stream,
       onPcState: (s) => {

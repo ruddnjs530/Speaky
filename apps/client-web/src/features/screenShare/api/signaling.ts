@@ -1,45 +1,38 @@
-import { createEnvelope, type Role } from '../../../shared/lib/signaling/envelope';
 import type { SignalingClient } from '../../../shared/lib/signaling/SignalingClient';
-
-export type SignalArgs = {
-  channelId: string;
-  sessionId: string;
-  role: Role;
-};
-
-function opts({ channelId, sessionId, role }: SignalArgs) {
-  return { channelId, sessionId, from: { role } };
-}
 
 export function sendOfferWS(
   client: SignalingClient,
-  offer: RTCSessionDescriptionInit,
-  args: SignalArgs
+  offer: RTCSessionDescriptionInit
 ) {
-  client.send(createEnvelope('SIG_SDP_OFFER', opts(args), { sdp: offer }));
+  if (!offer.sdp) return;
+  client.sendTyped('SIG_OFFER', { sdpType: 'offer', sdp: offer.sdp });
 }
 
 export function sendAnswerWS(
   client: SignalingClient,
-  answer: RTCSessionDescriptionInit,
-  args: SignalArgs
+  answer: RTCSessionDescriptionInit
 ) {
-  client.send(createEnvelope('SIG_SDP_ANSWER', opts(args), { sdp: answer }));
+  if (!answer.sdp) return;
+  client.sendTyped('SIG_ANSWER', { sdpType: 'answer', sdp: answer.sdp });
 }
 
 export function sendIceWS(
   client: SignalingClient,
-  candidate: RTCIceCandidateInit,
-  args: SignalArgs
+  candidate: RTCIceCandidate
 ) {
-  client.send(createEnvelope('SIG_ICE', opts(args), { candidate }));
+  client.sendTyped('SIG_ICE', {
+    candidate: candidate.candidate,
+    sdpMid: candidate.sdpMid,
+    sdpMLineIndex: candidate.sdpMLineIndex,
+  });
 }
 
 export function sendAttachWS(
-    client: SignalingClient,
-    args: SignalArgs,
-    payload: { resume?: boolean } = { resume: false }
+  client: SignalingClient,
+  payload: { resume?: boolean } = { resume: false }
 ) {
-  client.send(createEnvelope('SYS_ATTACH', opts(args), payload));
+  // SignalingClient.attach() 메서드가 이미 존재하므로 그것을 활용하거나 sendTyped 사용
+  // 여기서는 일관성을 위해 sendTyped 사용 (SignalingClient.attach는 내부적으로 sendRaw 호출)
+  client.sendTyped('SYS_ATTACH', payload);
 }
 
