@@ -1,13 +1,14 @@
 import { setAccessToken } from '../../../shared/lib/authToken';
 import { apiFetch } from '../../../shared/lib/apiFetch';
 
-type LoginRequest = { id: string; password: string };
+type LoginRequest = { loginId: string; password: string };
 
 // 서버 응답 형태에 맞춰 수정해줘.
 type LoginResponse = { accessToken: string };
 
 export async function login(req: LoginRequest) {
-  const res = await apiFetch('/api/auth/login', {
+
+  const res = await apiFetch('/api/v1/auth/login', {
     method: 'POST',
     auth: false, // 로그인 자체는 토큰 없이
     headers: { 'Content-Type': 'application/json' },
