@@ -28,26 +28,26 @@ export default function HomePage() {
   };
 
   return (
-      <div>
-        <h1>Home</h1>
+    <div>
+      <h1>Home</h1>
 
-        <nav style={{ display: "flex", gap: 12 }}>
-          {!authed ? (
-              <>
-                <Link to="/login">Login</Link>
-                <Link to="/profile">Profile</Link>
-              </>
-          ) : (
-              <>
-                <Link to="/profile">Profile</Link>
-                <button onClick={logout}>Logout</button>
-                <Link to="/host/precheck">[DEV] Host Precheck</Link>
+      <nav style={{ display: "flex", gap: 12 }}>
+        {!authed ? (
+          <>
+            <Link to="/login">Login</Link>
+            <Link to="/profile">Profile</Link>
+          </>
+        ) : (
+          <>
+            <Link to="/profile">Profile</Link>
+            <button onClick={logout}>Logout</button>
+            <Link to="/host/precheck">[DEV] Host Precheck</Link>
 
-                {/* ✅ Viewer 라우트는 실제 roomId가 들어가야 합니다 */}
-                <Link to={`/viewer/${TEST_ROOM_ID}`}>Viewer</Link>
-              </>
-          )}
-        </nav>
-      </div>
+            {/* ✅ Viewer 라우트는 실제 roomId가 들어가야 합니다 */}
+            <Link to={`/viewer/${TEST_ROOM_ID}`}>Viewer</Link>
+          </>
+        )}
+      </nav>
+    </div>
   );
 }

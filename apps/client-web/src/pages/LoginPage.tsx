@@ -16,8 +16,8 @@ export default function LoginPage() {
   };
 
   return (
-      <div className="page page--center">
-        <LoginForm onSuccess={handleSuccess} />
-      </div>
+    <div className="page page--center">
+      <LoginForm onSuccess={handleSuccess} />
+    </div>
   );
 }
