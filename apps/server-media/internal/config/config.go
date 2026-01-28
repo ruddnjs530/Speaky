@@ -36,6 +36,7 @@ type Config struct {
 	AudioChannels      int // Target Channels (default: 1)
 	PCMBufferSize      int // Internal buffer size for PCM channel (default: 100)
 	AudioFrameDuration int // Audio Frame Duration in ms (default: 20)
+	AIBufferDuration   int // Duration to buffer before sending to AI (default: 400ms)
 }
 
 // Load reads configuration from environment variables and validates them.
@@ -61,10 +62,11 @@ func Load() (*Config, error) {
 		TURNCredential: getEnv("TURN_CREDENTIAL", ""),
 
 		// Audio
-		AudioSampleRate:    getEnvAsInt("AUDIO_SAMPLE_RATE", 24000),
+		AudioSampleRate:    getEnvAsInt("AUDIO_SAMPLE_RATE", 48000),
 		AudioChannels:      getEnvAsInt("AUDIO_CHANNELS", 1),
 		PCMBufferSize:      getEnvAsInt("PCM_BUFFER_SIZE", 100),
 		AudioFrameDuration: getEnvAsInt("AUDIO_FRAME_DURATION", 20),
+		AIBufferDuration:   getEnvAsInt("AI_BUFFER_DURATION", 400),
 	}
 
 	if err := cfg.Validate(); err != nil {

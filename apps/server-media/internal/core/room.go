@@ -172,7 +172,7 @@ func (r *Room) BroadcastTrack(fromUserID string, track *webrtc.TrackRemote, ctx 
 
 		// Initialize AudioProcessor if VoiceProcessor is available
 		if r.voiceProcessor != nil {
-			processor, err := NewAudioProcessor(r.voiceProcessor, activeTrack.audioQueue)
+			processor, err := NewAudioProcessor(r.cfg, r.voiceProcessor, activeTrack.audioQueue)
 			if err != nil {
 				slog.Error("Failed to create AudioProcessor", "error", err)
 			} else {

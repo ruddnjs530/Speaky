@@ -8,6 +8,7 @@ import (
     "sync"
     "time"
 
+    "speaky-media/internal/config"
     "speaky-media/internal/pipeline"
     "speaky-media/internal/transcode"
     "speaky-media/internal/upstream"
@@ -27,26 +28,38 @@ type AudioProcessor struct {
 
     // Ingest Buffering
     pcmBuffer     []int16        // Accumulates PCM samples
-    bufferLimit   int            // Threshold to send to AI (e.g., 0.4s * 24000 = 9600)
+    bufferLimit   int            // Threshold to send to AI
     firstPacketTS uint32         // RTP Timestamp of the first packet in the buffer (for tracking)
     tsMap         map[uint32]time.Time // Key: RTP Timestamp (start of chunk), Value: ArrivalTime
     tsMutex       sync.Mutex
 	egressRemainder []int16
+
+	// Config
+	cfg *config.Config
 }
 
 // NewAudioProcessor creates a new AudioProcessor.
-func NewAudioProcessor(aiClient upstream.VoiceProcessor, outQueue *pipeline.Queue[pipeline.RTPPacket]) (*AudioProcessor, error) {
-    decoder, err := transcode.NewOpusDecoder(48000, 1)
+func NewAudioProcessor(cfg *config.Config, aiClient upstream.VoiceProcessor, outQueue *pipeline.Queue[pipeline.RTPPacket]) (*AudioProcessor, error) {
+    decoder, err := transcode.NewOpusDecoder(cfg.AudioSampleRate, 1)
     if err != nil {
         return nil, err
     }
 
-    encoder, err := transcode.NewOpusEncoder(48000, 1)
+    encoder, err := transcode.NewOpusEncoder(cfg.AudioSampleRate, 1)
     if err != nil {
         return nil, err
     }
 
     packetizer := transcode.NewRTPPacketizer(12345, 111, 1200)
+
+	// Calculate buffer limit (samples) based on duration (ms)
+	// samples = Rate * Duration / 1000
+    // Default fallback to 400ms if 0
+    bufferMs := cfg.AIBufferDuration
+    if bufferMs <= 0 {
+        bufferMs = 400
+    }
+    bufferLimit := cfg.AudioSampleRate * bufferMs / 1000
 
     return &AudioProcessor{
         decoder:     decoder,
@@ -54,9 +67,10 @@ func NewAudioProcessor(aiClient upstream.VoiceProcessor, outQueue *pipeline.Queu
         packetizer:  packetizer,
         aiClient:    aiClient,
         outQueue:    outQueue,
-        pcmBuffer:   make([]int16, 0, 19200), // Pre-allocate for ~400ms @ 48kHz
-        bufferLimit: 19200,                   // 400ms buffer target (48kHz * 0.4s)
+        pcmBuffer:   make([]int16, 0, bufferLimit), 
+        bufferLimit: bufferLimit,                   
         tsMap:       make(map[uint32]time.Time),
+		cfg:         cfg,
     }, nil
 }
 
@@ -121,7 +135,7 @@ func (p *AudioProcessor) processInputPacket(stream upstream.VoiceStream, pipePkt
         // Send to AI Server
         chunk := &pb.AudioChunk{
             Pcm:          pcmBytes,
-            SampleRate:   48000, // Assuming Resampler handles 48->24 if needed, or RVC takes 48k? Check RVC.
+            SampleRate:   int32(p.cfg.AudioSampleRate), 
             Channels:     1,
             Timestamp:    p.firstPacketTS, // Use the TS of the start of this chunk
             VoiceModelId: 1, // Use String ID as per your AI Log
@@ -171,7 +185,13 @@ func (p *AudioProcessor) readLoop(ctx context.Context, stream upstream.VoiceStre
 		// 사용한 자투리는 비워줌
 		p.egressRemainder = p.egressRemainder[:0] 
 
-		const frameSize = 960 // 20ms @ 48kHz
+		// Calculate frame size dynamically (e.g. 960 for 20ms @ 48kHz)
+        // Ensure AudioFrameDuration is valid (default 20ms)
+        frameDuration := p.cfg.AudioFrameDuration
+        if frameDuration <= 0 {
+            frameDuration = 20
+        }
+        frameSize := p.cfg.AudioSampleRate * frameDuration / 1000
 
 		// 해당 덩어리의 원본 도착 시간(ArrivalTime) 조회
 		p.tsMutex.Lock()
@@ -210,7 +230,7 @@ func (p *AudioProcessor) readLoop(ctx context.Context, stream upstream.VoiceStre
 
 				// 20ms 단위로 ArrivalTime에 오프셋을 더해 시간을 보간(Interpolation)
 				// 이렇게 해야 VideoBuffer에서 비디오가 뭉텅이로 풀리지 않고 부드럽게 재생됨
-				frameOffset := time.Duration(i/frameSize*20) * time.Millisecond
+				frameOffset := time.Duration(i/frameSize*frameDuration) * time.Millisecond
 				packetArrivalTime := chunkArrivalTime.Add(frameOffset)
 
 				raw, err := rtpPkt.Marshal()

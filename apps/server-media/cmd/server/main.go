@@ -29,8 +29,11 @@ func main() {
 	slog.SetDefault(logger)
 
 	// 2. Load Config
-	cfg := &config.Config{
-		// Defaults or Load from Env
+	// 2. Load Config
+	cfg, err := config.Load()
+	if err != nil {
+		slog.Error("Failed to load config", "error", err)
+		os.Exit(1)
 	}
 	port := os.Getenv("PORT")
 	if port == "" {
