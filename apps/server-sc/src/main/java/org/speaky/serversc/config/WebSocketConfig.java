@@ -39,7 +39,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
      */
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
-        registry.addEndpoint("/ws")
+        registry.addEndpoint("/ws/signaling")
                 .setAllowedOriginPatterns("*") // MVP: 모든 origin 허용 (나중에 제한 필요)
                 .withSockJS(); // WebSocket 미지원 시 폴링 등으로 fallback
     }
