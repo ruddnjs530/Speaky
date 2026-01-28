@@ -9,6 +9,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.speaky.serversc.domain.SessionEntity;
 import org.speaky.serversc.domain.SessionStatus;
+import org.speaky.serversc.exception.InvalidSessionStateException;
 import org.speaky.serversc.exception.SessionNotFoundException;
 import org.speaky.serversc.repository.SessionRepository;
 
@@ -106,8 +107,8 @@ class SessionServiceTest {
         
         // When & Then
         assertThatThrownBy(() -> sessionService.startBroadcast(sessionId, "media-1", "pipeline-1"))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("Cannot start broadcast");
+                .isInstanceOf(InvalidSessionStateException.class)
+                .hasMessageContaining("Invalid session state");
         
         verify(sessionRepository, never()).save(any());
     }
