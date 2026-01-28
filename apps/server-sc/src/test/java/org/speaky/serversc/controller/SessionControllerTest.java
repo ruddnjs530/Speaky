@@ -67,7 +67,7 @@ class SessionControllerTest {
     void getSession_Success() {
         // Given
         SessionEntity session = createTestSession("session-1", 1L, 100L, "Test Session");
-        when(sessionService.getSession("session-1")).thenReturn(Optional.of(session));
+        when(sessionService.getSession("session-1")).thenReturn(session);
         
         // When
         ResponseEntity<SessionResponse> response = sessionController.getSession("session-1");
@@ -84,7 +84,7 @@ class SessionControllerTest {
     @DisplayName("세션 조회 실패 - 존재하지 않음")
     void getSession_NotFound() {
         // Given
-        when(sessionService.getSession("any")).thenReturn(Optional.empty());
+        when(sessionService.getSession("any")).thenThrow(new SessionNotFoundException("any"));
         
         // When & Then
         assertThatThrownBy(() -> sessionController.getSession("any"))
