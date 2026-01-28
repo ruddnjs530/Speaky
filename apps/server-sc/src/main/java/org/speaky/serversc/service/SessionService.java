@@ -6,6 +6,7 @@ import org.speaky.serversc.domain.SessionEntity;
 import org.speaky.serversc.domain.SessionEventType;
 import org.speaky.serversc.domain.SessionStatus;
 import org.speaky.serversc.dto.SessionEventPayload;
+import org.speaky.serversc.exception.InvalidSessionStateException;
 import org.speaky.serversc.exception.SessionNotFoundException;
 import org.speaky.serversc.repository.SessionRepository;
 import org.springframework.stereotype.Service;
@@ -73,8 +74,10 @@ public class SessionService {
      * @param sessionId 세션 ID
      * @return Optional로 래핑된 세션
      */
-    public Optional<SessionEntity> getSession(String sessionId) {
-        return sessionRepository.findById(sessionId);
+    public SessionEntity getSession(String sessionId) {
+        SessionEntity session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new SessionNotFoundException(sessionId));
+        return session;
     }
     
     /**
@@ -111,9 +114,11 @@ public class SessionService {
                 .orElseThrow(() -> new SessionNotFoundException(sessionId));
         
         if (session.getStatus() != SessionStatus.STARTING) {
-            throw new IllegalStateException(
-                String.format("Cannot start broadcast: session is not in STARTING state (current: %s)", 
-                    session.getStatus()));
+            throw new InvalidSessionStateException(
+                sessionId,
+                session.getStatus().toString(),
+                SessionStatus.STARTING.toString()
+            );
         }
         
         session.setStatus(SessionStatus.LIVE);
