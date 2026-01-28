@@ -1,5 +1,10 @@
+
 import type { ApiErrorResponse, StartOrJoinResponse, SessionResponse } from "./sessionApi.types";
 import { authHeaders } from "./authHeaders";
+import { getAccessToken } from "../../../shared/lib/authToken";
+
+
+const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8080/ws';
 
 async function parseError(res: Response): Promise<{ code: string; message: string }> {
     try {
@@ -13,12 +18,16 @@ async function parseError(res: Response): Promise<{ code: string; message: strin
     }
 }
 
+// 채널 상태 응답 타입 (내부용)
+type ChannelStateResponse = {
+    hostLoginId: string;
+    activeSessionId: string | null;
+};
 
 export const sessionApi = {
 
     // 세션 생성 (대기방 만들기)
-    async createSession(title: string):
-        Promise<SessionResponse> {
+    async createSession(title: string): Promise<SessionResponse> {
         const res = await fetch('/api/v1/sessions', {
             method: 'POST',
             headers: authHeaders(),
@@ -32,17 +41,20 @@ export const sessionApi = {
         return (await res.json()) as SessionResponse;
     },
 
-
-    // 세션 시작 (라이브 시작)
-    async startLive(sessionId: string): Promise<SessionResponse> {
+    // 세션 시작 (파라미터화)
+    async startLive(
+        sessionId: string,
+        mediaServerId: string = "default",
+        pipelineId: string = "default"
+    ): Promise<SessionResponse> {
         const res = await fetch(
             `/api/v1/sessions/${sessionId}/start`,
             {
                 method: "POST",
                 headers: authHeaders(),
                 body: JSON.stringify({
-                    mediaServerId: "default",
-                    pipelineId: "default",
+                    mediaServerId,
+                    pipelineId,
                 }),
             }
         );
@@ -51,29 +63,54 @@ export const sessionApi = {
         return (await res.json()) as SessionResponse;
     },
 
-    // 세션 참여 (라이브 참여)
+    // 세션 참여 (API 명세 준수: GET state -> session info)
     async joinLive(channelId: string): Promise<StartOrJoinResponse> {
+        // 1. 채널 상태 조회 (백엔드 미구현 시 404 예상)
         const res = await fetch(
-            `/api/channels/${encodeURIComponent(channelId)}/live/join`,
+            `/api/v1/channels/${encodeURIComponent(channelId)}/state`,
             {
-                method: "POST",
+                method: "GET", // GET으로 변경
                 headers: authHeaders(),
             }
         );
 
         if (!res.ok) throw await parseError(res);
-        return (await res.json()) as StartOrJoinResponse;
+
+        const data = (await res.json()) as { data: ChannelStateResponse }; // 공통 응답 래퍼 고려
+        const state = data.data || data; // 구조에 따라 유연하게
+
+        if (!state.activeSessionId) {
+            throw { code: "SESSION_NOT_ACTIVE", message: "방송 중이 아닙니다." };
+        }
+
+        const token = getAccessToken();
+        if (!token) {
+            throw { code: "UNAUTHORIZED", message: "로그인 후 이용해주세요." };
+        }
+
+        // 2. 참여 정보 구성 (Viewer용 Response)
+        // 백엔드에서 아직 wsUrl 등을 안주므로 Client 로직에서 구성해야 함
+        return {
+            channelId: state.hostLoginId,
+            sessionId: state.activeSessionId,
+            role: "GUEST",
+            wsUrl: WS_URL,
+            token: token
+        };
     },
 
-    // 방송 종료
-    async endBroadcast(sessionId: string): Promise<SessionResponse> {
+    // 방송 종료 (파라미터화)
+    async endBroadcast(
+        sessionId: string,
+        reason: string = "HOST_ENDED"
+    ): Promise<SessionResponse> {
         const res = await fetch(
             `/api/v1/sessions/${sessionId}/end`,
             {
                 method: "POST",
                 headers: authHeaders(),
                 body: JSON.stringify({
-                    reason: "HOST_ENDED" // 종료 사유 전달
+                    reason
                 }),
             }
         );
@@ -81,4 +118,3 @@ export const sessionApi = {
         return (await res.json()) as SessionResponse;
     },
 };
-
