@@ -7,13 +7,15 @@ import Button from '../../shared/ui/Button';
 import HostMediaPanel from '../../features/media/ui/HostMediaPanel';
 
 import { useScreenShare } from '../../features/screenShare/model/useScreenShare';
-// [추가] API 및 인증 유틸 Import
+
 import { getAccessToken } from '../../shared/lib/authToken';
 import { sessionApi } from '../../features/session/api/sessionApi';
 
 import './HostPage.css';
 
 type Step = 'setup' | 'live';
+
+const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8080/ws';
 
 export default function HostPage() {
   const [step, setStep] = useState<Step>('setup');
@@ -47,7 +49,7 @@ export default function HostPage() {
       await connect({
         role: 'host',
         // ⚠️ 주의: 백엔드가 wsUrl을 주지 않으므로 로컬 테스트용 URL 사용 (배포 시 수정 필요)
-        wsUrl: 'ws://localhost:8080/ws',
+        wsUrl: WS_URL,
         token: token,
         // 임시 채널 ID: "host-{userId}" 형식 사용
         channelId: `host-${session.hostUserId}`,
