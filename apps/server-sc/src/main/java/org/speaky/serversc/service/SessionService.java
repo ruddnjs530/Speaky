@@ -32,17 +32,19 @@ public class SessionService {
     /**
      * 새 방송 세션 생성
      * 
-     * @param hostUserId 호스트(방송자) 사용자 ID
+     * @param host UserId 호스트(방송자) 사용자 ID
+     * @param channelId 채널 ID (예: "ch_user_faker")
      * @param voiceModelId 음성 모델 ID
      * @param title 방송 제목
      * @return 생성된 세션 엔티티
      */
-    public SessionEntity createSession(Long hostUserId, Long voiceModelId, String title) {
+    public SessionEntity createSession(Long hostUserId, String channelId, Long voiceModelId, String title) {
         String sessionId = generateSessionId();
         LocalDateTime now = LocalDateTime.now();
         
         SessionEntity session = SessionEntity.builder()
                 .sessionId(sessionId)
+                .channelId(channelId)
                 .hostUserId(hostUserId)
                 .voiceModelId(voiceModelId)
                 .title(title)
@@ -62,8 +64,8 @@ public class SessionService {
                 .build()
         );
         
-        log.info("Created new session: sessionId={}, hostUserId={}, title={}", 
-                sessionId, hostUserId, title);
+        log.info("Created new session: sessionId={}, channelId={}, hostUserId={}, title={}", 
+                sessionId, channelId, hostUserId, title);
         
         return session;
     }
