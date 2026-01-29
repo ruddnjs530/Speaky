@@ -8,33 +8,76 @@ models:
     protect: 0.33
     rms_mix_rate: 1.0
     device: "cuda"
+
+  #------------------------------------
+  # 삭제
+  # - model_name: "Test Voice 1"
+  #   voice_model_id: 2
+  #   model_path: "/rvc-code/assets/weights/test_0119_02.pth"
+  #   index_path: "/rvc-code/assets/indices/test_0119_02_IVF81_Flat_nprobe_1_test_0119_02_v2.index"
+  #   index_rate: 0.75
+  #   pitch: 0
+  #   protect: 0.33
+  #   rms_mix_rate: 1.0
+  #   device: "cuda"
   
-  - model_name: "Test Voice 1"
+  # - model_name: "Test Voice 2"
+  #   voice_model_id: 3
+  #   model_path: "/rvc-code/assets/weights/test_0116_01.pth"
+  #   # 인덱스 없음
+  #   index_rate: 0.7
+  #   pitch: 0
+  #   protect: 0.5
+  #   rms_mix_rate: 1.0
+  #   device: "cuda"
+  
+  # - model_name: "Test Voice 3"
+  #   voice_model_id: 4
+  #   model_path: "/rvc-code/assets/weights/test_0119_01.pth"
+  #   # 인덱스 없음
+  #   index_rate: 0.7
+  #   pitch: 0
+  #   protect: 0.5
+  #   rms_mix_rate: 1.0
+  #   device: "cuda"
+  #-------------------------------
+  # 01.29 추가
+  - model_name: "aru_voice"
     voice_model_id: 2
-    model_path: "/rvc-code/assets/weights/test_0119_02.pth"
-    index_path: "/rvc-code/assets/indices/test_0119_02_IVF81_Flat_nprobe_1_test_0119_02_v2.index"
-    index_rate: 0.75
-    pitch: 0
-    protect: 0.33
+    model_path: "/rvc-code/assets/weights/0129_aru2.pth"
+    index_path: "/rvc-code/assets/indices/0129_aru2.index"
+    index_rate: 0.8
+    pitch: 12
+    protect: 0.25
     rms_mix_rate: 1.0
     device: "cuda"
-  
-  - model_name: "Test Voice 2"
+
+  - model_name: "baekjongwon_voice"
     voice_model_id: 3
-    model_path: "/rvc-code/assets/weights/test_0116_01.pth"
-    # 인덱스 없음
-    index_rate: 0.0
-    pitch: 0
-    protect: 0.33
+    model_path: "/rvc-code/assets/weights/0128_baek.pth"
+    index_path: "/rvc-code/assets/indices/0128_baek.index"
+    index_rate: 0.9
+    pitch: -2
+    protect: 0.2
     rms_mix_rate: 1.0
     device: "cuda"
-  
-  - model_name: "Test Voice 3"
+
+  - model_name: "child_voice"
     voice_model_id: 4
-    model_path: "/rvc-code/assets/weights/test_0119_01.pth"
-    # 인덱스 없음
-    index_rate: 0.0
-    pitch: 0
-    protect: 0.33
+    model_path: "/rvc-code/assets/weights/0127_child"
+    index_path: "/rvc-code/assets/indices/0127_child"
+    index_rate: 0.9
+    pitch: 6
+    protect: 0.20
+    rms_mix_rate: 1.0
+    device: "cuda"
+
+  - model_name: "trump_voice"
+    voice_model_id: 5
+    model_path: "/rvc-code/assets/weights/0129_trump"
+    index_path: "/rvc-code/assets/indices/0129_trump"
+    index_rate: 0.85
+    pitch: -2
+    protect: 0.3
     rms_mix_rate: 1.0
     device: "cuda"
