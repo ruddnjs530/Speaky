@@ -44,14 +44,16 @@ class SessionServiceTest {
     void testCreateSession() {
         // Given
         Long hostUserId = 1L;
+        String channelId = "ch_test";
         Long voiceModelId = 100L;
         String title = "Test Broadcast";
         
         // When
-        SessionEntity created = sessionService.createSession(hostUserId, voiceModelId, title);
+        SessionEntity created = sessionService.createSession(hostUserId, channelId, voiceModelId, title);
         
         // Then
         assertThat(created).isNotNull();
+        assertThat(created.getChannelId()).isEqualTo(channelId);
         assertThat(created.getHostUserId()).isEqualTo(hostUserId);
         assertThat(created.getVoiceModelId()).isEqualTo(voiceModelId);
         assertThat(created.getTitle()).isEqualTo(title);

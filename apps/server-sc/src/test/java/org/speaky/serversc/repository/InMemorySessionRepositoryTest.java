@@ -29,7 +29,7 @@ class InMemorySessionRepositoryTest {
     @DisplayName("세션 저장 및 조회")
     void testSaveAndFindById() {
         // Given
-        SessionEntity session = createTestSession("session-1", 1L, 100L, "Test Broadcast");
+        SessionEntity session = createTestSession("session-1", 1L, "ch_test", 100L, "Test Broadcast");
         
         // When
         repository.save(session);
@@ -55,9 +55,9 @@ class InMemorySessionRepositoryTest {
     @DisplayName("호스트 사용자 ID로 세션 목록 조회")
     void testFindByHostUserId() {
         // Given
-        SessionEntity session1 = createTestSession("session-1", 1L, 100L, "Broadcast 1");
-        SessionEntity session2 = createTestSession("session-2", 1L, 101L, "Broadcast 2");
-        SessionEntity session3 = createTestSession("session-3", 2L, 102L, "Broadcast 3");
+        SessionEntity session1 = createTestSession("session-1", 1L, "ch_test", 100L, "Broadcast 1");
+        SessionEntity session2 = createTestSession("session-2", 1L, "ch_test", 101L, "Broadcast 2");
+        SessionEntity session3 = createTestSession("session-3", 2L, "ch_test", 102L, "Broadcast 3");
         
         repository.save(session1);
         repository.save(session2);
@@ -76,13 +76,13 @@ class InMemorySessionRepositoryTest {
     @DisplayName("상태별 세션 목록 조회")
     void testFindByStatus() {
         // Given
-        SessionEntity session1 = createTestSession("session-1", 1L, 100L, "Broadcast 1");
+        SessionEntity session1 = createTestSession("session-1", 1L, "ch_test", 100L, "Broadcast 1");
         session1.setStatus(SessionStatus.LIVE);
         
-        SessionEntity session2 = createTestSession("session-2", 2L, 101L, "Broadcast 2");
+        SessionEntity session2 = createTestSession("session-2", 2L, "ch_test", 101L, "Broadcast 2");
         session2.setStatus(SessionStatus.LIVE);
         
-        SessionEntity session3 = createTestSession("session-3", 3L, 102L, "Broadcast 3");
+        SessionEntity session3 = createTestSession("session-3", 3L, "ch_test", 102L, "Broadcast 3");
         session3.setStatus(SessionStatus.ENDED);
         
         repository.save(session1);
@@ -102,7 +102,7 @@ class InMemorySessionRepositoryTest {
     @DisplayName("세션 삭제")
     void testDeleteById() {
         // Given
-        SessionEntity session = createTestSession("session-1", 1L, 100L, "Test Broadcast");
+        SessionEntity session = createTestSession("session-1", 1L, "ch_test", 100L, "Test Broadcast");
         repository.save(session);
         
         // When
@@ -117,9 +117,9 @@ class InMemorySessionRepositoryTest {
     @DisplayName("전체 세션 조회")
     void testFindAll() {
         // Given
-        repository.save(createTestSession("session-1", 1L, 100L, "Broadcast 1"));
-        repository.save(createTestSession("session-2", 2L, 101L, "Broadcast 2"));
-        repository.save(createTestSession("session-3", 3L, 102L, "Broadcast 3"));
+        repository.save(createTestSession("session-1", 1L, "ch_test", 100L, "Broadcast 1"));
+        repository.save(createTestSession("session-2", 2L, "ch_test", 101L, "Broadcast 2"));
+        repository.save(createTestSession("session-3", 3L, "ch_test", 102L, "Broadcast 3"));
         
         // When
         List<SessionEntity> allSessions = repository.findAll();
@@ -132,8 +132,8 @@ class InMemorySessionRepositoryTest {
     @DisplayName("저장소 크기 확인")
     void testSize() {
         // Given
-        repository.save(createTestSession("session-1", 1L, 100L, "Broadcast 1"));
-        repository.save(createTestSession("session-2", 2L, 101L, "Broadcast 2"));
+        repository.save(createTestSession("session-1", 1L, "ch_test", 100L, "Broadcast 1"));
+        repository.save(createTestSession("session-2", 2L, "ch_test", 101L, "Broadcast 2"));
         
         // When & Then
         assertThat(repository.size()).isEqualTo(2);
@@ -143,8 +143,8 @@ class InMemorySessionRepositoryTest {
     @DisplayName("저장소 초기화")
     void testClear() {
         // Given
-        repository.save(createTestSession("session-1", 1L, 100L, "Broadcast 1"));
-        repository.save(createTestSession("session-2", 2L, 101L, "Broadcast 2"));
+        repository.save(createTestSession("session-1", 1L, "ch_test", 100L, "Broadcast 1"));
+        repository.save(createTestSession("session-2", 2L, "ch_test", 101L, "Broadcast 2"));
         
         // When
         repository.clear();
@@ -154,9 +154,11 @@ class InMemorySessionRepositoryTest {
         assertThat(repository.findAll()).isEmpty();
     }
     
-    private SessionEntity createTestSession(String sessionId, Long hostUserId, Long voiceModelId, String title) {
+    
+    private SessionEntity createTestSession(String sessionId, Long hostUserId, String channelId, Long voiceModelId, String title) {
         return SessionEntity.builder()
                 .sessionId(sessionId)
+                .channelId(channelId)
                 .hostUserId(hostUserId)
                 .voiceModelId(voiceModelId)
                 .title(title)

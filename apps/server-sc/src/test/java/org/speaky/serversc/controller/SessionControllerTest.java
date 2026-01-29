@@ -44,11 +44,12 @@ class SessionControllerTest {
         // Given
         CreateSessionRequest request = new CreateSessionRequest();
         request.setHostUserId(1L);
+        request.setChannelId("ch_test");
         request.setVoiceModelId(100L);
         request.setTitle("Test Session");
         
-        SessionEntity session = createTestSession("session-1", 1L, 100L, "Test Session");
-        when(sessionService.createSession(1L, 100L, "Test Session")).thenReturn(session);
+        SessionEntity session = createTestSession("session-1", 1L, "ch_test", 100L, "Test Session");
+        when(sessionService.createSession(1L, "ch_test", 100L, "Test Session")).thenReturn(session);
         
         // When
         ResponseEntity<SessionResponse> response = sessionController.createSession(request);
@@ -59,14 +60,14 @@ class SessionControllerTest {
         assertThat(response.getBody().getSessionId()).isEqualTo("session-1");
         assertThat(response.getBody().getTitle()).isEqualTo("Test Session");
         
-        verify(sessionService).createSession(1L, 100L, "Test Session");
+        verify(sessionService).createSession(1L, "ch_test", 100L, "Test Session");
     }
     
     @Test
     @DisplayName("세션 ID로 조회 성공")
     void getSession_Success() {
         // Given
-        SessionEntity session = createTestSession("session-1", 1L, 100L, "Test Session");
+        SessionEntity session = createTestSession("session-1", 1L, "ch_test", 100L, "Test Session");
         when(sessionService.getSession("session-1")).thenReturn(session);
         
         // When
@@ -96,7 +97,7 @@ class SessionControllerTest {
     @DisplayName("호스트 사용자 ID로 세션 목록 조회")
     void getSessionsByHost_Success() {
         // Given
-        SessionEntity session = createTestSession("session-1", 1L, 100L, "Test Session");
+        SessionEntity session = createTestSession("session-1", 1L, "ch_test", 100L, "Test Session");
         when(sessionService.getSessionsByHostUserId(1L)).thenReturn(List.of(session));
         
         // When
@@ -112,7 +113,7 @@ class SessionControllerTest {
     @DisplayName("상태별 세션 목록 조회")
     void getSessionsByStatus_Success() {
         // Given
-        SessionEntity session = createTestSession("session-1", 1L, 100L, "Test Session");
+        SessionEntity session = createTestSession("session-1", 1L, "ch_test", 100L, "Test Session");
         session.setStatus(SessionStatus.LIVE);
         when(sessionService.getSessionsByStatus(SessionStatus.LIVE)).thenReturn(List.of(session));
         
@@ -133,7 +134,7 @@ class SessionControllerTest {
         request.setMediaServerId("server-1");
         request.setPipelineId("pipe-1");
         
-        SessionEntity session = createTestSession("session-1", 1L, 100L, "Test");
+        SessionEntity session = createTestSession("session-1", 1L, "ch_test", 100L, "Test");
         session.setStatus(SessionStatus.LIVE);
         
         when(sessionService.startBroadcast("session-1", "server-1", "pipe-1")).thenReturn(session);
@@ -153,7 +154,7 @@ class SessionControllerTest {
         EndBroadcastRequest request = new EndBroadcastRequest();
         request.setReason("End reason");
         
-        SessionEntity session = createTestSession("session-1", 1L, 100L, "Test");
+        SessionEntity session = createTestSession("session-1", 1L, "ch_test", 100L, "Test");
         session.setStatus(SessionStatus.ENDED);
         
         when(sessionService.endBroadcast("session-1", "End reason")).thenReturn(session);
@@ -177,9 +178,10 @@ class SessionControllerTest {
         verify(sessionService).deleteSession("session-1");
     }
 
-    private SessionEntity createTestSession(String sessionId, Long hostUserId, Long voiceModelId, String title) {
+    private SessionEntity createTestSession(String sessionId, Long hostUserId, String channelId, Long voiceModelId, String title) {
         return SessionEntity.builder()
                 .sessionId(sessionId)
+                .channelId(channelId)
                 .hostUserId(hostUserId)
                 .voiceModelId(voiceModelId)
                 .title(title)

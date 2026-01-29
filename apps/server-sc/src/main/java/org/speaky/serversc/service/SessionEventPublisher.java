@@ -42,7 +42,7 @@ public class SessionEventPublisher {
                 .type(payload.getEventType().name())
                 .requestId(UUID.randomUUID().toString())
                 .ts(System.currentTimeMillis())
-                .channelId(null)  // TODO: channelId 지원 시 추가
+                .channelId(payload.getSessionData().getChannelId())
                 .sessionId(payload.getSessionId())
                 .from(From.builder()
                         .role(SERVER_ROLE)

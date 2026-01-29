@@ -46,6 +46,24 @@ public interface SessionRepository {
     List<SessionEntity> findByStatus(SessionStatus status);
     
     /**
+     * 채널 ID와 상태로 세션 조회
+     * LIVE 세션 찾기에 사용 (시청자 입장 시)
+     * 
+     * @param channelId 채널 ID
+     * @param status 세션 상태
+     * @return Optional로 래핑된 세션
+     */
+    Optional<SessionEntity> findByChannelIdAndStatus(String channelId, SessionStatus status);
+    
+    /**
+     * 채널 ID로 세션 목록 조회
+     * 
+     * @param channelId 채널 ID
+     * @return 해당 채널의 세션 목록
+     */
+    List<SessionEntity> findByChannelId(String channelId);
+    
+    /**
      * 세션 ID로 삭제
      * 
      * @param sessionId 삭제할 세션 ID

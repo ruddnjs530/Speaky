@@ -24,6 +24,14 @@ public class SessionEntity {
     private String sessionId;
     
     /**
+     * 채널 ID (하이브리드 방식)
+     * - Envelope.channelId: 실시간 라우팅 (DB 조회 X)
+     * - SessionEntity.channelId: 세션 관리 (LIVE 세션 조회)
+     * 예: "ch_user_faker"
+     */
+    private String channelId;
+    
+    /**
      * 호스트(방송자) 사용자 ID
      * ERD: host_user_id BIGINT NOT NULL
      */
