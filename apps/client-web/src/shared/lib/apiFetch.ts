@@ -11,9 +11,17 @@ export async function apiFetch(input: RequestInfo | URL, options: ApiFetchOption
 
   // URL에 VITE_API_URL 환경 변수 적용
   let url = input;
-  if (typeof input === 'string' && input.startsWith('/')) {
-    const baseUrl = import.meta.env.VITE_API_URL || '';
-    url = `${baseUrl}${input}`;
+  if (typeof input === 'string' && !input.startsWith('http')) {
+    const baseUrl = import.meta.env.VITE_API_URL;
+
+    // 환경 변수가 없을 경우에 대한 경고 로그 (선택 사항)
+    if (!baseUrl) {
+      console.warn('VITE_API_URL is not defined. Using relative path.');
+    }
+
+    const safeBaseUrl = baseUrl || '';
+    const normalizedInput = input.startsWith('/') ? input : `/${input}`;
+    url = `${safeBaseUrl}${normalizedInput}`;
   }
 
   const res = await fetch(url, {

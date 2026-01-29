@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, useEffect } from "react";
 
 export type InputSource = "screen" | "mp4";
 
@@ -237,6 +237,14 @@ export function usePrecheckModel(opts?: { onNext?: () => void }): PrecheckModel 
             },
         };
     }, [onNext, mic.selectedDeviceId]);
+
+    // 컴포넌트가 언마운트되거나 액션이 변경될 때(예: 장치 변경) 클린업을 수행합니다.
+    // 이를 통해 컴포넌트가 사라지거나 장치가 바뀔 때 리소스가 확실히 해제되도록 보장합니다.
+    useEffect(() => {
+        return () => {
+            actions.stopLevelMonitor();
+        };
+    }, [actions]);
 
     const canProceed = mic.permission === "granted";
 

@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 import Card from '../../shared/ui/Card';
 import Input from '../../shared/ui/Input';
@@ -13,6 +13,7 @@ import { sessionApi } from '../../features/session/api/sessionApi';
 
 import './HostPage.css';
 import HealthBadgesPanel from '../../features/host/ui/HealthBadgesPanel';
+import { usePrecheckModel } from '../../features/host/hooks/usePrecheckModel';
 
 type Step = 'setup' | 'live';
 
@@ -22,8 +23,22 @@ export default function HostPage() {
   const [step, setStep] = useState<Step>('setup');
   const [title, setTitle] = useState('');
 
-  // [추가] 세션 ID 관리
+  // 세션 ID 관리
   const [sessionId, setSessionId] = useState('');
+
+  // 헬스 체크 모델 (마이크 모니터링용)
+  const { health, actions, mic } = usePrecheckModel();
+
+  // Live 상태 진입 시 마이크 모니터링 시작
+  useEffect(() => {
+    if (step === 'live') {
+      if (mic.permission === 'idle') {
+        actions.requestMicPermission();
+      } else if (mic.permission === 'granted') {
+        actions.startLevelMonitor();
+      }
+    }
+  }, [step, mic.permission, actions]);
 
   const { remoteStream, status, error, startCapture, connect, stopAll } = useScreenShare();
 
@@ -49,7 +64,7 @@ export default function HostPage() {
       // connect 호출 시 필요한 정보 전달
       await connect({
         role: 'host',
-        // ⚠️ 주의: 백엔드가 wsUrl을 주지 않으므로 로컬 테스트용 URL 사용 (배포 시 수정 필요)
+        // 주의: 백엔드가 wsUrl을 주지 않으므로 로컬 테스트용 URL 사용 (배포 시 수정 필요)
         wsUrl: WS_URL,
         token: token,
         // 임시 채널 ID: "host-{userId}" 형식 사용
@@ -175,12 +190,7 @@ export default function HostPage() {
         <div style={{ marginTop: '1rem' }}>
           <HealthBadgesPanel
             viewers="집계 중"
-            health={{
-              mic: "ok",      // 실제 스트림은 useScreenShare 등에서 관리되므로 여기선 표시만 함
-              level: "ok",
-              network: "unknown",
-              ai: "unknown"
-            }}
+            health={health}
           />
         </div>
 
