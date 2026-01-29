@@ -1,0 +1,68 @@
+.viewerPage {
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    max-width: 1200px;
+    margin: 0 auto;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.viewerPage__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.viewerPage__title {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #111;
+}
+
+.viewerPage__statusCard {
+    background-color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.viewerPage__infoRow {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    font-size: 0.95rem;
+    color: #444;
+}
+
+.viewerPage__infoLabel {
+    font-weight: 600;
+    color: #666;
+}
+
+.viewerPage__error {
+    color: #e11d48;
+    background-color: #ffe4e6;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    margin-top: 0.5rem;
+}
+
+.viewerPage__mediaArea {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background-color: #000;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+/* Fallback / Error states container (optional centering) */
+.viewerPage__paramError {
+    padding: 24px;
+    display: grid;
+    place-items: center;
+    min-height: 50vh;
+}
