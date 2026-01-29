@@ -1,6 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
 import { SignalingClient } from '../../../shared/lib/signaling/SignalingClient';
-// Envelope import 제거 (불필요)
 import type { ConnectionStatus } from '../../media/model/useConnectionStatus';
 
 type Role = 'host' | 'viewer';
@@ -15,7 +14,6 @@ type ConnectArgs = {
   sessionId: string;
 };
 
-// ... (mapToConnectionStatus 함수는 그대로 유지) ...
 function mapToConnectionStatus(s: InternalStatus): ConnectionStatus {
   switch (s) {
     case 'idle': return 'idle';
@@ -148,19 +146,12 @@ export function useScreenShare() {
             setInternalStatus('error');
           }
         } else if (msg.type === 'SIG_ICE') {
-          const candidate = (msg.payload as any).candidate;
-          // ICE payload 구조에 맞춰 매핑 필요할 수 있음 (일단 candidate가 문자열로 오면 파싱 필요할 수도 있으나, 여기선 객체로 온다고 가정)
-          // 만약 payload 자체가 RTCIceCandidateInit 형태라면 그대로 사용
-          if (typeof candidate === 'string') {
-            // payload 구조 확인 필요, 일단 candidate 필드가 있으면 시도
-            const c = { candidate, sdpMid: (msg.payload as any).sdpMid, sdpMLineIndex: (msg.payload as any).sdpMLineIndex };
-            await pc.addIceCandidate(c);
-          } else if (candidate) {
-            // 이미 객체라면
+          const candidateInit = msg.payload as RTCIceCandidateInit;
+          if (candidateInit.candidate) {
             if (pc.remoteDescription) {
-              await pc.addIceCandidate(candidate);
+              await pc.addIceCandidate(candidateInit);
             } else {
-              pendingRemoteIceRef.current.push(candidate);
+              pendingRemoteIceRef.current.push(candidateInit);
             }
           }
         }

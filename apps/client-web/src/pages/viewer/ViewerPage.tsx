@@ -8,6 +8,7 @@ import { useScreenShare } from '../../features/screenShare/model/useScreenShare'
 import { sessionApi } from '../../features/session/api/sessionApi';
 import { getErrorCode, getErrorMessage } from '../../shared/lib/errorUtils';
 import { SignalingClient } from '../../shared/lib/signaling/SignalingClient';
+import { getAccessToken } from '../../shared/lib/authToken';
 
 import './ViewerPage.css';
 
@@ -77,18 +78,19 @@ export default function ViewerPage() {
   useEffect(() => {
     if (!channelId) return;
 
-    let alive = true;
-    let currentSc: SignalingClient | null = null;
+    let isActive = true; // 언마운트 체크용
 
+    // 🛠 개선: 이 effect 실행 주기에서 만든 소켓을 추적
+    let mySc: SignalingClient | null = null;
     const tryJoin = async () => {
       try {
-        // 1. 일반 입장 시도
         const res = await sessionApi.joinLive(channelId);
-        if (!alive) return;
-
-        // 성공 시: 대기 WS가 있었다면 해제
-        waitingScRef.current?.close();
-        waitingScRef.current = null;
+        if (!isActive) return;
+        // 성공 시: 대기하던 소켓이 있다면 닫기
+        if (waitingScRef.current) {
+          waitingScRef.current.close();
+          waitingScRef.current = null;
+        }
 
         dispatch({ type: 'JOINED' });
 
@@ -101,7 +103,7 @@ export default function ViewerPage() {
         });
 
       } catch (e: any) {
-        if (!alive) return;
+        if (!isActive) return;
 
         const code = getErrorCode(e);
         const msg = getErrorMessage(e) ?? '시청 연결 실패';
@@ -117,7 +119,7 @@ export default function ViewerPage() {
 
           const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8080/ws';
 
-          // 대기용 SignalingClient 생성
+          const token = getAccessToken() ?? '';
           const sc = new SignalingClient({
             channelId,
             sessionId: 'waiting',
@@ -126,20 +128,17 @@ export default function ViewerPage() {
           }, {
             onOpen: () => console.log('[AutoRouting] WS Connected (Waiting)'),
             onInbound: (msg) => {
-              // 방송 시작 이벤트 감지 -> 재시도(attempt 증가)
               if (msg.type === 'SYS_SESSION_STARTED' || msg.type === 'SESSION_LIVE_STARTED') {
                 console.log('[AutoRouting] 방송 시작 감지! -> Retrying join');
-                // WS 정리 후 재시도 트리거
-                sc.close();
-                waitingScRef.current = null;
+                // 여기서 닫지 않고, 재시도(attempt++) 시 cleanup 혹은 tryJoin 진입 시점에 처리
                 setAttempt(prev => prev + 1);
               }
             }
           });
+          sc.connect(wsUrl, token);
 
-          sc.connect(wsUrl, 'GUEST_TOKEN'); // 토큰 필요 시 적절한 값 사용
           waitingScRef.current = sc;
-          currentSc = sc;
+          mySc = sc; // 내가 만든 소켓임 표시
 
         } else if (code === 'UNAUTHORIZED') {
           dispatch({ type: 'UNAUTHORIZED' });
@@ -152,10 +151,14 @@ export default function ViewerPage() {
     tryJoin();
 
     return () => {
-      alive = false;
-      // 컴포넌트 언마운트 시에만 정리 (attempt 변경 시에는 유지하고 싶을 수 있으나, 안전하게 매번 정리)
-      waitingScRef.current?.close();
-      waitingScRef.current = null;
+      isActive = false;
+      // 🛠 개선: "내가 만든 소켓"일 때만 닫음 (다른 effect 주기의 소켓 건드리지 않음)
+      if (mySc) {
+        mySc.close();
+        if (waitingScRef.current === mySc) {
+          waitingScRef.current = null;
+        }
+      }
     };
   }, [channelId, attempt, connect]);
   const reload = useCallback(() => window.location.reload(), []);
