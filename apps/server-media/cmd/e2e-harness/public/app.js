@@ -13,24 +13,50 @@ function log(msg) {
 let pc;
 let localStream;
 
+async function updateTracks(newStream) {
+    if (!pc || pc.connectionState === 'closed') return; // Early return if no connection
+
+    const senders = pc.getSenders();
+    let negotiationNeeded = false;
+
+    for (const track of newStream.getTracks()) {
+        const sender = senders.find(s => s.track && s.track.kind === track.kind);
+        if (sender) {
+            log(`Replacing ${track.kind} track...`);
+            await sender.replaceTrack(track);
+            // Ensure direction is sendrecv
+            const transceiver = pc.getTransceivers().find(t => t.sender === sender);
+            if (transceiver) transceiver.direction = 'sendrecv';
+        } else {
+            log(`Adding new ${track.kind} track...`);
+            pc.addTrack(track, newStream);
+            negotiationNeeded = true;
+            // Force direction for new transceivers
+            pc.getTransceivers().forEach(t => {
+                if (t.sender.track === track) t.direction = 'sendrecv';
+            });
+        }
+    }
+
+    if (negotiationNeeded) {
+        negotiate();
+    }
+}
+
 async function startCamera() {
     try {
-        if (localStream) localStream.getTracks().forEach(t => t.stop());
+        if (localStream) {
+            // Stop existing tracks to release hardware
+            localStream.getTracks().forEach(t => t.stop());
+        }
         localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         localVideo.srcObject = localStream;
         log('Camera acquiring success');
         btnJoin.disabled = false;
 
-        // Late Publish Support
+        // Dynamic Switch Support
         if (pc && pc.connectionState !== 'closed') {
-            localStream.getTracks().forEach(track => {
-                pc.addTrack(track, localStream);
-                // CRITICAL: Force direction update
-                pc.getTransceivers().forEach(t => {
-                    if (t.sender.track === track) t.direction = 'sendrecv';
-                });
-            });
-            negotiate();
+            await updateTracks(localStream);
         }
     } catch (e) {
         log(`Camera Error: ${e.message}`);
@@ -39,22 +65,17 @@ async function startCamera() {
 
 async function startScreenShare() {
     try {
-        if (localStream) localStream.getTracks().forEach(t => t.stop());
+        if (localStream) {
+            localStream.getTracks().forEach(t => t.stop());
+        }
         localStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
         localVideo.srcObject = localStream;
         log('Screen Share acquiring success');
         btnJoin.disabled = false;
 
-        // Late Publish Support
+        // Dynamic Switch Support
         if (pc && pc.connectionState !== 'closed') {
-            localStream.getTracks().forEach(track => {
-                pc.addTrack(track, localStream);
-                // CRITICAL: Force direction update
-                pc.getTransceivers().forEach(t => {
-                    if (t.sender.track === track) t.direction = 'sendrecv';
-                });
-            });
-            negotiate();
+            await updateTracks(localStream);
         }
     } catch (e) {
         log(`Screen Share Error: ${e.message}`);
