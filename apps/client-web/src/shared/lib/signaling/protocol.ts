@@ -6,6 +6,8 @@ export type MsgType =
     | "SYS_PING"
     | "SYS_PONG"
     | "SYS_ERROR"
+    | "SYS_SESSION_STARTED"  // <-- 추가됨
+    | "SESSION_LIVE_STARTED" // <-- 추가됨 (백엔드 스펙 혼용 대비)
     | "SIG_OFFER"
     | "SIG_ANSWER"
     | "SIG_ICE"
@@ -23,6 +25,11 @@ export type EnvelopeBase = {
         clientId: string;
     };
     payload: unknown;
+};
+
+export type SysSessionStarted = EnvelopeBase & {
+    type: "SYS_SESSION_STARTED" | "SESSION_LIVE_STARTED";
+    payload: { title?: string; startedAt?: string }; // 필요한 페이로드 정의
 };
 
 export type SysAttach = EnvelopeBase & {
@@ -85,7 +92,8 @@ export type AnyInbound =
     | SysPong
     | SysError
     | SigAnswer
-    | SigIce;
+    | SigIce
+    | SysSessionStarted;
 
 export type AnyOutbound =
     | SysAttach
