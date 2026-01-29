@@ -14,14 +14,19 @@ import { sessionApi } from '../../features/session/api/sessionApi';
 import './HostPage.css';
 import HealthBadgesPanel from '../../features/host/ui/HealthBadgesPanel';
 import { usePrecheckModel } from '../../features/host/hooks/usePrecheckModel';
+import { useNavigate } from 'react-router-dom';
+import Modal from '../../shared/ui/Modal';
 
 type Step = 'setup' | 'live';
 
 const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8080/ws';
 
 export default function HostPage() {
+  const navigate = useNavigate();
   const [step, setStep] = useState<Step>('setup');
   const [title, setTitle] = useState('');
+  // 종료 모달
+  const [showEndModal, setShowEndModal] = useState(false);
 
   // 세션 ID 관리
   const [sessionId, setSessionId] = useState('');
@@ -109,8 +114,14 @@ export default function HostPage() {
       } catch (e) { console.warn(e); }
     }
     stopAll(); // WS 연결 해제
-    setStep('setup');
+    setShowEndModal(true);
     setSessionId('');
+  };
+
+  // 종료 모달 확인 핸들러
+  const confirmEnd = () => {
+    setShowEndModal(false);
+    navigate('/', { replace: true }); // 홈으로 이동
   };
 
   if (step === 'setup') {
@@ -210,6 +221,15 @@ export default function HostPage() {
         </div>
 
       </div>
+      <Modal
+        open={showEndModal}
+        title="방송 종료"
+        primaryLabel="홈으로 이동"
+        onPrimary={confirmEnd}
+      >
+        <p>방송이 종료되었습니다.</p>
+        <p>수고하셨습니다 👏</p>
+      </Modal>
     </div>
   );
 }
