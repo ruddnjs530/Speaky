@@ -232,3 +232,9 @@ async function negotiate() {
         log(`Renegotiation Error: ${e.message}`);
     }
 }
+
+// Auto-Randomize ID for Test Convenience
+window.onload = () => {
+    const randomSuffix = Math.floor(Math.random() * 10000);
+    document.getElementById('userId').value = `user-${randomSuffix.toString().padStart(4, '0')}`;
+};
