@@ -44,6 +44,11 @@ export interface PrecheckModel {
 
 export function usePrecheckModel(opts?: { onNext?: () => void }): PrecheckModel {
     const onNext = opts?.onNext;
+    const onNextRef = useRef(onNext);
+
+    useEffect(() => {
+        onNextRef.current = onNext;
+    }, [onNext]);
 
     const [inputSource, setInputSource] = useState<InputSource>("screen");
     const [voiceId, setVoiceId] = useState<string>("AI 보이스 1");
@@ -233,10 +238,10 @@ export function usePrecheckModel(opts?: { onNext?: () => void }): PrecheckModel 
 
             goNext: () => {
                 stopLevelMonitorImpl();
-                onNext?.();
+                onNextRef.current?.();
             },
         };
-    }, [onNext, mic.selectedDeviceId]);
+    }, [mic.selectedDeviceId]); // Remove onNext dependency
 
     // 컴포넌트가 언마운트되거나 액션이 변경될 때(예: 장치 변경) 클린업을 수행합니다.
     // 이를 통해 컴포넌트가 사라지거나 장치가 바뀔 때 리소스가 확실히 해제되도록 보장합니다.
