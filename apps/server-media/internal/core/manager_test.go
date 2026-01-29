@@ -18,7 +18,7 @@ func TestManager_CreateRoom(t *testing.T) {
 	manager := NewRoomManager(cfg, api, nil, nil)
 
 	// Create room
-	room, err := manager.CreateRoom("test-room")
+	room, err := manager.CreateRoom("test-room", "host-1")
 	require.NoError(t, err)
 	assert.NotNil(t, room)
 	assert.Equal(t, "test-room", room.ID)
@@ -31,11 +31,11 @@ func TestManager_CreateRoom_Duplicate(t *testing.T) {
 	manager := NewRoomManager(cfg, api, nil, nil)
 
 	// Create first room
-	_, err := manager.CreateRoom("test-room")
+	_, err := manager.CreateRoom("test-room", "host-1")
 	require.NoError(t, err)
 
 	// Try to create duplicate
-	_, err = manager.CreateRoom("test-room")
+	_, err = manager.CreateRoom("test-room", "host-1")
 	assert.Error(t, err)
 	assert.True(t, errors.Is(err, ErrRoomAlreadyExists))
 }
@@ -47,7 +47,7 @@ func TestManager_GetRoom(t *testing.T) {
 	manager := NewRoomManager(cfg, api, nil, nil)
 
 	// Create room
-	created, err := manager.CreateRoom("test-room")
+	created, err := manager.CreateRoom("test-room", "host-1")
 	require.NoError(t, err)
 
 	// Get room
@@ -75,7 +75,7 @@ func TestManager_DeleteRoom(t *testing.T) {
 	manager := NewRoomManager(cfg, api, nil, nil)
 
 	// Create and delete room
-	_, err := manager.CreateRoom("test-room")
+	_, err := manager.CreateRoom("test-room", "host-1")
 	require.NoError(t, err)
 
 	err = manager.DeleteRoom("test-room")
@@ -93,12 +93,12 @@ func TestManager_GetOrCreateRoom(t *testing.T) {
 	manager := NewRoomManager(cfg, api, nil, nil)
 
 	// First call should create
-	room1, err := manager.GetOrCreateRoom("test-room")
+	room1, err := manager.GetOrCreateRoom("test-room", "host-1")
 	require.NoError(t, err)
 	assert.NotNil(t, room1)
 
 	// Second call should return existing
-	room2, err := manager.GetOrCreateRoom("test-room")
+	room2, err := manager.GetOrCreateRoom("test-room", "host-1")
 	require.NoError(t, err)
 	assert.Equal(t, room1, room2)
 }
@@ -120,7 +120,7 @@ func TestManager_Concurrent(t *testing.T) {
 			roomID := "room-0" // All goroutines compete for same room
 
 			// Try to create or get
-			_, _ = manager.GetOrCreateRoom(roomID)
+			_, _ = manager.GetOrCreateRoom(roomID, "host-1")
 
 			// Try to get
 			_, _ = manager.GetRoom(roomID)

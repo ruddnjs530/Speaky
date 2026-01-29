@@ -35,10 +35,7 @@ func main() {
 		slog.Error("Failed to load config", "error", err)
 		os.Exit(1)
 	}
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
+	port := cfg.Port
 
 	// 3. Setup Dependencies
 	// AI Client (Mock for Phase 4)

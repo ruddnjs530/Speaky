@@ -20,6 +20,18 @@ async function startCamera() {
         localVideo.srcObject = localStream;
         log('Camera acquiring success');
         btnJoin.disabled = false;
+
+        // Late Publish Support
+        if (pc && pc.connectionState !== 'closed') {
+            localStream.getTracks().forEach(track => {
+                pc.addTrack(track, localStream);
+                // CRITICAL: Force direction update
+                pc.getTransceivers().forEach(t => {
+                    if (t.sender.track === track) t.direction = 'sendrecv';
+                });
+            });
+            negotiate();
+        }
     } catch (e) {
         log(`Camera Error: ${e.message}`);
     }
@@ -32,6 +44,18 @@ async function startScreenShare() {
         localVideo.srcObject = localStream;
         log('Screen Share acquiring success');
         btnJoin.disabled = false;
+
+        // Late Publish Support
+        if (pc && pc.connectionState !== 'closed') {
+            localStream.getTracks().forEach(track => {
+                pc.addTrack(track, localStream);
+                // CRITICAL: Force direction update
+                pc.getTransceivers().forEach(t => {
+                    if (t.sender.track === track) t.direction = 'sendrecv';
+                });
+            });
+            negotiate();
+        }
     } catch (e) {
         log(`Screen Share Error: ${e.message}`);
     }
@@ -69,7 +93,7 @@ async function joinRoom() {
                 log('Video Bitrate forced to 2.5 Mbps');
             }
         } else {
-            // Observer: Add RecvOnly Transceivers so we get an Offer requesting media
+            // Observer: Add RecvOnly Transceivers
             pc.addTransceiver('audio', { direction: 'recvonly' });
             pc.addTransceiver('video', { direction: 'recvonly' });
         }
@@ -142,5 +166,48 @@ async function joinRoom() {
     } catch (e) {
         log(`ERROR: ${e.message}`);
         btnJoin.disabled = false;
+    }
+}
+
+async function negotiate() {
+    if (!pc) return; // Not joined yet
+    log('Renegotiating...');
+
+    try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+
+        const roomId = document.getElementById('roomId').value;
+        const userId = document.getElementById('userId').value;
+
+        const response = await fetch('/api/renegotiate', {
+            method: 'POST',
+            body: JSON.stringify({
+                roomId: roomId,
+                userId: userId,
+                sdpOffer: offer.sdp
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`Renegotiate failed: ${response.status}`);
+        }
+
+        const data = await response.json();
+        log(`Received Renegotiation Answer. Type: ${data.sdpAnswer ? 'Found' : 'Missing'}`);
+        // Log m-lines for debugging
+        if (data.sdpAnswer) {
+            data.sdpAnswer.split('\r\n').forEach(l => {
+                if (l.startsWith('m=') || l.startsWith('a=direction') || l.startsWith('a=send') || l.startsWith('a=recv')) log(l);
+            });
+        }
+
+        await pc.setRemoteDescription(new RTCSessionDescription({
+            type: 'answer',
+            sdp: data.sdpAnswer
+        }));
+        log('Renegotiation complete');
+    } catch (e) {
+        log(`Renegotiation Error: ${e.message}`);
     }
 }

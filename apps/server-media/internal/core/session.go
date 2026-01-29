@@ -26,11 +26,12 @@ type Session struct {
 	cancel       context.CancelFunc
 	onClosed     func()               // Callback to notify Room when session ends
 	Synchronizer *media_sync.Synchronizer // Manages AV sync for this session's ingest
+	Role         string               // "host" or "guest"
 }
 
 // NewSession creates a new session for a participant.
 // It registers event handlers (OnTrack, OnICEConnectionStateChange) before SDP exchange.
-func NewSession(id string, room *Room, pc *webrtc.PeerConnection, onClosed func()) *Session {
+func NewSession(id string, role string, room *Room, pc *webrtc.PeerConnection, onClosed func()) *Session {
 	ctx, cancel := context.WithCancel(room.ctx)
 
 	session := &Session{
@@ -42,6 +43,7 @@ func NewSession(id string, room *Room, pc *webrtc.PeerConnection, onClosed func(
 		cancel:       cancel,
 		Synchronizer: media_sync.NewSynchronizer(),
 		onClosed:     onClosed,
+		Role:         role,
 	}
 
 	// Register OnTrack handler to forward incoming tracks to the room
@@ -50,9 +52,16 @@ func NewSession(id string, room *Room, pc *webrtc.PeerConnection, onClosed func(
 	pc.OnTrack(func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 		slog.Info("Track received",
 			"sessionID", id,
+			"role", role,
 			"trackID", track.ID(),
 			"kind", track.Kind().String(),
 		)
+
+		// ENFORCE ROLE: Only "host" can publish
+		if role != "host" {
+			slog.Warn("Guest attempted to publish track, ignoring", "userID", id)
+			return
+		}
 
 		// Forward track to room for broadcasting (will be implemented in room.go)
 		if err := room.BroadcastTrack(id, track, session.ctx); err != nil {
@@ -108,6 +117,41 @@ func (s *Session) HandleOffer(offerSDP string) (string, error) {
 		SDP:  offerSDP,
 	}); err != nil {
 		return "", fmt.Errorf("failed to set remote description: %w", err)
+	}
+
+	// SSRC Allocation Strategy for Guests:
+	// Inject "Dummy" (Silent/Black) tracks into the PeerConnection.
+	// This forces Pion to allocate SSRCs and include them in the SDP Answer.
+	// Without this, the SDP Answer would have no SSRC information for the empty slots,
+	// causing the Client to drop future incoming media packets from the Host.
+	slog.Info("HandleOffer: Injecting dummy tracks to ensure SSRC allocation", "role", s.Role)
+
+	if s.Role == "guest" {
+		// Audio Dummy (Opus)
+		audioCap := webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus}
+		dummyAudio, err := webrtc.NewTrackLocalStaticRTP(audioCap, "dummy-audio", "dummy-stream")
+		if err != nil {
+			slog.Warn("Failed to create dummy audio", "error", err)
+		} else {
+			if _, err := s.pc.AddTrack(dummyAudio); err != nil {
+				slog.Warn("Failed to add dummy audio track", "error", err)
+			} else {
+				slog.Debug("Added dummy audio track")
+			}
+		}
+
+		// Video Dummy (VP8)
+		videoCap := webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8}
+		dummyVideo, err := webrtc.NewTrackLocalStaticRTP(videoCap, "dummy-video", "dummy-stream")
+		if err != nil {
+			slog.Warn("Failed to create dummy video", "error", err)
+		} else {
+			if _, err := s.pc.AddTrack(dummyVideo); err != nil {
+				slog.Warn("Failed to add dummy video track", "error", err)
+			} else {
+				slog.Debug("Added dummy video track")
+			}
+		}
 	}
 
 	// Create answer

@@ -20,13 +20,15 @@ service ControlService {
 
   // 4. Leave Room & Resource Cleanup
   // Corresponds to SC's ClosePeer
-  rpc LeaveRoom(LeaveRoomRequest) returns (LeaveRoomResponse);
+  // 5. Renegotiate (Add tracks after joining)
+  rpc Renegotiate(RenegotiateRequest) returns (RenegotiateResponse);
 }
 
 // --- Messages ---
 
 message CreateRoomRequest {
   string host_id = 1;
+  string room_id = 2;
 }
 
 message CreateRoomResponse {
@@ -41,6 +43,16 @@ message JoinRoomRequest {
 
 message JoinRoomResponse {
   string sdp_answer = 1;
+}
+
+message RenegotiateRequest {
+    string room_id = 1;
+    string user_id = 2;
+    string sdp_offer = 3;
+}
+
+message RenegotiateResponse {
+    string sdp_answer = 1;
 }
 
 message SubmitIceCandidateRequest {
