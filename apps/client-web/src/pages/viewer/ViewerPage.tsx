@@ -6,7 +6,10 @@ import Button from '../../shared/ui/Button';
 import Modal from '../../shared/ui/Modal';
 import { useScreenShare } from '../../features/screenShare/model/useScreenShare';
 import { sessionApi } from '../../features/session/api/sessionApi';
+import { getErrorCode, getErrorMessage } from '../../shared/lib/errorUtils';
+
 import './ViewerPage.css';
+
 type JoinUiState =
   | { kind: 'idle' }
   | { kind: 'joining' }
@@ -36,20 +39,7 @@ function joinReducer(_state: JoinUiState, action: JoinAction): JoinUiState {
       return { kind: 'idle' };
   }
 }
-function getErrorCode(e: unknown): string | undefined {
-  if (typeof e === 'object' && e !== null && 'code' in e) {
-    const code = (e as { code?: unknown }).code;
-    return typeof code === 'string' ? code : undefined;
-  }
-  return undefined;
-}
-function getErrorMessage(e: unknown): string | undefined {
-  if (typeof e === 'object' && e !== null && 'message' in e) {
-    const msg = (e as { message?: unknown }).message;
-    return typeof msg === 'string' ? msg : undefined;
-  }
-  return undefined;
-}
+
 export default function ViewerPage() {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();

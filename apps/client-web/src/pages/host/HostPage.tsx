@@ -16,6 +16,7 @@ import HealthBadgesPanel from '../../features/host/ui/HealthBadgesPanel';
 import { usePrecheckModel } from '../../features/host/hooks/usePrecheckModel';
 import { useNavigate } from 'react-router-dom';
 import Modal from '../../shared/ui/Modal';
+import { getErrorMessage } from '../../shared/lib/errorUtils';
 
 type Step = 'setup' | 'live';
 
@@ -111,7 +112,11 @@ export default function HostPage() {
       try {
         // 5. 방송 종료 (REST)
         await sessionApi.endBroadcast(sessionId);
-      } catch (e) { console.warn(e); }
+      } catch (e) {
+        // 헬퍼 함수를 사용해 에러 메시지 추출
+        const msg = getErrorMessage(e) || '알 수 없는 오류';
+        console.error(`방송 종료 실패: ${msg}`, e);
+      }
     }
     stopAll(); // WS 연결 해제
     setShowEndModal(true);
