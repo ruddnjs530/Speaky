@@ -5,7 +5,6 @@ import type {
   EnvelopeBase,
   SessionContext,
   SysAttach,
-  SysPong,
 } from "./protocol";
 import { parseEnvelope } from "./validate";
 import { newRequestId } from "./ids";
@@ -27,19 +26,11 @@ type Handlers = {
 export class SignalingClient {
   private client: Client | null = null;
   private hasSentAttach = false;
+  private hasConnectedOnce = false; // 첫 연결 vs 재연결 구분 플래그
 
   private lastWsUrl: string | null = null;
   private lastToken: string | null = null;
   private manualClose = false;
-  private reconnectAttempt = 0;
-
-  // STOMP가 ping/pong (heartbeat)을 처리하지만, 필요한 경우 앱 레벨의 핑을 유.
-  // 서버가 여전히 일부 로직을 위해 앱 레벨의 PONG을 의존할 수 있다고 가정하지만,
-  // 보통 STOMP 하트비트면 충분.
-  // 현재는 안전을 위해 앱 레벨의 핑 타이머를 명시적으로 유지.
-  // 사용자의 서버 코드 스니펫에서 하트비트에 관한 STOMP 설정 세부 정보가 없었기 때문.
-  // 따라서 원래 코드에 있던 명시적인 PING/PONG 로직을 안전을 위해 유지.
-  private pingTimer: number | null = null;
 
   private readonly ctx: SessionContext;
   private readonly handlers: Handlers;
@@ -68,17 +59,15 @@ export class SignalingClient {
     this.client = new Client({
       brokerURL,
       // 기본 하트비트: 수신 10000ms, 발신 10000ms
+      // 이 하트비트가 앱 레벨의 ping/pong을 대체합니다.
       heartbeatIncoming: 10000,
       heartbeatOutgoing: 10000,
       reconnectDelay: 5000,
 
       onConnect: () => {
         signalingTrace.pushWs("OPEN", "STOMP Connected");
-        this.reconnectAttempt = 0;
-        this.startPingPong();
 
         this.handlers.onOpen?.();
-
 
         // 채널 토픽 구독
         // 토픽: /topic/channel/{channelId}
@@ -87,11 +76,11 @@ export class SignalingClient {
         });
 
         // SYS_ATTACH 전송
-        // 재연결인 경우 resume = true 여야 한다.
-        // 하지만 STOMP 클라이언트가 내부적으로 재연결을 처리.
-        // 이것이 처음 시작인지 재연결인지 추적할 필요가 있을 수 있다.
-        // 간단함을 위해 항상 attach 로직 실행:
-        this.attach(false); // TODO: 중요하다면 resume 상태 감지 필요
+        // hasConnectedOnce 플래그를 사용하여 resume 여부 결정
+        const resume = this.hasConnectedOnce;
+        this.attach(resume);
+
+        this.hasConnectedOnce = true;
       },
 
       onStompError: (frame) => {
@@ -103,7 +92,6 @@ export class SignalingClient {
       onWebSocketClose: (evt) => {
         signalingTrace.pushWs("CLOSE", "STOMP WebSocket Closed");
         this.handlers.onClose?.(0, "STOMP_CLOSE");
-        this.clearPingPong();
       },
 
       onWebSocketError: (evt) => {
@@ -135,7 +123,6 @@ export class SignalingClient {
 
   close(code?: number, reason?: string) {
     this.manualClose = true;
-    this.clearPingPong();
     if (this.client) {
       this.client.deactivate();
       this.client = null;
@@ -153,7 +140,6 @@ export class SignalingClient {
 
     // 만약 서버가 보낸 사람에게도 모든 것을 브로드캐스트한다면 자신의 메시지는 필터링
     if (env.from?.clientId === this.ctx.clientId) {
-      // 반사된 자신의 메시지 무시
       return;
     }
 
@@ -163,40 +149,9 @@ export class SignalingClient {
     const inbound = this.tryDecodeInbound(env);
     if (!inbound) return;
 
-    if (inbound.type === "SYS_PING") {
-      const seq = (inbound as any).payload?.seq;
-      if (typeof seq === "number") this.sendPong(seq);
-    }
+    // 앱 레벨 PING/PONG 로직 제거됨 (STOMP 하트비트 사용)
 
     this.handlers.onInbound?.(inbound);
-  }
-
-  private startPingPong() {
-    this.clearPingPong();
-
-    // 앱 레벨 핑 (STOMP 하트비트가 사용되면 선택 사항이지만, 프로토콜 호환성을 위해 유지)
-    this.pingTimer = window.setInterval(() => {
-      if (!this.client?.connected) return;
-      if (!this.hasSentAttach) return;
-
-      try {
-        const seq = Date.now();
-        const ping = this.build("SYS_PING", { seq }) as any;
-        this.sendRaw(ping, { requireAttachFirst: true });
-      } catch { }
-    }, 15000);
-  }
-
-  private clearPingPong() {
-    if (this.pingTimer) {
-      window.clearInterval(this.pingTimer);
-      this.pingTimer = null;
-    }
-  }
-
-  private sendPong(seq: number) {
-    const pong = this.build("SYS_PONG", { seq }) as SysPong;
-    this.sendRaw(pong, { requireAttachFirst: true });
   }
 
   private sendRaw(env: AnyOutbound, opt: { requireAttachFirst: boolean }) {
@@ -205,7 +160,6 @@ export class SignalingClient {
     }
 
     if (opt.requireAttachFirst && !this.hasSentAttach) {
-      // opt 체크에 의해 처리되므로 메시지가 attach 메시지 자체라면 전송 허용
       console.warn("PROTOCOL_VIOLATION: Attach first");
     }
 
