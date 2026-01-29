@@ -18,6 +18,13 @@ public class CreateSessionRequest {
     private Long hostUserId;
     
     /**
+     * 채널 ID (필수)
+     * 예: "ch_user_faker"
+     */
+    @NotBlank(message = "Channel ID is required")
+    private String channelId;
+    
+    /**
      * 음성 모델 ID
      */
     @NotNull(message = "Voice model ID is required")

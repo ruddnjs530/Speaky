@@ -37,11 +37,12 @@ public class SessionController {
     public ResponseEntity<SessionResponse> createSession(
             @Valid @RequestBody CreateSessionRequest request) {
         
-        log.info("Creating session: hostUserId={}, title={}", 
-                request.getHostUserId(), request.getTitle());
+        log.info("Creating session: hostUserId={}, channelId={}, title={}", 
+                request.getHostUserId(), request.getChannelId(), request.getTitle());
         
         var session = sessionService.createSession(
                 request.getHostUserId(),
+                request.getChannelId(),
                 request.getVoiceModelId(),
                 request.getTitle()
         );
