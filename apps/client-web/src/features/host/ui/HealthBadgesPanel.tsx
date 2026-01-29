@@ -4,18 +4,28 @@ import type { HealthState } from "../hooks/usePrecheckModel.ts";
 import "./HealthBadgesPanel.css";
 
 interface Props {
-    health: HealthState;
+    health?: HealthState;       // Optional로 변경하여 유연하게 사용
+    viewers?: number | string; // 시청자 수
 }
 
-export default function HealthBadgesPanel({ health }: Props) {
+export default function HealthBadgesPanel({ health, viewers }: Props) {
+    // health가 없을 경우 기본값 처리
+
+    const safeHealth = health || {
+        mic: "unknown",
+        level: "unknown",
+        network: "unknown",
+        ai: "unknown",
+    } as HealthState;
+
     return (
-        // TODO : 네트워크/AI는 다음 주 연동)
         <Card title="상태 표시">
             <div className="healthBadges">
-                <Badge label="MIC" value={health.mic} />
-                <Badge label="LEVEL" value={health.level} />
-                <Badge label="NETWORK" value={health.network} />
-                <Badge label="AI" value={health.ai} />
+                <Badge label="VIEWERS" value={viewers ?? "-"} />
+                <Badge label="MIC" value={safeHealth.mic} />
+                <Badge label="LEVEL" value={safeHealth.level} />
+                <Badge label="NETWORK" value={safeHealth.network} />
+                <Badge label="AI" value={safeHealth.ai} />
             </div>
 
             <p className="healthBadges__note">

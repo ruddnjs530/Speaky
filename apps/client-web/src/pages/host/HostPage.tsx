@@ -12,6 +12,7 @@ import { getAccessToken } from '../../shared/lib/authToken';
 import { sessionApi } from '../../features/session/api/sessionApi';
 
 import './HostPage.css';
+import HealthBadgesPanel from '../../features/host/ui/HealthBadgesPanel';
 
 type Step = 'setup' | 'live';
 
@@ -170,6 +171,18 @@ export default function HostPage() {
           title="송출 화면(서버 출력)"
           muted={false}
         />
+
+        <div style={{ marginTop: '1rem' }}>
+          <HealthBadgesPanel
+            viewers="집계 중"
+            health={{
+              mic: "ok",      // 실제 스트림은 useScreenShare 등에서 관리되므로 여기선 표시만 함
+              level: "ok",
+              network: "unknown",
+              ai: "unknown"
+            }}
+          />
+        </div>
 
       </div>
     </div>
