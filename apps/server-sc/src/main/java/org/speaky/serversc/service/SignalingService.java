@@ -43,7 +43,7 @@ public class SignalingService {
      * - 세션 존재 여부
      * - 세션 상태 (LIVE만 허용)
      * 
-     * 응답: SYS_ATTACHED
+     * 응답: SYS_ACK
      * 
      * @param envelope 클라이언트 메시지
      * @param headerAccessor WebSocket 세션 정보
@@ -68,10 +68,10 @@ public class SignalingService {
         headerAccessor.getSessionAttributes().put("sessionId", sessionId);
         headerAccessor.getSessionAttributes().put("role", envelope.getFrom().getRole());
         
-        // SYS_ATTACHED 응답
+        // SYS_ACK 응답 (프론트엔드 protocol.ts 규격)
         Envelope response = Envelope.builder()
                 .v(PROTOCOL_VERSION)
-                .type("SYS_ATTACHED")
+                .type("SYS_ACK")
                 .requestId(envelope.getRequestId())
                 .ts(System.currentTimeMillis())
                 .channelId(envelope.getChannelId())
@@ -80,14 +80,10 @@ public class SignalingService {
                         .role(SERVER_ROLE)
                         .clientId(SERVER_CLIENT_ID)
                         .build())
-                .payload(Map.of(
-                        "sessionId", session.getSessionId(),
-                        "status", session.getStatus().name(),
-                        "title", session.getTitle()
-                ))
+                .payload(Map.of("status", "OK"))
                 .build();
         
-        String destination = "/topic/session/" + sessionId;
+        String destination = "/topic/channel/" + envelope.getChannelId();
         messagingTemplate.convertAndSend(destination, response);
         
         log.info("Client attached: sessionId={}, clientId={}, role={}", 
@@ -125,7 +121,7 @@ public class SignalingService {
                 ))
                 .build();
         
-        String destination = "/topic/session/" + envelope.getSessionId();
+        String destination = "/topic/channel/" + envelope.getChannelId();
         messagingTemplate.convertAndSend(destination, response);
         
         log.info("Sent mock SIG_ANSWER: sessionId={}", envelope.getSessionId());
@@ -183,7 +179,7 @@ public class SignalingService {
                 ))
                 .build();
         
-        String destination = "/topic/session/" + originalEnvelope.getSessionId();
+        String destination = "/topic/channel/" + originalEnvelope.getChannelId();
         messagingTemplate.convertAndSend(destination, errorResponse);
         
         log.warn("Sent error: sessionId={}, code={}, message={}", 
