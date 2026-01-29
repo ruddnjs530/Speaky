@@ -97,6 +97,7 @@ func main() {
 	slog.Info("Shutting down server...")
 	grpcServer.GracefulStop()
 
-	// TODO: Clean up Manager resources (loop over rooms -> close)
+	// Clean up Manager resources (Close all rooms/sessions)
+	manager.Close()
 	slog.Info("Server stopped")
 }

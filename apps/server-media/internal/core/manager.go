@@ -144,3 +144,18 @@ func (m *Manager) Leave(roomID, userID string) error {
 	}
 	return room.Leave(userID)
 }
+
+// Close shuts down the manager and all active rooms.
+func (m *Manager) Close() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	slog.Info("Shutting down Room Manager", "rooms", len(m.rooms))
+	for id, room := range m.rooms {
+		if err := room.Close(); err != nil {
+			slog.Warn("Failed to close room", "roomID", id, "error", err)
+		}
+	}
+	// Clear map
+	m.rooms = make(map[string]*Room)
+}

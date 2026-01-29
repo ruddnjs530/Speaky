@@ -88,14 +88,48 @@ func NewSession(id string, role string, room *Room, pc *webrtc.PeerConnection, o
 		}
 	})
 
+	// Cleanup Timer for Zombie Sessions (Disconnected state)
+	var disconnectTimer *time.Timer
+	var mu sync.Mutex // Protect timer access
+
 	// Register ICE connection state handler
 	pc.OnICEConnectionStateChange(func(state webrtc.ICEConnectionState) {
 		msg := fmt.Sprintf("ICE Connection State changed: %s", state.String())
 
+		mu.Lock()
+		defer mu.Unlock()
+
 		switch state {
-		case webrtc.ICEConnectionStateFailed, webrtc.ICEConnectionStateDisconnected, webrtc.ICEConnectionStateClosed:
+		case webrtc.ICEConnectionStateDisconnected:
+			slog.Warn(msg, "sessionID", id, "action", "starting cleanup timer")
+			// Start cleanup timer (30s)
+			if disconnectTimer != nil {
+				disconnectTimer.Stop()
+			}
+			disconnectTimer = time.AfterFunc(30*time.Second, func() {
+				slog.Info("Session disconnected timeout, cleaning up", "sessionID", id)
+				if session.onClosed != nil {
+					session.onClosed()
+				}
+			})
+
+		case webrtc.ICEConnectionStateConnected, webrtc.ICEConnectionStateCompleted:
+			slog.Info(msg, "sessionID", id)
+			// Connection recovered, stop timer
+			if disconnectTimer != nil {
+				disconnectTimer.Stop()
+				disconnectTimer = nil
+				slog.Info("Session reconnected, cleanup timer cancelled", "sessionID", id)
+			}
+
+		case webrtc.ICEConnectionStateFailed, webrtc.ICEConnectionStateClosed:
 			slog.Warn(msg, "sessionID", id)
-			// Trigger cleanup if the connection is dead
+			// Stop timer if it exists (cleanup will happen anyway)
+			if disconnectTimer != nil {
+				disconnectTimer.Stop()
+				disconnectTimer = nil
+			}
+			// Trigger cleanup immediately
 			if state == webrtc.ICEConnectionStateFailed || state == webrtc.ICEConnectionStateClosed {
 				if session.onClosed != nil {
 					go session.onClosed()
