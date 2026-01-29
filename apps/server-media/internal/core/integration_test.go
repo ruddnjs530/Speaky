@@ -28,8 +28,8 @@ func TestIntegration_BroadcastTrack_SubscriberManagement(t *testing.T) {
 	require.NoError(t, err)
 	defer pc2.Close()
 
-	session1 := NewSession("guest-1", room, pc1)
-	session2 := NewSession("guest-2", room, pc2)
+	session1 := NewSession("guest-1", room, pc1, nil)
+	session2 := NewSession("guest-2", room, pc2, nil)
 
 	room.mu.Lock()
 	room.sessions["guest-1"] = session1
@@ -57,7 +57,7 @@ func TestIntegration_Leave_SubscriberCleanup(t *testing.T) {
 	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{})
 	require.NoError(t, err)
 
-	session := NewSession("user-1", room, pc)
+	session := NewSession("user-1", room, pc, nil)
 	room.mu.Lock()
 	room.sessions["user-1"] = session
 	room.mu.Unlock()
@@ -121,7 +121,7 @@ func TestIntegration_OwnerLeave_TrackRemoval(t *testing.T) {
 	hostPC, err := webrtc.NewPeerConnection(webrtc.Configuration{})
 	require.NoError(t, err)
 
-	hostSession := NewSession("host", room, hostPC)
+	hostSession := NewSession("host", room, hostPC, nil)
 	room.mu.Lock()
 	room.sessions["host"] = hostSession
 	room.mu.Unlock()
@@ -178,7 +178,7 @@ func TestIntegration_Join_Basic(t *testing.T) {
 	defer pc.Close()
 
 	room.mu.Lock()
-	room.sessions["existing-user"] = NewSession("existing-user", room, pc)
+	room.sessions["existing-user"] = NewSession("existing-user", room, pc, nil)
 	room.mu.Unlock()
 
 	// Try to Join with same ID (should fail with duplicate error)

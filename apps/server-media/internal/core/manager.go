@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"log/slog"
 	"sync"
 
 	"speaky-media/internal/config"
@@ -45,6 +46,11 @@ func (m *Manager) CreateRoom(roomID string) (*Room, error) {
 	}
 
 	room := NewRoom(roomID, m.cfg, m.api, m.aiClient, m.voiceProcessor)
+	// Auto-destruction when empty
+	room.OnEmpty = func() {
+		slog.Info("Room empty, destroying", "roomID", roomID)
+		_ = m.DeleteRoom(roomID)
+	}
 	m.rooms[roomID] = room
 
 	return room, nil
@@ -70,11 +76,12 @@ func (m *Manager) DeleteRoom(roomID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if _, exists := m.rooms[roomID]; !exists {
+	if room, exists := m.rooms[roomID]; exists {
+		room.Close() // Ensure resources are freed
+		delete(m.rooms, roomID)
+	} else {
 		return fmt.Errorf("%w: %s", ErrRoomNotFound, roomID)
 	}
-
-	delete(m.rooms, roomID)
 	return nil
 }
 
@@ -100,6 +107,11 @@ func (m *Manager) GetOrCreateRoom(roomID string) (*Room, error) {
 	}
 
 	room = NewRoom(roomID, m.cfg, m.api, m.aiClient, m.voiceProcessor)
+	// Auto-destruction when empty
+	room.OnEmpty = func() {
+		slog.Info("Room empty, destroying", "roomID", roomID)
+		_ = m.DeleteRoom(roomID)
+	}
 	m.rooms[roomID] = room
 
 	return room, nil

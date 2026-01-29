@@ -119,7 +119,7 @@ func TestRoom_Join_Duplicate(t *testing.T) {
 	require.NoError(t, err)
 	defer pc.Close()
 
-	session := NewSession("user-1", room, pc)
+	session := NewSession("user-1", room, pc, nil)
 	room.mu.Lock()
 	room.sessions["user-1"] = session
 	room.mu.Unlock()
@@ -141,7 +141,7 @@ func TestRoom_Leave(t *testing.T) {
 	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{})
 	require.NoError(t, err)
 
-	session := NewSession("user-1", room, pc)
+	session := NewSession("user-1", room, pc, nil)
 	room.mu.Lock()
 	room.sessions["user-1"] = session
 	room.mu.Unlock()
@@ -193,7 +193,7 @@ func TestRoom_Concurrency(t *testing.T) {
 			}
 			defer pc.Close()
 
-			session := NewSession(userID, room, pc)
+			session := NewSession(userID, room, pc, nil)
 
 			// Add session
 			room.mu.Lock()

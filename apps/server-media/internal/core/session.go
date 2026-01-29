@@ -24,12 +24,13 @@ type Session struct {
 	mu           sync.Mutex
 	ctx          context.Context
 	cancel       context.CancelFunc
+	onClosed     func()               // Callback to notify Room when session ends
 	Synchronizer *media_sync.Synchronizer // Manages AV sync for this session's ingest
 }
 
 // NewSession creates a new session for a participant.
 // It registers event handlers (OnTrack, OnICEConnectionStateChange) before SDP exchange.
-func NewSession(id string, room *Room, pc *webrtc.PeerConnection) *Session {
+func NewSession(id string, room *Room, pc *webrtc.PeerConnection, onClosed func()) *Session {
 	ctx, cancel := context.WithCancel(room.ctx)
 
 	session := &Session{
@@ -40,6 +41,7 @@ func NewSession(id string, room *Room, pc *webrtc.PeerConnection) *Session {
 		ctx:          ctx,
 		cancel:       cancel,
 		Synchronizer: media_sync.NewSynchronizer(),
+		onClosed:     onClosed,
 	}
 
 	// Register OnTrack handler to forward incoming tracks to the room
@@ -82,10 +84,14 @@ func NewSession(id string, room *Room, pc *webrtc.PeerConnection) *Session {
 		msg := fmt.Sprintf("ICE Connection State changed: %s", state.String())
 
 		switch state {
-		case webrtc.ICEConnectionStateFailed, webrtc.ICEConnectionStateDisconnected:
+		case webrtc.ICEConnectionStateFailed, webrtc.ICEConnectionStateDisconnected, webrtc.ICEConnectionStateClosed:
 			slog.Warn(msg, "sessionID", id)
-		case webrtc.ICEConnectionStateClosed:
-			slog.Debug(msg, "sessionID", id)
+			// Trigger cleanup if the connection is dead
+			if state == webrtc.ICEConnectionStateFailed || state == webrtc.ICEConnectionStateClosed {
+				if session.onClosed != nil {
+					go session.onClosed()
+				}
+			}
 		default:
 			slog.Info(msg, "sessionID", id)
 		}

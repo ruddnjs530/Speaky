@@ -33,6 +33,7 @@ type Room struct {
 	cancel         context.CancelFunc
 	aiClient       ai.Client
 	voiceProcessor upstream.VoiceProcessor
+	OnEmpty        func() // Callback when room becomes empty
 }
 
 // Subscriber represents a participant subscribed to a track.
@@ -59,6 +60,12 @@ type ActiveTrack struct {
 	processorInput chan pipeline.RTPPacket
 }
 
+// RoomStats provides metrics about the room.
+type RoomStats struct {
+	SessionCount int
+	TrackCount   int
+}
+
 // NewRoom creates a new room with the given ID.
 func NewRoom(id string, cfg *config.Config, api *webrtc.API, aiClient ai.Client, voiceProcessor upstream.VoiceProcessor) *Room {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -73,6 +80,16 @@ func NewRoom(id string, cfg *config.Config, api *webrtc.API, aiClient ai.Client,
 		cancel:         cancel,
 		aiClient:       aiClient,
 		voiceProcessor: voiceProcessor,
+	}
+}
+
+// Stats returns current room statistics.
+func (r *Room) Stats() RoomStats {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return RoomStats{
+		SessionCount: len(r.sessions),
+		TrackCount:   len(r.activeTracks),
 	}
 }
 
@@ -241,7 +258,12 @@ func (r *Room) Join(userID, offerSDP string) (string, error) {
 	}
 
 	// 3. Create Session wrapper
-	session := NewSession(userID, r, pc)
+	onSessionClosed := func() {
+		if err := r.Leave(userID); err != nil {
+			slog.Warn("Failed to remove session on close", "userID", userID, "error", err)
+		}
+	}
+	session := NewSession(userID, r, pc, onSessionClosed)
 
 	// 4. Subscribe to existing tracks (Late Joiner support)
 	for _, activeTrack := range r.activeTracks {
@@ -313,6 +335,7 @@ func (r *Room) Leave(userID string) error {
 	r.mu.Unlock()
 
 	// Close session (outside lock to avoid blocking)
+	// Close session (outside lock to avoid blocking)
 	if err := session.Close(); err != nil {
 		slog.Warn("Error closing session", "userID", userID, "error", err)
 	}
@@ -322,6 +345,11 @@ func (r *Room) Leave(userID string) error {
 		"userID", userID,
 		"remainingSessions", remainingSessions,
 	)
+
+	// Check if room is empty and trigger callback
+	if remainingSessions == 0 && r.OnEmpty != nil {
+		r.OnEmpty()
+	}
 
 	return nil
 }
@@ -486,8 +514,11 @@ func (r *Room) Close() error {
 	r.cancel()
 
 	// TODO: Close individual sessions when Session.Close() is implemented
+	// Close all sessions
 	for _, session := range r.sessions {
-		_ = session // Placeholder for future session.Close()
+		if err := session.Close(); err != nil {
+			slog.Warn("Failed to close session during room close", "error", err)
+		}
 	}
 
 	return nil

@@ -25,7 +25,7 @@ func TestSession_New(t *testing.T) {
 	defer pc.Close()
 
 	// Create session
-	session := NewSession("user-1", room, pc)
+	session := NewSession("user-1", room, pc, nil)
 
 	// Verify session is created
 	require.NotNil(t, session)
@@ -55,7 +55,7 @@ func TestSession_Close(t *testing.T) {
 	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{})
 	require.NoError(t, err)
 
-	session := NewSession("user-1", room, pc)
+	session := NewSession("user-1", room, pc, nil)
 
 	// Verify context is active
 	select {
@@ -88,7 +88,7 @@ func TestSession_ContextInheritance(t *testing.T) {
 	require.NoError(t, err)
 	defer pc.Close()
 
-	session := NewSession("user-1", room, pc)
+	session := NewSession("user-1", room, pc, nil)
 
 	// Verify session context is active
 	select {
@@ -122,7 +122,7 @@ func TestSession_AddLocalTrack(t *testing.T) {
 	require.NoError(t, err)
 	defer pc.Close()
 
-	session := NewSession("user-1", room, pc)
+	session := NewSession("user-1", room, pc, nil)
 	defer session.Close()
 
 	// Create a mock local track
@@ -156,7 +156,7 @@ func TestSession_RemoveLocalTrack(t *testing.T) {
 	require.NoError(t, err)
 	defer pc.Close()
 
-	session := NewSession("user-1", room, pc)
+	session := NewSession("user-1", room, pc, nil)
 	defer session.Close()
 
 	// Create and add track
