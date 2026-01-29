@@ -17,7 +17,7 @@ import (
 
 // Config
 const (
-	gRPCAddr = "localhost:8080"
+	gRPCAddr = "localhost:8081"
 	httpPort = "9090"
 )
 
@@ -63,7 +63,8 @@ func main() {
 		// `manager.Join` checks existence generally.
 		// Let's call CreateRoom first just in case to be safe!
 		_, err = client.CreateRoom(context.Background(), &pb.CreateRoomRequest{
-			HostId: req.RoomID, // Use RoomID as HostID so Server creates logic properly
+			HostId: req.UserID, // Use UserID as HostID so the creator is the host
+			RoomId: req.RoomID, // Use explicit RoomID
 		})
 		if err != nil {
 			log.Printf("CreateRoom warning (might exist): %v", err)
@@ -81,6 +82,48 @@ func main() {
 		if err != nil {
 			log.Printf("JoinRoom failed: %v", err)
 			http.Error(w, fmt.Sprintf("JoinRoom failed: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		// Return Answer
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{
+			"sdpAnswer": resp.SdpAnswer,
+		})
+	})
+
+	http.HandleFunc("/api/renegotiate", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Read Request
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "Failed to read body", http.StatusBadRequest)
+			return
+		}
+
+		var req struct {
+			RoomID   string `json:"roomId"`
+			UserID   string `json:"userId"`
+			SDPOffer string `json:"sdpOffer"`
+		}
+		if err := json.Unmarshal(body, &req); err != nil {
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+
+		// Call gRPC Renegotiate
+		resp, err := client.Renegotiate(context.Background(), &pb.RenegotiateRequest{
+			RoomId:   req.RoomID,
+			UserId:   req.UserID,
+			SdpOffer: req.SDPOffer,
+		})
+		if err != nil {
+			log.Printf("Renegotiate failed: %v", err)
+			http.Error(w, fmt.Sprintf("Renegotiate failed: %v", err), http.StatusInternalServerError)
 			return
 		}
 

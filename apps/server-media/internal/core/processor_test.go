@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"speaky-media/internal/config"
 	"speaky-media/internal/pipeline"
 	"speaky-media/internal/transcode"
 	"speaky-media/internal/upstream"
@@ -21,7 +22,12 @@ func TestAudioProcessor_EndToEnd(t *testing.T) {
 
 	// 2. Setup AudioProcessor
 	outQueue := pipeline.NewQueue[pipeline.RTPPacket](10)
-	processor, err := NewAudioProcessor(mockClient, outQueue)
+	processor, err := NewAudioProcessor(&config.Config{
+		AudioSampleRate:    48000,
+		AudioChannels:      1,
+		AIBufferDuration:   20,
+		AudioFrameDuration: 20,
+	}, mockClient, outQueue)
 	require.NoError(t, err)
 
 	// 3. Create Input Channel

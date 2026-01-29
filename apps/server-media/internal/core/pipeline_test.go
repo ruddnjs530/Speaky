@@ -25,7 +25,7 @@ func TestPhase3_Pipeline_AudioFlow(t *testing.T) {
 	mockAI := &ai.MockClient{}
 
 	// Create Room
-	room := NewRoom("pipeline-test-room", cfg, api, mockAI, nil)
+	room := NewRoom("pipeline-test-room", "host", cfg, api, mockAI, nil)
 	defer room.Close()
 
 	// 2a. Setup Synchronizer (Mock Session context)

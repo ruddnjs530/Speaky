@@ -13,13 +13,51 @@ function log(msg) {
 let pc;
 let localStream;
 
+async function updateTracks(newStream) {
+    if (!pc || pc.connectionState === 'closed') return; // Early return if no connection
+
+    const senders = pc.getSenders();
+    let negotiationNeeded = false;
+
+    for (const track of newStream.getTracks()) {
+        const sender = senders.find(s => s.track && s.track.kind === track.kind);
+        if (sender) {
+            log(`Replacing ${track.kind} track...`);
+            await sender.replaceTrack(track);
+            // Ensure direction is sendrecv
+            const transceiver = pc.getTransceivers().find(t => t.sender === sender);
+            if (transceiver) transceiver.direction = 'sendrecv';
+        } else {
+            log(`Adding new ${track.kind} track...`);
+            pc.addTrack(track, newStream);
+            negotiationNeeded = true;
+            // Force direction for new transceivers
+            pc.getTransceivers().forEach(t => {
+                if (t.sender.track === track) t.direction = 'sendrecv';
+            });
+        }
+    }
+
+    if (negotiationNeeded) {
+        negotiate();
+    }
+}
+
 async function startCamera() {
     try {
-        if (localStream) localStream.getTracks().forEach(t => t.stop());
+        if (localStream) {
+            // Stop existing tracks to release hardware
+            localStream.getTracks().forEach(t => t.stop());
+        }
         localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         localVideo.srcObject = localStream;
         log('Camera acquiring success');
         btnJoin.disabled = false;
+
+        // Dynamic Switch Support
+        if (pc && pc.connectionState !== 'closed') {
+            await updateTracks(localStream);
+        }
     } catch (e) {
         log(`Camera Error: ${e.message}`);
     }
@@ -27,11 +65,18 @@ async function startCamera() {
 
 async function startScreenShare() {
     try {
-        if (localStream) localStream.getTracks().forEach(t => t.stop());
+        if (localStream) {
+            localStream.getTracks().forEach(t => t.stop());
+        }
         localStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
         localVideo.srcObject = localStream;
         log('Screen Share acquiring success');
         btnJoin.disabled = false;
+
+        // Dynamic Switch Support
+        if (pc && pc.connectionState !== 'closed') {
+            await updateTracks(localStream);
+        }
     } catch (e) {
         log(`Screen Share Error: ${e.message}`);
     }
@@ -69,7 +114,7 @@ async function joinRoom() {
                 log('Video Bitrate forced to 2.5 Mbps');
             }
         } else {
-            // Observer: Add RecvOnly Transceivers so we get an Offer requesting media
+            // Observer: Add RecvOnly Transceivers
             pc.addTransceiver('audio', { direction: 'recvonly' });
             pc.addTransceiver('video', { direction: 'recvonly' });
         }
@@ -144,3 +189,52 @@ async function joinRoom() {
         btnJoin.disabled = false;
     }
 }
+
+async function negotiate() {
+    if (!pc) return; // Not joined yet
+    log('Renegotiating...');
+
+    try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+
+        const roomId = document.getElementById('roomId').value;
+        const userId = document.getElementById('userId').value;
+
+        const response = await fetch('/api/renegotiate', {
+            method: 'POST',
+            body: JSON.stringify({
+                roomId: roomId,
+                userId: userId,
+                sdpOffer: offer.sdp
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`Renegotiate failed: ${response.status}`);
+        }
+
+        const data = await response.json();
+        log(`Received Renegotiation Answer. Type: ${data.sdpAnswer ? 'Found' : 'Missing'}`);
+        // Log m-lines for debugging
+        if (data.sdpAnswer) {
+            data.sdpAnswer.split('\r\n').forEach(l => {
+                if (l.startsWith('m=') || l.startsWith('a=direction') || l.startsWith('a=send') || l.startsWith('a=recv')) log(l);
+            });
+        }
+
+        await pc.setRemoteDescription(new RTCSessionDescription({
+            type: 'answer',
+            sdp: data.sdpAnswer
+        }));
+        log('Renegotiation complete');
+    } catch (e) {
+        log(`Renegotiation Error: ${e.message}`);
+    }
+}
+
+// Auto-Randomize ID for Test Convenience
+window.onload = () => {
+    const randomSuffix = Math.floor(Math.random() * 10000);
+    document.getElementById('userId').value = `user-${randomSuffix.toString().padStart(4, '0')}`;
+};

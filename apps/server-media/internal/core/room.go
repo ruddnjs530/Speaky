@@ -24,6 +24,7 @@ import (
 // It manages participant sessions and broadcasts tracks.
 type Room struct {
 	ID             string
+	HostID         string // ID of the room creator/host
 	sessions       map[string]*Session
 	activeTracks   map[string]*ActiveTrack // Key is Track ID (not UserID), Value is the track info
 	mu             sync.RWMutex
@@ -33,6 +34,7 @@ type Room struct {
 	cancel         context.CancelFunc
 	aiClient       ai.Client
 	voiceProcessor upstream.VoiceProcessor
+	OnEmpty        func() // Callback when room becomes empty
 }
 
 // Subscriber represents a participant subscribed to a track.
@@ -59,12 +61,19 @@ type ActiveTrack struct {
 	processorInput chan pipeline.RTPPacket
 }
 
+// RoomStats provides metrics about the room.
+type RoomStats struct {
+	SessionCount int
+	TrackCount   int
+}
+
 // NewRoom creates a new room with the given ID.
-func NewRoom(id string, cfg *config.Config, api *webrtc.API, aiClient ai.Client, voiceProcessor upstream.VoiceProcessor) *Room {
+func NewRoom(id, hostID string, cfg *config.Config, api *webrtc.API, aiClient ai.Client, voiceProcessor upstream.VoiceProcessor) *Room {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Room{
 		ID:             id,
+		HostID:         hostID,
 		sessions:       make(map[string]*Session),
 		activeTracks:   make(map[string]*ActiveTrack),
 		cfg:            cfg,
@@ -73,6 +82,16 @@ func NewRoom(id string, cfg *config.Config, api *webrtc.API, aiClient ai.Client,
 		cancel:         cancel,
 		aiClient:       aiClient,
 		voiceProcessor: voiceProcessor,
+	}
+}
+
+// Stats returns current room statistics.
+func (r *Room) Stats() RoomStats {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return RoomStats{
+		SessionCount: len(r.sessions),
+		TrackCount:   len(r.activeTracks),
 	}
 }
 
@@ -241,7 +260,19 @@ func (r *Room) Join(userID, offerSDP string) (string, error) {
 	}
 
 	// 3. Create Session wrapper
-	session := NewSession(userID, r, pc)
+	onSessionClosed := func() {
+		if err := r.Leave(userID); err != nil {
+			slog.Warn("Failed to remove session on close", "userID", userID, "error", err)
+		}
+	}
+
+	// Determine Role based on HostID
+	role := "guest"
+	if userID == r.HostID {
+		role = "host"
+	}
+
+	session := NewSession(userID, role, r, pc, onSessionClosed)
 
 	// 4. Subscribe to existing tracks (Late Joiner support)
 	for _, activeTrack := range r.activeTracks {
@@ -280,6 +311,24 @@ func (r *Room) Join(userID, offerSDP string) (string, error) {
 	return answerSDP, nil
 }
 
+// Renegotiate handles an SDP offer from an existing participant (e.g. adding a track)
+func (r *Room) Renegotiate(userID string, offerSDP string) (string, error) {
+	r.mu.RLock()
+	session, exists := r.sessions[userID]
+	r.mu.RUnlock()
+
+	if !exists {
+		return "", fmt.Errorf("%w: %s", ErrSessionNotFound, userID)
+	}
+
+	answerSDP, err := session.HandleOffer(offerSDP)
+	if err != nil {
+		return "", fmt.Errorf("failed to handle offer: %w", err)
+	}
+
+	return answerSDP, nil
+}
+
 // Leave removes a participant from the room and cleans up resources.
 func (r *Room) Leave(userID string) error {
 	r.mu.Lock()
@@ -291,6 +340,9 @@ func (r *Room) Leave(userID string) error {
 	}
 
 	// Remove from sessions map
+	// CRITICAL: Deleting from the map effectively transfers ownership.
+	// Future calls to Room.Close() (triggered by OnEmpty) will iterate the map
+	// and will NOT find this session, preventing double-close.
 	delete(r.sessions, userID)
 
 	// Remove this user from all track subscribers and clean up owned tracks
@@ -313,6 +365,7 @@ func (r *Room) Leave(userID string) error {
 	r.mu.Unlock()
 
 	// Close session (outside lock to avoid blocking)
+	// Close session (outside lock to avoid blocking)
 	if err := session.Close(); err != nil {
 		slog.Warn("Error closing session", "userID", userID, "error", err)
 	}
@@ -322,6 +375,11 @@ func (r *Room) Leave(userID string) error {
 		"userID", userID,
 		"remainingSessions", remainingSessions,
 	)
+
+	// Check if room is empty and trigger callback
+	if remainingSessions == 0 && r.OnEmpty != nil {
+		r.OnEmpty()
+	}
 
 	return nil
 }
@@ -339,10 +397,37 @@ func (r *Room) subscribeToTrack(session *Session, activeTrack *ActiveTrack) erro
 		return fmt.Errorf("failed to create local track: %w", err)
 	}
 
-	// Add track to subscriber's PeerConnection
-	sender, err := session.pc.AddTrack(localTrack)
-	if err != nil {
-		return fmt.Errorf("failed to add track to peer connection: %w", err)
+	// Reuse Transceiver Strategy:
+	// Find an existing transceiver that is either:
+	// 1. Empty (created via SDP negotiation but not used)
+	// 2. Occupied by a "Dummy" track (created in HandleOffer to reserve SSRC)
+	// We overwrite this track with the real media track using ReplaceTrack.
+	var sender *webrtc.RTPSender
+	for _, t := range session.pc.GetTransceivers() {
+		// Identify Dummy Tracks by ID check (Robust)
+		isDummy := false
+		if t.Sender() != nil && t.Sender().Track() != nil {
+			isDummy = session.IsDummyTrack(t.Sender().Track().ID())
+		}
+		isEmpty := t.Sender() != nil && t.Sender().Track() == nil
+
+		if t.Kind() == activeTrack.Kind && (isEmpty || isDummy) {
+			if err := t.Sender().ReplaceTrack(localTrack); err != nil {
+				return fmt.Errorf("failed to replace track: %w", err)
+			}
+			sender = t.Sender()
+			// Ensure it's sending
+			slog.Info("Reused pre-allocated transceiver", "sessionID", session.ID, "kind", activeTrack.Kind, "wasDummy", isDummy)
+			break
+		}
+	}
+
+	// Fallback: Add new track if no empty slot found
+	if sender == nil {
+		sender, err = session.pc.AddTrack(localTrack)
+		if err != nil {
+			return fmt.Errorf("failed to add track to peer connection: %w", err)
+		}
 	}
 
 	// Capture Negotiated SSRC and Payload Type
@@ -374,18 +459,21 @@ func (r *Room) subscribeToTrack(session *Session, activeTrack *ActiveTrack) erro
 	}
 	activeTrack.mu.Unlock()
 
-	// Request Keyframe immediately for new subscriber
+	// Request Keyframe immediately for new subscriber (BURST to ensure delivery)
 	if activeTrack.Kind == webrtc.RTPCodecTypeVideo {
 		go func() {
-			// Find owner session to send PLI
-			if ownerSession, ok := r.GetSession(activeTrack.OwnerID); ok {
-				if err := ownerSession.pc.WriteRTCP([]rtcp.Packet{
-					&rtcp.PictureLossIndication{MediaSSRC: uint32(activeTrack.Remote.SSRC())},
-				}); err != nil {
-					slog.Warn("Failed to send initial PLI", "error", err)
-				} else {
-					slog.Info("Sent initial PLI for new subscriber", "ownerID", activeTrack.OwnerID)
+			// Burst 5 PLIs over 1 second to force keyframe
+			for i := 0; i < 5; i++ {
+				if ownerSession, ok := r.GetSession(activeTrack.OwnerID); ok {
+					if err := ownerSession.pc.WriteRTCP([]rtcp.Packet{
+						&rtcp.PictureLossIndication{MediaSSRC: uint32(activeTrack.Remote.SSRC())},
+					}); err != nil {
+						slog.Warn("Failed to send PLI", "error", err)
+					} else {
+						slog.Info("Sent PLI for new subscriber", "ownerID", activeTrack.OwnerID, "attempt", i+1)
+					}
 				}
+				time.Sleep(200 * time.Millisecond)
 			}
 		}()
 	}
@@ -486,8 +574,13 @@ func (r *Room) Close() error {
 	r.cancel()
 
 	// TODO: Close individual sessions when Session.Close() is implemented
+	// Close all sessions remaining in the map.
+	// Note: Users who called Leave() are already removed from this map
+	// and will not be closed again here.
 	for _, session := range r.sessions {
-		_ = session // Placeholder for future session.Close()
+		if err := session.Close(); err != nil {
+			slog.Warn("Failed to close session during room close", "error", err)
+		}
 	}
 
 	return nil

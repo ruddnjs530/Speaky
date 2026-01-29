@@ -35,11 +35,14 @@ func (s *MediaServiceServer) CreateRoom(ctx context.Context, req *pb.CreateRoomR
 	// Phase 4 simplification: Use host_id as room_id logic or generate one.
 	// Let's generate a simple one if not strictly required.
 	// But `GetOrCreateRoom` expects an ID.
-	// Phase 4 simplification: Use host_id as room_id directly.
-	// This allows the Client to dictate the RoomID by passing it as HostId.
-	roomID := req.HostId
+	// Use requested RoomID if strictly provided, otherwise fallback to HostID (legacy/phase 4 simplification)
+	roomID := req.RoomId
+	if roomID == "" {
+		roomID = req.HostId
+	}
+	hostID := req.HostId // Use HostId from request as the owner
 
-	room, err := s.manager.GetOrCreateRoom(roomID)
+	room, err := s.manager.GetOrCreateRoom(roomID, hostID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get or create room: %w", err)
 	}
@@ -67,6 +70,9 @@ func (s *MediaServiceServer) JoinRoom(ctx context.Context, req *pb.JoinRoomReque
 	// Protocol doesn't have Pull.
 	// So we MUST wait for gathering in core.
 
+	// Infer role from UserId logic is no longer needed here.
+	// Manager/Room now compares userId with HostID inside Join.
+
 	answerSDP, err := s.manager.Join(req.RoomId, req.UserId, req.SdpOffer)
 	if err != nil {
 		if errors.Is(err, core.ErrRoomNotFound) {
@@ -76,6 +82,23 @@ func (s *MediaServiceServer) JoinRoom(ctx context.Context, req *pb.JoinRoomReque
 	}
 
 	return &pb.JoinRoomResponse{
+		SdpAnswer: answerSDP,
+	}, nil
+}
+
+// Renegotiate handles adding tracks or changing media state after joining.
+func (s *MediaServiceServer) Renegotiate(ctx context.Context, req *pb.RenegotiateRequest) (*pb.RenegotiateResponse, error) {
+	slog.Info("Renegotiate called", "roomID", req.RoomId, "userID", req.UserId)
+
+	answerSDP, err := s.manager.Renegotiate(req.RoomId, req.UserId, req.SdpOffer)
+	if err != nil {
+		if errors.Is(err, core.ErrRoomNotFound) {
+			return nil, fmt.Errorf("room not found: %s", req.RoomId)
+		}
+		return nil, fmt.Errorf("failed to renegotiate: %w", err)
+	}
+
+	return &pb.RenegotiateResponse{
 		SdpAnswer: answerSDP,
 	}, nil
 }

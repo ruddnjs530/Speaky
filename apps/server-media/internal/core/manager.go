@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"log/slog"
 	"sync"
 
 	"speaky-media/internal/config"
@@ -36,7 +37,7 @@ func NewRoomManager(cfg *config.Config, api *webrtc.API, aiClient ai.Client, voi
 
 // CreateRoom creates a new room with the given ID.
 // Returns ErrRoomAlreadyExists if a room with this ID already exists.
-func (m *Manager) CreateRoom(roomID string) (*Room, error) {
+func (m *Manager) CreateRoom(roomID, hostID string) (*Room, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -44,7 +45,12 @@ func (m *Manager) CreateRoom(roomID string) (*Room, error) {
 		return nil, fmt.Errorf("%w: %s", ErrRoomAlreadyExists, roomID)
 	}
 
-	room := NewRoom(roomID, m.cfg, m.api, m.aiClient, m.voiceProcessor)
+	room := NewRoom(roomID, hostID, m.cfg, m.api, m.aiClient, m.voiceProcessor)
+	// Auto-destruction when empty
+	room.OnEmpty = func() {
+		slog.Info("Room empty, destroying", "roomID", roomID)
+		_ = m.DeleteRoom(roomID)
+	}
 	m.rooms[roomID] = room
 
 	return room, nil
@@ -70,17 +76,18 @@ func (m *Manager) DeleteRoom(roomID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if _, exists := m.rooms[roomID]; !exists {
+	if room, exists := m.rooms[roomID]; exists {
+		room.Close() // Ensure resources are freed
+		delete(m.rooms, roomID)
+	} else {
 		return fmt.Errorf("%w: %s", ErrRoomNotFound, roomID)
 	}
-
-	delete(m.rooms, roomID)
 	return nil
 }
 
 // GetOrCreateRoom retrieves a room if it exists, or creates it if it doesn't.
 // This is a convenience method for common use cases.
-func (m *Manager) GetOrCreateRoom(roomID string) (*Room, error) {
+func (m *Manager) GetOrCreateRoom(roomID, hostID string) (*Room, error) {
 	// Fast path: try to get existing room (read lock)
 	m.mu.RLock()
 	room, exists := m.rooms[roomID]
@@ -99,7 +106,12 @@ func (m *Manager) GetOrCreateRoom(roomID string) (*Room, error) {
 		return room, nil
 	}
 
-	room = NewRoom(roomID, m.cfg, m.api, m.aiClient, m.voiceProcessor)
+	room = NewRoom(roomID, hostID, m.cfg, m.api, m.aiClient, m.voiceProcessor)
+	// Auto-destruction when empty
+	room.OnEmpty = func() {
+		slog.Info("Room empty, destroying", "roomID", roomID)
+		_ = m.DeleteRoom(roomID)
+	}
 	m.rooms[roomID] = room
 
 	return room, nil
@@ -114,6 +126,16 @@ func (m *Manager) Join(roomID, userID, offerSDP string) (string, error) {
 	return room.Join(userID, offerSDP)
 }
 
+// Renegotiate handles a renegotiation request (subsequent SDP offer)
+func (m *Manager) Renegotiate(roomID, userID, offerSDP string) (string, error) {
+	room, err := m.GetRoom(roomID)
+	if err != nil {
+		return "", err
+	}
+
+	return room.Renegotiate(userID, offerSDP)
+}
+
 // Leave delegates to Room.Leave.
 func (m *Manager) Leave(roomID, userID string) error {
 	room, err := m.GetRoom(roomID)
@@ -121,4 +143,19 @@ func (m *Manager) Leave(roomID, userID string) error {
 		return err
 	}
 	return room.Leave(userID)
+}
+
+// Close shuts down the manager and all active rooms.
+func (m *Manager) Close() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	slog.Info("Shutting down Room Manager", "rooms", len(m.rooms))
+	for id, room := range m.rooms {
+		if err := room.Close(); err != nil {
+			slog.Warn("Failed to close room", "roomID", id, "error", err)
+		}
+	}
+	// Clear map
+	m.rooms = make(map[string]*Room)
 }
