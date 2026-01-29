@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 import Card from '../../shared/ui/Card';
 import Input from '../../shared/ui/Input';
@@ -13,6 +13,7 @@ import { sessionApi } from '../../features/session/api/sessionApi';
 
 import './HostPage.css';
 import HealthBadgesPanel from '../../features/host/ui/HealthBadgesPanel';
+import { usePrecheckModel } from '../../features/host/hooks/usePrecheckModel';
 
 type Step = 'setup' | 'live';
 
@@ -22,8 +23,32 @@ export default function HostPage() {
   const [step, setStep] = useState<Step>('setup');
   const [title, setTitle] = useState('');
 
-  // [추가] 세션 ID 관리
+  // 세션 ID 관리
   const [sessionId, setSessionId] = useState('');
+
+  // 헬스 체크 모델 (마이크 모니터링용)
+  const { health, actions, mic } = usePrecheckModel();
+
+  // Live 상태 진입 시 마이크 모니터링 시작
+  useEffect(() => {
+    if (step === 'live') {
+      if (mic.permission === 'idle') {
+        actions.requestMicPermission();
+      } else if (mic.permission === 'granted') {
+        actions.startLevelMonitor();
+      }
+    }
+  }, [step, mic.permission, actions]);
+
+  // 마이크 권한 거부 시 안내 메시지 표시 (간단한 예시)
+  // 실제 프로덕션에서는 더 예쁜 모달이나 토스트 메시지를 사용하는 것이 좋음
+  useEffect(() => {
+    if (mic.permission === 'denied') {
+      // alert보다는 화면에 직접 표시하거나 커스텀 UI를 쓰는 것이 좋지만,
+      // 현재는 빠른 피드백 반영을 위해 간단한 안내 문구를 렌더링하는 방식으로 접근
+      console.warn('마이크 권한이 거부되었습니다.');
+    }
+  }, [mic.permission]);
 
   const { remoteStream, status, error, startCapture, connect, stopAll } = useScreenShare();
 
@@ -49,7 +74,7 @@ export default function HostPage() {
       // connect 호출 시 필요한 정보 전달
       await connect({
         role: 'host',
-        // ⚠️ 주의: 백엔드가 wsUrl을 주지 않으므로 로컬 테스트용 URL 사용 (배포 시 수정 필요)
+        // 주의: 백엔드가 wsUrl을 주지 않으므로 로컬 테스트용 URL 사용 (배포 시 수정 필요)
         wsUrl: WS_URL,
         token: token,
         // 임시 채널 ID: "host-{userId}" 형식 사용
@@ -173,14 +198,14 @@ export default function HostPage() {
         />
 
         <div style={{ marginTop: '1rem' }}>
+          {mic.permission === 'denied' && (
+            <div style={{ padding: '8px', backgroundColor: '#xffebee', color: '#b91c1c', borderRadius: '4px', marginBottom: '8px', fontSize: '14px' }}>
+              🎤 마이크 권한이 거부되었습니다. 브라우저 설정에서 권한을 허용하고 새로고침 해주세요.
+            </div>
+          )}
           <HealthBadgesPanel
             viewers="집계 중"
-            health={{
-              mic: "ok",      // 실제 스트림은 useScreenShare 등에서 관리되므로 여기선 표시만 함
-              level: "ok",
-              network: "unknown",
-              ai: "unknown"
-            }}
+            health={health}
           />
         </div>
 

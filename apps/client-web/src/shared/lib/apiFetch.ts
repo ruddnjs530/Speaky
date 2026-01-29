@@ -11,9 +11,17 @@ export async function apiFetch(input: RequestInfo | URL, options: ApiFetchOption
 
   // URL에 VITE_API_URL 환경 변수 적용
   let url = input;
-  if (typeof input === 'string' && input.startsWith('/')) {
-    const baseUrl = import.meta.env.VITE_API_URL || '';
-    url = `${baseUrl}${input}`;
+  if (typeof input === 'string' && !input.startsWith('http')) {
+    const baseUrl = import.meta.env.VITE_API_URL;
+
+    if (!baseUrl) {
+      // 개발 편의상 로컬호스트 등에서 테스트할 때를 제외하고는 에러를 띄우는 것이 안전함
+      // 여기서는 명확하게 에러를 발생시켜 환경 변수 누락을 알림
+      throw new Error('API Error: VITE_API_URL environment variable is not defined.');
+    }
+
+    const normalizedInput = input.startsWith('/') ? input : `/${input}`;
+    url = `${baseUrl}${normalizedInput}`;
   }
 
   const res = await fetch(url, {
