@@ -9,7 +9,14 @@ export async function apiFetch(input: RequestInfo | URL, options: ApiFetchOption
 
   const token = auth ? getAccessToken() : null;
 
-  const res = await fetch(input, {
+  // URL에 VITE_API_URL 환경 변수 적용
+  let url = input;
+  if (typeof input === 'string' && input.startsWith('/')) {
+    const baseUrl = import.meta.env.VITE_API_URL || '';
+    url = `${baseUrl}${input}`;
+  }
+
+  const res = await fetch(url, {
     ...rest,
     headers: {
       ...(headers || {}),
