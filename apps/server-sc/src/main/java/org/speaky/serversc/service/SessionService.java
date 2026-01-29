@@ -55,7 +55,7 @@ public class SessionService {
         // WebSocket 이벤트 발행
         eventPublisher.publishSessionEvent(
             SessionEventPayload.builder()
-                .eventType(SessionEventType.SESSION_CREATED)
+                .eventType(SessionEventType.SYS_SESSION_CREATED)
                 .sessionId(session.getSessionId())
                 .timestamp(now)
                 .sessionData(session)
@@ -131,7 +131,7 @@ public class SessionService {
         // WebSocket 이벤트 발행
         eventPublisher.publishSessionEvent(
             SessionEventPayload.builder()
-                .eventType(SessionEventType.SESSION_STARTED)
+                .eventType(SessionEventType.SYS_SESSION_STARTED)
                 .sessionId(sessionId)
                 .timestamp(session.getStartedAt())
                 .sessionData(session)
@@ -165,7 +165,7 @@ public class SessionService {
         // WebSocket 이벤트 발행
         eventPublisher.publishSessionEvent(
             SessionEventPayload.builder()
-                .eventType(SessionEventType.SESSION_ENDED)
+                .eventType(SessionEventType.SYS_SESSION_ENDED)
                 .sessionId(sessionId)
                 .timestamp(session.getEndedAt())
                 .sessionData(session)
@@ -198,7 +198,7 @@ public class SessionService {
         // WebSocket 이벤트 발행
         eventPublisher.publishSessionEvent(
             SessionEventPayload.builder()
-                .eventType(SessionEventType.SESSION_FAILED)
+                .eventType(SessionEventType.SYS_SESSION_FAILED)
                 .sessionId(sessionId)
                 .timestamp(session.getEndedAt())
                 .sessionData(session)
