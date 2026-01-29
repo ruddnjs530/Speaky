@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useState } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import ViewerMediaPanel from '../../features/media/ui/ViewerMediaPanel';
 import Card from '../../shared/ui/Card';
@@ -7,6 +7,7 @@ import Modal from '../../shared/ui/Modal';
 import { useScreenShare } from '../../features/screenShare/model/useScreenShare';
 import { sessionApi } from '../../features/session/api/sessionApi';
 import { getErrorCode, getErrorMessage } from '../../shared/lib/errorUtils';
+import { SignalingClient } from '../../shared/lib/signaling/SignalingClient';
 
 import './ViewerPage.css';
 
@@ -23,6 +24,7 @@ type JoinAction =
   | { type: 'NOT_ACTIVE' }
   | { type: 'UNAUTHORIZED' }
   | { type: 'ERROR'; message: string };
+
 function joinReducer(_state: JoinUiState, action: JoinAction): JoinUiState {
   switch (action.type) {
     case 'JOIN_START':
@@ -45,11 +47,13 @@ export default function ViewerPage() {
   const navigate = useNavigate();
   const channelId = roomId ?? '';
   const { remoteStream, status, error, connect } = useScreenShare();
+
   // 초기 mount에서 joining 상태로 시작 (effect에서 동기 setState를 피하기 위함)
   const [joinUi, dispatch] = useReducer(
     joinReducer,
     channelId ? ({ kind: 'joining' } as JoinUiState) : ({ kind: 'idle' } as JoinUiState)
   );
+
   // effect 트리거용 attempt 카운터
   const [attempt, setAttempt] = useState(() => (channelId ? 1 : 0));
   /**
@@ -65,16 +69,29 @@ export default function ViewerPage() {
    * 네트워크 호출은 effect에서 수행하되,
    * effect 시작 시점에는 setState/dispatch를 동기로 호출하지 않습니다.
    */
+
+
+  // 대기 모드용 WS 클라이언트 참조
+  const waitingScRef = useRef<SignalingClient | null>(null);
+
   useEffect(() => {
     if (!channelId) return;
-    if (attempt === 0) return;
+
     let alive = true;
-    (async () => {
+    let currentSc: SignalingClient | null = null;
+
+    const tryJoin = async () => {
       try {
+        // 1. 일반 입장 시도
         const res = await sessionApi.joinLive(channelId);
         if (!alive) return;
-        // 여기부터는 await 이후이므로 "동기 setState in effect"로 잡히지 않습니다.
+
+        // 성공 시: 대기 WS가 있었다면 해제
+        waitingScRef.current?.close();
+        waitingScRef.current = null;
+
         dispatch({ type: 'JOINED' });
+
         await connect({
           role: 'viewer',
           wsUrl: res.wsUrl,
@@ -82,23 +99,63 @@ export default function ViewerPage() {
           channelId: res.channelId,
           sessionId: res.sessionId,
         });
-      } catch (e) {
+
+      } catch (e: any) {
         if (!alive) return;
+
         const code = getErrorCode(e);
-        const msg = getErrorMessage(e) ?? '시청 연결에 실패했습니다.';
+        const msg = getErrorMessage(e) ?? '시청 연결 실패';
+
+        // 2. 방송 없음(NOT_ACTIVE) -> WebSocket 대기 모드 진입
         if (code === 'SESSION_NOT_ACTIVE') {
           dispatch({ type: 'NOT_ACTIVE' });
-          return;
-        }
-        if (code === 'UNAUTHORIZED') {
+
+          // 이미 대기 중 WS가 연결돼 있다면 패스
+          if (waitingScRef.current) return;
+
+          console.log('[AutoRouting] 방송 대기 모드: WS 연결 시작');
+
+          const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8080/ws';
+
+          // 대기용 SignalingClient 생성
+          const sc = new SignalingClient({
+            channelId,
+            sessionId: 'waiting',
+            role: 'GUEST',
+            clientId: 'waiting-' + Math.random().toString(36).slice(2)
+          }, {
+            onOpen: () => console.log('[AutoRouting] WS Connected (Waiting)'),
+            onInbound: (msg) => {
+              // 방송 시작 이벤트 감지 -> 재시도(attempt 증가)
+              if (msg.type === 'SYS_SESSION_STARTED' || msg.type === 'SESSION_LIVE_STARTED') {
+                console.log('[AutoRouting] 방송 시작 감지! -> Retrying join');
+                // WS 정리 후 재시도 트리거
+                sc.close();
+                waitingScRef.current = null;
+                setAttempt(prev => prev + 1);
+              }
+            }
+          });
+
+          sc.connect(wsUrl, 'GUEST_TOKEN'); // 토큰 필요 시 적절한 값 사용
+          waitingScRef.current = sc;
+          currentSc = sc;
+
+        } else if (code === 'UNAUTHORIZED') {
           dispatch({ type: 'UNAUTHORIZED' });
-          return;
+        } else {
+          dispatch({ type: 'ERROR', message: msg });
         }
-        dispatch({ type: 'ERROR', message: msg });
       }
-    })();
+    };
+
+    tryJoin();
+
     return () => {
       alive = false;
+      // 컴포넌트 언마운트 시에만 정리 (attempt 변경 시에는 유지하고 싶을 수 있으나, 안전하게 매번 정리)
+      waitingScRef.current?.close();
+      waitingScRef.current = null;
     };
   }, [channelId, attempt, connect]);
   const reload = useCallback(() => window.location.reload(), []);
@@ -171,12 +228,12 @@ export default function ViewerPage() {
       {/* 방송 종료 감지 시 모달 표시 */}
       <Modal
         open={joinUi.kind === 'notActive'}
-        title="방송 종료"
+        title="방송 대기중"
         primaryLabel="홈으로 이동"
         onPrimary={() => navigate('/', { replace: true })}
       >
-        <p>호스트가 방송을 종료했습니다.</p>
-        <p>메인 화면으로 이동하시겠습니까?</p>
+        <p>호스트가 방송을 준비하고 있습니다.</p>
+        <p>방송이 시작되면 자동으로 연결됩니다.</p>
       </Modal>
     </div>
   );

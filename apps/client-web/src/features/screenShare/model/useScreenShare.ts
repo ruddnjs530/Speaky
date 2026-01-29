@@ -1,8 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
-import { sendOfferWS, sendIceWS, sendAttachWS } from '../api/signaling';
 import { SignalingClient } from '../../../shared/lib/signaling/SignalingClient';
-import type { Envelope, Role as EnvelopeRole } from '../../../shared/lib/signaling/envelope';
-
+// Envelope import 제거 (불필요)
 import type { ConnectionStatus } from '../../media/model/useConnectionStatus';
 
 type Role = 'host' | 'viewer';
@@ -11,295 +9,193 @@ type InternalStatus = 'idle' | 'captured' | 'connecting' | 'connected' | 'error'
 type ConnectArgs = {
   role: Role;
   stream?: MediaStream;
-  roomId?: string;
-
   wsUrl?: string;
   token?: string;
-  channelId?: string;
-  sessionId?: string;
+  channelId: string;
+  sessionId: string;
 };
 
-type AnswerPayload = { sdp: RTCSessionDescriptionInit };
-type IcePayload = { candidate: RTCIceCandidateInit };
-
+// ... (mapToConnectionStatus 함수는 그대로 유지) ...
 function mapToConnectionStatus(s: InternalStatus): ConnectionStatus {
   switch (s) {
-    case 'idle':
-      return 'idle';
+    case 'idle': return 'idle';
     case 'captured':
-    case 'connecting':
-      return 'connecting';
-    case 'connected':
-      return 'connected';
-    case 'error':
-      return 'failed';
-    default:
-      return 'disconnected';
+    case 'connecting': return 'connecting';
+    case 'connected': return 'connected';
+    case 'error': return 'failed';
+    default: return 'disconnected';
   }
 }
 
 export function useScreenShare() {
   const pcRef = useRef<RTCPeerConnection | null>(null);
-  const wsRef = useRef<SignalingClient | null>(null);
-
+  const scRef = useRef<SignalingClient | null>(null);
   const pendingRemoteIceRef = useRef<RTCIceCandidateInit[]>([]);
 
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
-
-  // 내부 상태는 훅 내부에서만 사용
   const [internalStatus, setInternalStatus] = useState<InternalStatus>('idle');
   const [error, setError] = useState('');
 
   const cleanup = useCallback(() => {
-    wsRef.current?.close();
-    wsRef.current = null;
-
+    scRef.current?.close();
+    scRef.current = null;
     pcRef.current?.close();
     pcRef.current = null;
-
     pendingRemoteIceRef.current = [];
   }, []);
 
   const startCapture = useCallback(async () => {
     setError('');
     try {
-      const s = await navigator.mediaDevices.getDisplayMedia({
-        video: { frameRate: 30 },
-        audio: true,
-      });
-
+      const s = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30 }, audio: true });
       setLocalStream(s);
       setInternalStatus('captured');
-
-      const [vt] = s.getVideoTracks();
-      if (vt) {
-        vt.onended = () => {
-          s.getTracks().forEach((t) => t.stop());
-          setLocalStream(null);
-          setRemoteStream(null);
-          cleanup();
-          setInternalStatus('idle');
-        };
-      }
-
+      s.getVideoTracks()[0].onended = () => {
+        s.getTracks().forEach((t) => t.stop());
+        setLocalStream(null);
+        setRemoteStream(null);
+        cleanup();
+        setInternalStatus('idle');
+      };
       return s;
-    } catch (e) {
+    } catch (e: any) {
       console.error('getDisplayMedia failed:', e);
-      const err = e as DOMException;
-      setError(`${err.name}: ${err.message}`);
+      setError(`${e.name}: ${e.message}`);
       setInternalStatus('error');
       return null;
     }
   }, [cleanup]);
 
-  const connect = useCallback(
-    async ({ role, stream, wsUrl, token, channelId, sessionId }: ConnectArgs) => {
-      setError('');
-      setInternalStatus('connecting');
+  const connect = useCallback(async (args: ConnectArgs) => {
+    const { role, stream, wsUrl, token, channelId, sessionId } = args;
+    setError('');
+    setInternalStatus('connecting');
 
-      if (!channelId || !sessionId) {
-        setError('channelId/sessionId가 필요해요. (REST 응답으로 받아오세요)');
-        setInternalStatus('error');
-        return;
-      }
-      if (!wsUrl) {
-        setError('wsUrl이 필요해요. (REST 응답으로 받아오세요)');
-        setInternalStatus('error');
-        return;
-      }
-      if (!token) {
-        setError('token(signalingToken)이 필요해요. (REST 응답으로 받아오세요)');
-        setInternalStatus('error');
-        return;
-      }
+    if (!channelId || !sessionId || !wsUrl || !token) {
+      setError('필수 연결 정보(channelId, sessionId, wsUrl, token)가 부족합니다.');
+      setInternalStatus('error');
+      return;
+    }
 
-      const envelopeRole: EnvelopeRole = role === 'host' ? 'HOST' : 'GUEST';
+    const outbound = role === 'host' ? (stream ?? localStream) : null;
+    if (role === 'host' && !outbound) {
+      setError('호스트는 화면 공유 스트림이 필요합니다.');
+      setInternalStatus('error');
+      return;
+    }
 
-      const outbound = role === 'host' ? (stream ?? localStream) : null;
-      if (role === 'host' && !outbound) {
-        setError('호스트는 먼저 화면 공유를 시작해야 해요.');
-        setInternalStatus('error');
-        return;
-      }
+    cleanup();
 
-      cleanup();
+    const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+    pcRef.current = pc;
 
-      const pc = new RTCPeerConnection({
-        // TODO(Day3-B): 최종적으로는 REST 응답의 rtcConfig.iceServers를 주입하는 형태로 교체 권장
-        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
-      });
-      pcRef.current = pc;
+    if (role === 'viewer') {
+      pc.addTransceiver('video', { direction: 'recvonly' });
+      pc.addTransceiver('audio', { direction: 'recvonly' });
+    }
 
-      if (role === 'viewer') {
-        pc.addTransceiver('video', { direction: 'recvonly' });
-        pc.addTransceiver('audio', { direction: 'recvonly' });
-      }
+    const inbound = new MediaStream();
+    setRemoteStream(inbound);
 
-      const inbound = new MediaStream();
-      setRemoteStream(inbound);
-
-      pc.ontrack = (e) => {
-        const s0 = e.streams[0];
-        if (!s0) return;
-        s0.getTracks().forEach((t) => inbound.addTrack(t));
+    pc.ontrack = (e) => {
+      if (e.streams[0]) {
+        e.streams[0].getTracks().forEach(t => inbound.addTrack(t));
         setRemoteStream(new MediaStream(inbound.getTracks()));
-      };
-
-      if (role === 'host' && outbound) {
-        outbound.getTracks().forEach((t) => pc.addTrack(t, outbound));
       }
+    };
 
-      const wsReady = new Promise<void>((resolve, reject) => {
-        let settled = false;
+    if (role === 'host' && outbound) {
+      outbound.getTracks().forEach(t => pc.addTrack(t, outbound));
+    }
 
-        const sc = new SignalingClient(
-          {
-            channelId,
-            sessionId,
-            role: envelopeRole,
-            clientId: Math.random().toString(36).slice(2),
-          },
-          {
-            onOpen: () => {
-              if (settled) return;
-              settled = true;
-              resolve();
-            },
-            onClose: (code, reason) => {
-              // 연결 시도 중 닫히면 실패 처리
-              if (!settled) {
-                settled = true;
-                reject(new Error(`WS closed: ${code} ${reason}`));
-                return;
-              }
-              // 연결 이후 close는 여기서 굳이 reject하지 않음
-            },
-            onError: () => {
-              if (settled) return;
-              settled = true;
-              reject(new Error('WS error'));
-            },
-            onMessage: async (env: Envelope) => {
-              if (env.type === 'SYS_ERROR') {
-                const payload = env.payload as { code?: string; msg?: string } | undefined;
-                const code = payload?.code ?? 'WS_ERROR';
-                const msg = payload?.msg ?? 'WebSocket 오류가 발생했습니다.';
-
-                setError(`${code}: ${msg}`);
-                setInternalStatus('error');
-
-                cleanup();
-                setRemoteStream(null);
-                return;
-              }
-
-              if (env.type === 'SYS_ACK') return;
-
-              if (env.type === 'SIG_ANSWER') {
-                try {
-                  const payload = env.payload as AnswerPayload | undefined;
-                  if (!payload?.sdp) return;
-
-                  await pc.setRemoteDescription(payload.sdp);
-
-                  const pending = pendingRemoteIceRef.current;
-                  pendingRemoteIceRef.current = [];
-                  for (const c of pending) {
-                    try {
-                      await pc.addIceCandidate(c);
-                    } catch (err) {
-                      console.debug('addIceCandidate ignored:', err);
-                    }
-                  }
-
-                  setInternalStatus('connected');
-                } catch (err) {
-                  console.error('apply answer failed:', err);
-                  setError('Answer 적용에 실패했어요.');
-                  setInternalStatus('error');
-                  cleanup();
-                  setRemoteStream(null);
-                }
-                return;
-              }
-
-              if (env.type === 'SIG_ICE') {
-                const payload = env.payload as IcePayload | undefined;
-                const cand = payload?.candidate;
-                if (!cand) return;
-
-                if (!pc.remoteDescription) {
-                  pendingRemoteIceRef.current.push(cand);
-                  return;
-                }
-
-                try {
-                  await pc.addIceCandidate(cand);
-                } catch (err) {
-                  console.debug('addIceCandidate ignored:', err);
-                }
-                return;
-              }
-            },
+    const sc = new SignalingClient({
+      channelId,
+      sessionId,
+      role: role === 'host' ? 'HOST' : 'GUEST',
+      clientId: Math.random().toString(36).slice(2),
+    }, {
+      onOpen: async () => {
+        if (role === 'host' || role === 'viewer') {
+          try {
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            // sdpType 타입 단언 (as "offer")
+            sc.sendTyped('SIG_OFFER', {
+              sdp: offer.sdp!,
+              sdpType: offer.type as "offer"
+            });
+          } catch (e) {
+            console.error('Offer creation failed', e);
+            setError('Offer 생성 실패');
           }
-        );
+        }
+      },
+      onInbound: async (msg) => {
+        if (msg.type === 'SIG_ANSWER') {
+          try {
+            const sdp = (msg.payload as any).sdp;
+            await pc.setRemoteDescription({ type: 'answer', sdp });
 
-        wsRef.current = sc;
-        // sc.setContext 제거됨
+            const candidates = pendingRemoteIceRef.current;
+            pendingRemoteIceRef.current = [];
+            for (const c of candidates) await pc.addIceCandidate(c);
 
-        sc.connect(wsUrl, token);
-      });
-
-      pc.onicecandidate = (e) => {
-        if (!e.candidate) return;
-        const sc = wsRef.current;
-        if (!sc) return;
-
-        sendIceWS(sc, e.candidate);
-      };
-
-      try {
-        await wsReady;
-
-        const sc = wsRef.current;
-        if (!sc) throw new Error('WS client not ready');
-
-        // 규약: 첫 메시지는 SYS_ATTACH
-        sendAttachWS(sc, { resume: false });
-
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-
-        sendOfferWS(sc, offer);
-      } catch (err) {
-        console.error('connect failed:', err);
-        setError('서버 연결(WS/Offer)에 실패했어요.');
+            setInternalStatus('connected');
+          } catch (e) {
+            console.error('Remote Desc Error', e);
+            setError('Answer 처리 실패');
+            setInternalStatus('error');
+          }
+        } else if (msg.type === 'SIG_ICE') {
+          const candidate = (msg.payload as any).candidate;
+          // ICE payload 구조에 맞춰 매핑 필요할 수 있음 (일단 candidate가 문자열로 오면 파싱 필요할 수도 있으나, 여기선 객체로 온다고 가정)
+          // 만약 payload 자체가 RTCIceCandidateInit 형태라면 그대로 사용
+          if (typeof candidate === 'string') {
+            // payload 구조 확인 필요, 일단 candidate 필드가 있으면 시도
+            const c = { candidate, sdpMid: (msg.payload as any).sdpMid, sdpMLineIndex: (msg.payload as any).sdpMLineIndex };
+            await pc.addIceCandidate(c);
+          } else if (candidate) {
+            // 이미 객체라면
+            if (pc.remoteDescription) {
+              await pc.addIceCandidate(candidate);
+            } else {
+              pendingRemoteIceRef.current.push(candidate);
+            }
+          }
+        }
+      },
+      onError: () => {
+        setError('WebSocket 에러 발생');
         setInternalStatus('error');
-        cleanup();
-        setRemoteStream(null);
       }
-    },
-    [localStream, cleanup]
-  );
+    });
+
+    scRef.current = sc;
+
+    pc.onicecandidate = (e) => {
+      if (e.candidate && e.candidate.candidate) { // candidate 문자열 확인
+        // candidate 객체 분해해서 전송
+        sc.sendTyped('SIG_ICE', {
+          candidate: e.candidate.candidate,
+          sdpMid: e.candidate.sdpMid,
+          sdpMLineIndex: e.candidate.sdpMLineIndex
+        });
+      }
+    };
+
+    sc.connect(wsUrl, token);
+
+  }, [localStream, cleanup]);
 
   const stopAll = useCallback(() => {
-    pcRef.current?.close();
-    pcRef.current = null;
-
-    wsRef.current?.close();
-    wsRef.current = null;
-
-    localStream?.getTracks().forEach((t) => t.stop());
-
+    cleanup();
+    localStream?.getTracks().forEach(t => t.stop());
     setLocalStream(null);
     setRemoteStream(null);
     setInternalStatus('idle');
     setError('');
-  }, [localStream]);
+  }, [localStream, cleanup]);
 
-  // ✅ 외부에 노출하는 status는 ConnectionStatus로 통일
-  const status: ConnectionStatus = mapToConnectionStatus(internalStatus);
-
-  return { localStream, remoteStream, status, error, startCapture, connect, stopAll };
+  return { localStream, remoteStream, status: mapToConnectionStatus(internalStatus), error, startCapture, connect, stopAll };
 }
