@@ -72,6 +72,29 @@ public class InMemorySessionRepository implements SessionRepository {
     }
     
     @Override
+    public Optional<SessionEntity> findByChannelIdAndStatus(String channelId, SessionStatus status) {
+        if (channelId == null || status == null) {
+            return Optional.empty();
+        }
+        
+        return sessionStore.values().stream()
+                .filter(session -> channelId.equals(session.getChannelId()))
+                .filter(session -> status.equals(session.getStatus()))
+                .findFirst();
+    }
+    
+    @Override
+    public List<SessionEntity> findByChannelId(String channelId) {
+        if (channelId == null) {
+            return List.of();
+        }
+        
+        return sessionStore.values().stream()
+                .filter(session -> channelId.equals(session.getChannelId()))
+                .collect(Collectors.toList());
+    }
+    
+    @Override
     public void deleteById(String sessionId) {
         if (sessionId == null) {
             log.warn("Attempted to delete session with null ID");
