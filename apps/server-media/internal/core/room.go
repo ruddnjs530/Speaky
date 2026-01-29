@@ -340,6 +340,9 @@ func (r *Room) Leave(userID string) error {
 	}
 
 	// Remove from sessions map
+	// CRITICAL: Deleting from the map effectively transfers ownership.
+	// Future calls to Room.Close() (triggered by OnEmpty) will iterate the map
+	// and will NOT find this session, preventing double-close.
 	delete(r.sessions, userID)
 
 	// Remove this user from all track subscribers and clean up owned tracks
@@ -401,8 +404,11 @@ func (r *Room) subscribeToTrack(session *Session, activeTrack *ActiveTrack) erro
 	// We overwrite this track with the real media track using ReplaceTrack.
 	var sender *webrtc.RTPSender
 	for _, t := range session.pc.GetTransceivers() {
-		// Identify Dummy Tracks by ID prefix
-		isDummy := t.Sender() != nil && t.Sender().Track() != nil && (len(t.Sender().Track().ID()) > 5 && t.Sender().Track().ID()[:5] == "dummy")
+		// Identify Dummy Tracks by ID check (Robust)
+		isDummy := false
+		if t.Sender() != nil && t.Sender().Track() != nil {
+			isDummy = session.IsDummyTrack(t.Sender().Track().ID())
+		}
 		isEmpty := t.Sender() != nil && t.Sender().Track() == nil
 
 		if t.Kind() == activeTrack.Kind && (isEmpty || isDummy) {
@@ -568,7 +574,9 @@ func (r *Room) Close() error {
 	r.cancel()
 
 	// TODO: Close individual sessions when Session.Close() is implemented
-	// Close all sessions
+	// Close all sessions remaining in the map.
+	// Note: Users who called Leave() are already removed from this map
+	// and will not be closed again here.
 	for _, session := range r.sessions {
 		if err := session.Close(); err != nil {
 			slog.Warn("Failed to close session during room close", "error", err)

@@ -24,9 +24,10 @@ type Session struct {
 	mu           sync.Mutex
 	ctx          context.Context
 	cancel       context.CancelFunc
-	onClosed     func()               // Callback to notify Room when session ends
-	Synchronizer *media_sync.Synchronizer // Manages AV sync for this session's ingest
-	Role         string               // "host" or "guest"
+	onClosed      func()                          // Callback to notify Room when session ends
+	Synchronizer  *media_sync.Synchronizer        // Manages AV sync for this session's ingest
+	Role          string                          // "host" or "guest"
+	dummyTrackIDs map[string]struct{}             // Set of track IDs created as dummies
 }
 
 // NewSession creates a new session for a participant.
@@ -35,15 +36,16 @@ func NewSession(id string, role string, room *Room, pc *webrtc.PeerConnection, o
 	ctx, cancel := context.WithCancel(room.ctx)
 
 	session := &Session{
-		ID:           id,
-		pc:           pc,
-		room:         room,
-		localTracks:  make(map[string]*webrtc.TrackLocalStaticRTP),
-		ctx:          ctx,
-		cancel:       cancel,
-		Synchronizer: media_sync.NewSynchronizer(),
-		onClosed:     onClosed,
-		Role:         role,
+		ID:            id,
+		pc:            pc,
+		room:          room,
+		localTracks:   make(map[string]*webrtc.TrackLocalStaticRTP),
+		dummyTrackIDs: make(map[string]struct{}), // Track dummy IDs explicitly
+		ctx:           ctx,
+		cancel:        cancel,
+		Synchronizer:  media_sync.NewSynchronizer(),
+		onClosed:      onClosed,
+		Role:          role,
 	}
 
 	// Register OnTrack handler to forward incoming tracks to the room
@@ -161,6 +163,8 @@ func (s *Session) HandleOffer(offerSDP string) (string, error) {
 	slog.Info("HandleOffer: Injecting dummy tracks to ensure SSRC allocation", "role", s.Role)
 
 	if s.Role == "guest" {
+		s.mu.Lock() // Protect map access
+
 		// Audio Dummy (Opus)
 		audioCap := webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus}
 		dummyAudio, err := webrtc.NewTrackLocalStaticRTP(audioCap, "dummy-audio", "dummy-stream")
@@ -170,7 +174,8 @@ func (s *Session) HandleOffer(offerSDP string) (string, error) {
 			if _, err := s.pc.AddTrack(dummyAudio); err != nil {
 				slog.Warn("Failed to add dummy audio track", "error", err)
 			} else {
-				slog.Debug("Added dummy audio track")
+				s.dummyTrackIDs[dummyAudio.ID()] = struct{}{}
+				slog.Debug("Added dummy audio track", "trackID", dummyAudio.ID())
 			}
 		}
 
@@ -183,9 +188,11 @@ func (s *Session) HandleOffer(offerSDP string) (string, error) {
 			if _, err := s.pc.AddTrack(dummyVideo); err != nil {
 				slog.Warn("Failed to add dummy video track", "error", err)
 			} else {
-				slog.Debug("Added dummy video track")
+				s.dummyTrackIDs[dummyVideo.ID()] = struct{}{}
+				slog.Debug("Added dummy video track", "trackID", dummyVideo.ID())
 			}
 		}
+		s.mu.Unlock()
 	}
 
 	// Create answer
@@ -263,4 +270,12 @@ func (s *Session) Close() error {
 // This is exposed for testing and advanced use cases.
 func (s *Session) PeerConnection() *webrtc.PeerConnection {
 	return s.pc
+}
+
+// IsDummyTrack checks if a given track ID corresponds to a dummy track.
+func (s *Session) IsDummyTrack(trackID string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, exists := s.dummyTrackIDs[trackID]
+	return exists
 }
