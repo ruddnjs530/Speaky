@@ -40,6 +40,16 @@ export default function HostPage() {
     }
   }, [step, mic.permission, actions]);
 
+  // 마이크 권한 거부 시 안내 메시지 표시 (간단한 예시)
+  // 실제 프로덕션에서는 더 예쁜 모달이나 토스트 메시지를 사용하는 것이 좋음
+  useEffect(() => {
+    if (mic.permission === 'denied') {
+      // alert보다는 화면에 직접 표시하거나 커스텀 UI를 쓰는 것이 좋지만,
+      // 현재는 빠른 피드백 반영을 위해 간단한 안내 문구를 렌더링하는 방식으로 접근
+      console.warn('마이크 권한이 거부되었습니다.');
+    }
+  }, [mic.permission]);
+
   const { remoteStream, status, error, startCapture, connect, stopAll } = useScreenShare();
 
   // 송출 가능 조건: 타이틀 O, 연결 O, 세션 생성됨
@@ -188,6 +198,11 @@ export default function HostPage() {
         />
 
         <div style={{ marginTop: '1rem' }}>
+          {mic.permission === 'denied' && (
+            <div style={{ padding: '8px', backgroundColor: '#xffebee', color: '#b91c1c', borderRadius: '4px', marginBottom: '8px', fontSize: '14px' }}>
+              🎤 마이크 권한이 거부되었습니다. 브라우저 설정에서 권한을 허용하고 새로고침 해주세요.
+            </div>
+          )}
           <HealthBadgesPanel
             viewers="집계 중"
             health={health}
