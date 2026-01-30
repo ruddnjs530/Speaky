@@ -11,7 +11,6 @@ export async function login(req: LoginRequest) {
   const res = await apiFetch('/api/v1/auth/login', {
     method: 'POST',
     auth: false, // 로그인 자체는 토큰 없이
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
   });
 

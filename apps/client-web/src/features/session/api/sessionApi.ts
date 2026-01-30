@@ -29,9 +29,6 @@ export const sessionApi = {
     async createSession(title: string): Promise<SessionResponse> {
         const res = await apiFetch('/api/v1/sessions', {
             method: 'POST',
-            headers: {
-                "Content-Type": "application/json",
-            },
             body: JSON.stringify({
                 title: title || "방송 제목 없음",
                 voiceModelID: null
@@ -52,9 +49,6 @@ export const sessionApi = {
             `/api/v1/sessions/${sessionId}/start`,
             {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
                 body: JSON.stringify({
                     mediaServerId,
                     pipelineId,
@@ -110,9 +104,6 @@ export const sessionApi = {
             `/api/v1/sessions/${sessionId}/end`,
             {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
                 body: JSON.stringify({
                     reason
                 }),

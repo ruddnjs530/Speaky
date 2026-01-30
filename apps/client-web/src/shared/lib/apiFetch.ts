@@ -9,7 +9,7 @@ export async function apiFetch(input: RequestInfo | URL, options: ApiFetchOption
 
   const token = auth ? getAccessToken() : null;
 
-  // URL에 VITE_API_URL 환경 변수 적용
+  // 1. URL에 VITE_API_URL 환경 변수 적용
   let url = input;
   if (typeof input === 'string' && !input.startsWith('http')) {
     const baseUrl = import.meta.env.VITE_API_URL;
@@ -24,12 +24,24 @@ export async function apiFetch(input: RequestInfo | URL, options: ApiFetchOption
     url = `${baseUrl}${normalizedInput}`;
   }
 
+  // 2. 헤더 구성 (Headers 객체 활용)
+  const reqHeaders = new Headers(headers);
+  // 2-1. 토큰 자동 주입
+  if (auth) {
+    const token = getAccessToken();
+    if (token) {
+      reqHeaders.set('Authorization', `Bearer ${token}`);
+    }
+  }
+  // 2-2. Content-Type 자동 주입 (JSON)
+  // 사용자가 명시하지 않았고, body가 문자열(JSON stringify됨)이라면 JSON 헤더 추가
+  if (!reqHeaders.has('Content-Type') && typeof rest.body === 'string') {
+    reqHeaders.set('Content-Type', 'application/json');
+  }
+
   const res = await fetch(url, {
     ...rest,
-    headers: {
-      ...(headers || {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
+    headers: reqHeaders,
   });
 
   // 토큰 만료/인증 실패 처리
