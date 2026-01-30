@@ -12,6 +12,7 @@ import org.speaky.serversc.domain.SessionStatus;
 import org.speaky.serversc.exception.InvalidSessionStateException;
 import org.speaky.serversc.exception.SessionNotFoundException;
 import org.speaky.serversc.repository.SessionRepository;
+import org.speaky.serversc.client.MediaServerClient;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -35,6 +36,9 @@ class SessionServiceTest {
     
     @Mock
     private SessionEventPublisher eventPublisher;
+
+    @Mock
+    private MediaServerClient mediaServerClient;
     
     @InjectMocks
     private SessionService sessionService;
@@ -93,6 +97,7 @@ class SessionServiceTest {
         assertThat(result.getPipelineId()).isEqualTo(pipelineId);
         
         verify(sessionRepository, times(1)).save(session);
+        verify(mediaServerClient, times(1)).createRoom(eq(sessionId), anyString());
     }
     
     @Test
