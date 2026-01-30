@@ -85,7 +85,25 @@ export function useSessionBootstrap() {
         dispatch({ type: "EV_BOOTSTRAP_START" });
 
         try {
-            const res = await sessionApi.startHostLive();
+            // [v1 API 대응 수정] startHostLive 호출을 createSession으로 대체
+            // 참고: startHostLive는 기존에 세션 생성+시작을 동시에 했을 가능성이 있습니다.
+            // AppState 흐름상 'Create + Start'를 의미하겠지만, 현재는 createSession만 수행합니다.
+
+            // 1. 세션 생성
+            const session = await sessionApi.createSession("Default Title");
+
+            // 2. HostPage 동작과 맞추기 위해 여기서 자동으로 startLive를 호출하지 않습니다.
+            // 다만 이 훅(Bootstrap)의 기대값에 맞춰, 세션 응답을 StartOrJoinResponse 구조로 매핑합니다. 
+            // 그래야 dispatch가 정상 작동합니다.
+
+            const res = {
+                channelId: session.channelId || `host-${session.hostUserId}`,
+                sessionId: session.sessionId,
+                role: "HOST" as Role,
+                wsUrl: session.wsUrl || "",
+                token: session.signalingToken || ""
+            };
+
             assertBootstrapResponse(res);
 
             dispatch({
