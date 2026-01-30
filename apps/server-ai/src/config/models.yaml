@@ -1,7 +1,7 @@
 models:
   - model_name: "Korone Voice"
     voice_model_id: 1
-    model_path: "/rvc-code/assets/weights/Korone.pth"
+    model_path: "/rvc-code/assets/weights/korone.pth"
     index_path: "/rvc-code/assets/indices/korone.index"
     index_rate: 0.75
     pitch: 0
@@ -45,6 +45,16 @@ models:
     index_path: "/rvc-code/assets/indices/0129_trump.pth"
     index_rate: 0.85
     pitch: -2
+    protect: 0.3
+    rms_mix_rate: 1.0
+    device: "cuda"
+
+  - model_name: "criss"
+    voice_model_id: 6
+    model_path: "/rvc-code/assets/weights/0130_criss01.pth"
+    index_path: "/rvc-code/assets/indices/0130_criss01.index"
+    index_rate: 0.85
+    pitch: 8
     protect: 0.3
     rms_mix_rate: 1.0
     device: "cuda"
