@@ -78,7 +78,7 @@ func main() {
 	mediaService := impl.NewServer(manager)
 
 	// Register Proto Service
-	pb.RegisterControlServiceServer(grpcServer, mediaService)
+	pb.RegisterMediaControlServiceServer(grpcServer, mediaService)
 
 	// 5. Start Server (Blocking)
 	go func() {

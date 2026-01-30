@@ -152,7 +152,7 @@ func (s *Session) HandleOffer(offerSDP string) (string, error) {
 		Type: webrtc.SDPTypeOffer,
 		SDP:  offerSDP,
 	}); err != nil {
-		return "", fmt.Errorf("failed to set remote description: %w", err)
+		return "", fmt.Errorf("%w: %v", ErrInvalidSDP, err)
 	}
 
 	// SSRC Allocation Strategy for Guests:
@@ -214,7 +214,7 @@ func (s *Session) HandleOffer(offerSDP string) (string, error) {
 	case <-gatherComplete:
 		slog.Info("ICE Gathering complete", "sessionID", s.ID)
 	case <-s.ctx.Done():
-		return "", fmt.Errorf("session context cancelled during ICE gathering")
+		return "", fmt.Errorf("%w: %s", ErrICEGatheringTimeout, s.ID)
 	}
 
 	// Return the *updated* LocalDescription which now contains ALL candidates

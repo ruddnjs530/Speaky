@@ -256,7 +256,7 @@ func (r *Room) Join(userID, offerSDP string) (string, error) {
 	pc, err := r.api.NewPeerConnection(webrtc.Configuration{})
 	if err != nil {
 		r.mu.Unlock()
-		return "", fmt.Errorf("failed to create peer connection: %w", err)
+		return "", fmt.Errorf("%w: %v", ErrPeerConnectionFailed, err)
 	}
 
 	// 3. Create Session wrapper
@@ -299,7 +299,7 @@ func (r *Room) Join(userID, offerSDP string) (string, error) {
 	if err != nil {
 		// Cleanup on failure
 		r.Leave(userID)
-		return "", fmt.Errorf("failed to handle offer: %w", err)
+		return "", fmt.Errorf("%w: %v", ErrInvalidSDP, err)
 	}
 
 	slog.Info("User joined room",
@@ -323,7 +323,7 @@ func (r *Room) Renegotiate(userID string, offerSDP string) (string, error) {
 
 	answerSDP, err := session.HandleOffer(offerSDP)
 	if err != nil {
-		return "", fmt.Errorf("failed to handle offer: %w", err)
+		return "", fmt.Errorf("%w: %v", ErrInvalidSDP, err)
 	}
 
 	return answerSDP, nil
@@ -581,6 +581,37 @@ func (r *Room) Close() error {
 		if err := session.Close(); err != nil {
 			slog.Warn("Failed to close session during room close", "error", err)
 		}
+	}
+
+	return nil
+}
+
+// UpdateHostSessionConfig updates the AI configuration for the host session.
+func (r *Room) UpdateHostSessionConfig(voiceModelID string, pitchScale float32) error {
+	r.mu.RLock()
+	_, exists := r.sessions[r.HostID]
+	r.mu.RUnlock()
+
+	if !exists {
+		return fmt.Errorf("%w: host %s not found in room", ErrSessionNotFound, r.HostID)
+	}
+
+	// Update the AudioProcessor for all audio tracks owned by the host.
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	found := false
+	for _, track := range r.activeTracks {
+		if track.OwnerID == r.HostID && track.Kind == webrtc.RTPCodecTypeAudio {
+			if track.processor != nil {
+				track.processor.UpdateConfig(voiceModelID, pitchScale)
+				found = true
+			}
+		}
+	}
+
+	if !found {
+		slog.Warn("UpdateHostSessionConfig: No audio processor found for host", "roomID", r.ID, "hostID", r.HostID)
 	}
 
 	return nil

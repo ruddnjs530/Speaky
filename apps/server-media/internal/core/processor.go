@@ -5,6 +5,7 @@ import (
     "errors"
     "io"
     "log/slog"
+	"strconv"
     "sync"
     "time"
 
@@ -36,6 +37,11 @@ type AudioProcessor struct {
 
 	// Config
 	cfg *config.Config
+
+	// Dynamic AI Config
+	currentModelID int64
+	currentPitch   float32
+	configMu       sync.RWMutex
 }
 
 // NewAudioProcessor creates a new AudioProcessor.
@@ -71,7 +77,24 @@ func NewAudioProcessor(cfg *config.Config, aiClient upstream.VoiceProcessor, out
         bufferLimit: bufferLimit,                   
         tsMap:       make(map[uint32]time.Time),
 		cfg:         cfg,
+		currentModelID: 1,   // Default
+		currentPitch:   1.0, // Default
     }, nil
+}
+
+// UpdateConfig updates the AI voice configuration.
+func (p *AudioProcessor) UpdateConfig(voiceModelID string, pitchScale float32) {
+	p.configMu.Lock()
+	defer p.configMu.Unlock()
+
+	id, err := strconv.ParseInt(voiceModelID, 10, 64)
+	if err == nil {
+		p.currentModelID = id
+	} else {
+		slog.Warn("AudioProcessor: Failed to parse voiceModelID as int64, using default 1", "val", voiceModelID)
+		p.currentModelID = 1
+	}
+	p.currentPitch = pitchScale
 }
 
 // Start begins the processing loop.
@@ -133,12 +156,16 @@ func (p *AudioProcessor) processInputPacket(stream upstream.VoiceStream, pipePkt
         pcmBytes := Int16ToBytes(p.pcmBuffer)
 
         // Send to AI Server
+		p.configMu.RLock()
+		modelID := p.currentModelID
+		p.configMu.RUnlock()
+
         chunk := &pb.AudioChunk{
             Pcm:          pcmBytes,
             SampleRate:   int32(p.cfg.AudioSampleRate), 
             Channels:     1,
             Timestamp:    p.firstPacketTS, // Use the TS of the start of this chunk
-            VoiceModelId: 1, // Use String ID as per your AI Log
+            VoiceModelId: modelID,
         }
         
         // Reset Buffer
