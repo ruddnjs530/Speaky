@@ -1,0 +1,92 @@
+.idleRoot {
+    position: fixed;
+    right: 90px; /* DebugPanel 옆에 배치 */
+    bottom: 16px;
+    z-index: 9999;
+}
+
+.idleFab {
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(20, 80, 20, 0.85); /* 초록색 계열로 구분 */
+    color: white;
+    padding: 10px 12px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.idlePanel {
+    position: absolute;
+    bottom: 40px;
+    right: 0;
+    width: 320px;
+    background: rgba(12, 12, 12, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 12px;
+    padding: 16px;
+    color: #eaeaea;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.idleHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 8px;
+    margin-bottom: 8px;
+}
+
+.idleTitle {
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.idleClose {
+    background: transparent;
+    border: none;
+    color: #aaa;
+    cursor: pointer;
+}
+
+.idleRow {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.idleInput {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: white;
+    padding: 6px;
+    border-radius: 4px;
+}
+
+.idleActions {
+    display: flex;
+    gap: 8px;
+}
+
+.idleBtn {
+    flex: 1;
+    padding: 8px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.idleBtn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.idleBtn:not(:disabled):hover {
+    background: rgba(255, 255, 255, 0.2);
+}
