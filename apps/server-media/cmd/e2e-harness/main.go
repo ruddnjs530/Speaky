@@ -28,7 +28,7 @@ func main() {
 		log.Fatalf("did not connect: %v", err)
 	}
 	defer conn.Close()
-	client := pb.NewControlServiceClient(conn)
+	client := pb.NewMediaControlServiceClient(conn)
 
 	// 2. Setup HTTP Handlers
 	http.Handle("/", http.FileServer(http.Dir("./cmd/e2e-harness/public")))

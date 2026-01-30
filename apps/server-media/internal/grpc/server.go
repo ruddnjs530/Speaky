@@ -15,7 +15,7 @@ import (
 
 // MediaServiceServer implements the ControlService gRPC interface.
 type MediaServiceServer struct {
-	pb.UnimplementedControlServiceServer
+	pb.UnimplementedMediaControlServiceServer
 	manager *core.Manager
 }
 
@@ -43,8 +43,20 @@ func (s *MediaServiceServer) CreateRoom(ctx context.Context, req *pb.CreateRoomR
 	slog.Info("CreateRoom called", "roomID", room.ID, "hostID", req.HostId)
 
 	return &pb.CreateRoomResponse{
-		RoomId: room.ID,
+		Success: true,
+		RoomId:  room.ID,
 	}, nil
+}
+
+// DeleteRoom destroys a media room.
+func (s *MediaServiceServer) DeleteRoom(ctx context.Context, req *pb.DeleteRoomRequest) (*pb.DeleteRoomResponse, error) {
+	slog.Info("DeleteRoom called", "roomID", req.RoomId)
+
+	if err := s.manager.DeleteRoom(req.RoomId); err != nil {
+		return &pb.DeleteRoomResponse{Success: false}, mapErrorToGRPC(err)
+	}
+
+	return &pb.DeleteRoomResponse{Success: true}, nil
 }
 
 // JoinRoom handles the WebRTC signaling to join a room.
@@ -120,6 +132,23 @@ func (s *MediaServiceServer) LeaveRoom(ctx context.Context, req *pb.LeaveRoomReq
 		return &pb.LeaveRoomResponse{Success: false}, mapErrorToGRPC(err)
 	}
 	return &pb.LeaveRoomResponse{Success: true}, nil
+}
+
+// UpdateSessionConfig updates the AI configuration for the host in the room.
+func (s *MediaServiceServer) UpdateSessionConfig(ctx context.Context, req *pb.UpdateSessionConfigRequest) (*pb.UpdateSessionConfigResponse, error) {
+	slog.Info("UpdateSessionConfig called", "roomID", req.RoomId)
+
+	room, err := s.manager.GetRoom(req.RoomId)
+	if err != nil {
+		return &pb.UpdateSessionConfigResponse{Success: false}, mapErrorToGRPC(err)
+	}
+
+	// Delegate to room to update host settings
+	if err := room.UpdateHostSessionConfig(req.VoiceModelId, req.PitchScale); err != nil {
+		return &pb.UpdateSessionConfigResponse{Success: false}, mapErrorToGRPC(err)
+	}
+
+	return &pb.UpdateSessionConfigResponse{Success: true}, nil
 }
 
 // -----------------------------------------------------------------------------

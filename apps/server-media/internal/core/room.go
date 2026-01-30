@@ -586,6 +586,37 @@ func (r *Room) Close() error {
 	return nil
 }
 
+// UpdateHostSessionConfig updates the AI configuration for the host session.
+func (r *Room) UpdateHostSessionConfig(voiceModelID string, pitchScale float32) error {
+	r.mu.RLock()
+	_, exists := r.sessions[r.HostID]
+	r.mu.RUnlock()
+
+	if !exists {
+		return fmt.Errorf("%w: host %s not found in room", ErrSessionNotFound, r.HostID)
+	}
+
+	// Update the AudioProcessor for all audio tracks owned by the host.
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	found := false
+	for _, track := range r.activeTracks {
+		if track.OwnerID == r.HostID && track.Kind == webrtc.RTPCodecTypeAudio {
+			if track.processor != nil {
+				track.processor.UpdateConfig(voiceModelID, pitchScale)
+				found = true
+			}
+		}
+	}
+
+	if !found {
+		slog.Warn("UpdateHostSessionConfig: No audio processor found for host", "roomID", r.ID, "hostID", r.HostID)
+	}
+
+	return nil
+}
+
 // GetSession retrieves a session by userID.
 func (r *Room) GetSession(userID string) (*Session, bool) {
 	r.mu.RLock()

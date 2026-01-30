@@ -4,67 +4,50 @@ package control.v1;
 
 option go_package = "mediaserver/proto;protopb";
 
-// ControlService handles room management and signaling.
-service ControlService {
-  // 1. Create Room
-  rpc CreateRoom(CreateRoomRequest) returns (CreateRoomResponse);
+service MediaControlService {
+  // 1. Resource Management
+  rpc CreateRoom (CreateRoomRequest) returns (CreateRoomResponse);
+  rpc DeleteRoom (DeleteRoomRequest) returns (DeleteRoomResponse);
 
-  // 2. Join Room (Signaling - Offer/Answer)
-  // Corresponds to SC's StartHostPeer
-  rpc JoinRoom(JoinRoomRequest) returns (JoinRoomResponse);
+  // 2. Signaling & Connectivity
+  rpc JoinRoom (JoinRoomRequest) returns (JoinRoomResponse);
+  rpc LeaveRoom (LeaveRoomRequest) returns (LeaveRoomResponse);
+  rpc Renegotiate (RenegotiateRequest) returns (RenegotiateResponse);
+  rpc SubmitIceCandidate (SubmitIceCandidateRequest) returns (SubmitIceCandidateResponse);
 
-  // 3. ICE Candidate Exchange (Trickle ICE Support)
-  // Corresponds to SC's TrickleIce(roomId, peerId, candidate)
-  // Needed because client might send candidates after the initial Offer.
-  rpc SubmitIceCandidate(SubmitIceCandidateRequest) returns (SubmitIceCandidateResponse);
-
-  // 4. Leave Room & Resource Cleanup
-  // Corresponds to SC's ClosePeer
-  // 5. Renegotiate (Add tracks after joining)
-  rpc Renegotiate(RenegotiateRequest) returns (RenegotiateResponse);
+  // 3. Feature Control
+  // SC 서버에서 권한 확인이 완료된 후, 해당 방의 유일한 송출자의 설정(AI 모델, 피치 등)을 설정합니다.
+  rpc UpdateSessionConfig (UpdateSessionConfigRequest) returns (UpdateSessionConfigResponse);
 }
 
 // --- Messages ---
 
 message CreateRoomRequest {
-  string host_id = 1;
-  string room_id = 2;
+  string room_id = 1; 
+  string host_id = 2; // 방 생성 시 송출 권한을 가진 유저를 지정합니다.
 }
 
 message CreateRoomResponse {
+  bool success = 1;
+  string room_id = 2;
+}
+
+message DeleteRoomRequest {
   string room_id = 1;
+}
+
+message DeleteRoomResponse {
+  bool success = 1;
 }
 
 message JoinRoomRequest {
   string room_id = 1;
-  string user_id = 2; // Corresponds to peerId
+  string user_id = 2;
   string sdp_offer = 3;
 }
 
 message JoinRoomResponse {
   string sdp_answer = 1;
-}
-
-message RenegotiateRequest {
-    string room_id = 1;
-    string user_id = 2;
-    string sdp_offer = 3;
-}
-
-message RenegotiateResponse {
-    string sdp_answer = 1;
-}
-
-message SubmitIceCandidateRequest {
-  string room_id = 1;
-  string user_id = 2;
-  string candidate = 3; // JSON string or candidate string
-  string sdp_mid = 4;
-  int32 sdp_m_line_index = 5;
-}
-
-message SubmitIceCandidateResponse {
-  bool success = 1;
 }
 
 message LeaveRoomRequest {
@@ -73,5 +56,37 @@ message LeaveRoomRequest {
 }
 
 message LeaveRoomResponse {
+  bool success = 1;
+}
+
+message RenegotiateRequest {
+  string room_id = 1;
+  string user_id = 2;
+  string sdp_offer = 3;
+}
+
+message RenegotiateResponse {
+  string sdp_answer = 1;
+}
+
+message SubmitIceCandidateRequest {
+  string room_id = 1;
+  string user_id = 2;
+  string candidate = 3;
+  string sdp_mid = 4;
+  int32 sdp_m_line_index = 5;
+}
+
+message SubmitIceCandidateResponse {
+  bool success = 1;
+}
+
+message UpdateSessionConfigRequest {
+  string room_id = 1;        // 어떤 방의 설정을 바꿀지 알려줍니다.
+  string voice_model_id = 2; // 변경할 모델 파일 ID
+  float pitch_scale = 3;     // 변경할 피치 값
+}
+
+message UpdateSessionConfigResponse {
   bool success = 1;
 }
