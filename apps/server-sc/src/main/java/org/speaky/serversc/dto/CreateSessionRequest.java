@@ -13,22 +13,22 @@ public class CreateSessionRequest {
     
     /**
      * 호스트(방송자) 사용자 ID
+     * TODO: JWT에서 추출하도록 변경 예정 (현재는 호환성을 위해 유지)
      */
     @NotNull(message = "Host user ID is required")
     private Long hostUserId;
     
     /**
-     * 채널 ID (필수)
+     * 채널 ID (Optional - 서버에서 자동 생성 가능)
      * 예: "ch_user_faker"
      */
-    @NotBlank(message = "Channel ID is required")
     private String channelId;
     
     /**
-     * 음성 모델 ID
+     * 음성 모델 ID (Optional)
+     * 프론트엔드 스펙: voiceModelID
      */
-    @NotNull(message = "Voice model ID is required")
-    private Long voiceModelId;
+    private Long voiceModelID;
     
     /**
      * 방송 제목

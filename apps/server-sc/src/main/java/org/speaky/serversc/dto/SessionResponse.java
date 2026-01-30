@@ -30,6 +30,11 @@ public class SessionResponse {
     private String pipelineId;
     private LocalDateTime createdAt;
     
+    // WebSocket 연결 정보
+    private String wsUrl;
+    private String signalingToken;
+    private String channelId;
+    
     /**
      * SessionEntity를 SessionResponse로 변환
      */
@@ -46,6 +51,8 @@ public class SessionResponse {
                 .mediaServerId(entity.getMediaServerId())
                 .pipelineId(entity.getPipelineId())
                 .createdAt(entity.getCreatedAt())
+                .channelId(entity.getChannelId())
+                // wsUrl과 signalingToken은 Controller에서 설정
                 .build();
     }
 }
