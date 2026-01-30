@@ -20,7 +20,9 @@ import { getErrorMessage } from '../../shared/lib/errorUtils';
 
 type Step = 'setup' | 'live';
 
-const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8080/ws';
+import { WS_URL_DEFAULT } from '../../shared/config';
+
+const WS_URL = WS_URL_DEFAULT;
 
 export default function HostPage() {
   const navigate = useNavigate();

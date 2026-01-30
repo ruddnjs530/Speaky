@@ -3,7 +3,9 @@ import { apiFetch } from "../../../shared/lib/apiFetch";
 import { getAccessToken } from "../../../shared/lib/authToken";
 
 
-const WS_URL_FALLBACK = import.meta.env.VITE_WS_URL || 'ws://localhost:8080/ws';
+import { WS_URL_DEFAULT } from "../../../shared/config";
+
+const WS_URL_FALLBACK = WS_URL_DEFAULT;
 
 async function parseError(res: Response): Promise<{ code: string; message: string }> {
     try {

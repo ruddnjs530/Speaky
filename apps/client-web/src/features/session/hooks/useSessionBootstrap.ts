@@ -79,7 +79,7 @@ export function useSessionBootstrap() {
         return kind === "Idle" || kind === "Error";
     }
 
-    async function startHost() {
+    async function startHost(title: string) {
         if (!canStartBootstrap(state.kind)) return;
 
         dispatch({ type: "EV_BOOTSTRAP_START" });
@@ -90,7 +90,7 @@ export function useSessionBootstrap() {
             // AppState 흐름상 'Create + Start'를 의미하겠지만, 현재는 createSession만 수행합니다.
 
             // 1. 세션 생성
-            const session = await sessionApi.createSession("Default Title");
+            const session = await sessionApi.createSession(title);
 
             // 2. HostPage 동작과 맞추기 위해 여기서 자동으로 startLive를 호출하지 않습니다.
             // 다만 이 훅(Bootstrap)의 기대값에 맞춰, 세션 응답을 StartOrJoinResponse 구조로 매핑합니다. 
