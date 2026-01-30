@@ -256,7 +256,7 @@ func (r *Room) Join(userID, offerSDP string) (string, error) {
 	pc, err := r.api.NewPeerConnection(webrtc.Configuration{})
 	if err != nil {
 		r.mu.Unlock()
-		return "", fmt.Errorf("failed to create peer connection: %w", err)
+		return "", fmt.Errorf("%w: %v", ErrPeerConnectionFailed, err)
 	}
 
 	// 3. Create Session wrapper
@@ -299,7 +299,7 @@ func (r *Room) Join(userID, offerSDP string) (string, error) {
 	if err != nil {
 		// Cleanup on failure
 		r.Leave(userID)
-		return "", fmt.Errorf("failed to handle offer: %w", err)
+		return "", fmt.Errorf("%w: %v", ErrInvalidSDP, err)
 	}
 
 	slog.Info("User joined room",
@@ -323,7 +323,7 @@ func (r *Room) Renegotiate(userID string, offerSDP string) (string, error) {
 
 	answerSDP, err := session.HandleOffer(offerSDP)
 	if err != nil {
-		return "", fmt.Errorf("failed to handle offer: %w", err)
+		return "", fmt.Errorf("%w: %v", ErrInvalidSDP, err)
 	}
 
 	return answerSDP, nil
