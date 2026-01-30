@@ -45,45 +45,15 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
 
     try {
       /**
-       * 실제 백엔드 로그인 시도
-       * login() 함수는 내부에서 accessToken을 저장하도록 구현되어 있으면 더 좋고,
-       * 아니면 여기서 data.accessToken 받아서 저장해도 됨.
+       * - loginId 필드 사용
        */
-      await login({ id: id.trim(), password });
+      await login({ loginId: id.trim(), password });
 
-      // 토큰 저장/인증 상태 변경 알림(프로젝트에서 쓰는 방식 유지)
+      // 토큰 저장/인증 상태 변경 알림
       window.dispatchEvent(new Event('auth-change'));
       onSuccess?.();
     } catch (err) {
-      /**
-       * 백엔드가 아직 없거나(404/네트워크 에러),
-       * 스펙이 아직 안 맞는 동안 개발이 막히지 않도록 fallback 유지
-       * - test / 1234 는 성공
-       */
-      const isBackendNotReady =
-        err instanceof Error &&
-        (err.message.includes('Failed to fetch') ||
-          err.message.includes('404') ||
-          err.message.includes('login') ||
-          err.message.includes('로그인'));
-
-      if (isBackendNotReady) {
-        // ===== fallback: fake login =====
-        const success = id.trim() === 'test' && password === '1234';
-
-        if (success) {
-          localStorage.setItem('accessToken', 'fake-token');
-          setIsSubmitting(false);
-          window.dispatchEvent(new Event('auth-change'));
-          onSuccess?.();
-          return;
-        }
-
-        setFormError('아이디 또는 비밀번호가 올바르지 않습니다.');
-      } else {
-        // 진짜 서버에서 내려준 실패일 가능성
-        setFormError('로그인에 실패했습니다. 잠시 후 다시 시도해주세요.');
-      }
+      setFormError('로그인에 실패했습니다. 아이디와 비밀번호를 확인해주세요.');
     } finally {
       setIsSubmitting(false);
     }
