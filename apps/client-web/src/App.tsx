@@ -9,7 +9,7 @@ export default function AppLayout() {
             <Outlet />
             {/* 필요하면 Footer */}
 
-            <DebugPanel />
+            {import.meta.env.DEV && <DebugPanel />}
         </div>
     );
 }

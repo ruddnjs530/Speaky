@@ -1,58 +1,81 @@
 import { useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useSessionBootstrap } from "../../hooks/useSessionBootstrap";
+import "./IdlePanel.css";
 
 export function IdlePanel() {
-    const { start, join } = useSessionBootstrap();
+    const { start, join, startHost } = useSessionBootstrap();
     const { pathname } = useLocation();
 
-    const isHostStudio = pathname.startsWith("/host/studio");
+    const [open, setOpen] = useState(false);
     const [channelId, setChannelId] = useState("");
 
-    const { startHost } = useSessionBootstrap();
+    const isHostStudio = pathname.startsWith("/host/studio");
 
     // Host studio: channelId 입력 없이 "내 채널로 시작"만 노출
-    if (isHostStudio) {
-        return (
-            <div style={{ padding: 16 }}>
-                <h2>세션 준비</h2>
-                <p style={{ marginTop: 8 }}>
+    const renderHostContent = () => (
+        <>
+            <div className="idleRow">
+                <p style={{ fontSize: 12, opacity: 0.8 }}>
                     호스트 채널 정보를 기반으로 방송 세션을 생성합니다.
                 </p>
-
-                <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-                    {/* 핵심: start를 channelId 없이 시작할 수 있도록 useSessionBootstrap을 수정해야 함 */}
-                    <button onClick={() => startHost()}>
-                        Host: Start Live (REST)
-                    </button>
-                </div>
             </div>
-        );
-    }
+            <div className="idleActions">
+                <button className="idleBtn" onClick={() => { startHost(); setOpen(false); }}>
+                    Start Live (REST)
+                </button>
+            </div>
+        </>
+    );
 
     // Viewer/기타: 기존대로 channelId 입력해서 join
-    return (
-        <div style={{ padding: 16 }}>
-            <h2>Idle</h2>
-            <div style={{ marginTop: 8 }}>
-                <label>
-                    channelId:
-                    <input
-                        value={channelId}
-                        onChange={(e) => setChannelId(e.target.value)}
-                        style={{ marginLeft: 8 }}
-                    />
-                </label>
+    const renderViewerContent = () => (
+        <>
+            <div className="idleRow">
+                <label style={{ fontSize: 12 }}>channelId</label>
+                <input
+                    className="idleInput"
+                    value={channelId}
+                    onChange={(e) => setChannelId(e.target.value)}
+                    placeholder="Enter channel ID..."
+                />
             </div>
 
-            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-                <button onClick={() => start(channelId)} disabled={!channelId.trim()}>
-                    Host: Start Live (REST)
+            <div className="idleActions">
+                <button
+                    className="idleBtn"
+                    onClick={() => { start(channelId); setOpen(false); }}
+                    disabled={!channelId.trim()}
+                >
+                    Host: Start
                 </button>
-                <button onClick={() => join(channelId)} disabled={!channelId.trim()}>
-                    Guest: Join Live (REST)
+                <button
+                    className="idleBtn"
+                    onClick={() => { join(channelId); setOpen(false); }}
+                    disabled={!channelId.trim()}
+                >
+                    Guest: Join
                 </button>
             </div>
+        </>
+    );
+
+    return (
+        <div className="idleRoot">
+            <button className="idleFab" onClick={() => setOpen((v) => !v)}>
+                Idle Setup
+            </button>
+
+            {open && (
+                <div className="idlePanel">
+                    <div className="idleHeader">
+                        <span className="idleTitle">Session Setup (Dev)</span>
+                        <button className="idleClose" onClick={() => setOpen(false)}>✕</button>
+                    </div>
+
+                    {isHostStudio ? renderHostContent() : renderViewerContent()}
+                </div>
+            )}
         </div>
     );
 }

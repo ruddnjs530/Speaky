@@ -1,6 +1,5 @@
-
 import type { ApiErrorResponse, StartOrJoinResponse, SessionResponse } from "./sessionApi.types";
-import { authHeaders } from "./authHeaders";
+import { apiFetch } from "../../../shared/lib/apiFetch";
 import { getAccessToken } from "../../../shared/lib/authToken";
 
 
@@ -28,9 +27,8 @@ export const sessionApi = {
 
     // 세션 생성 (대기방 만들기)
     async createSession(title: string): Promise<SessionResponse> {
-        const res = await fetch('/api/v1/sessions', {
+        const res = await apiFetch('/api/v1/sessions', {
             method: 'POST',
-            headers: authHeaders(),
             body: JSON.stringify({
                 title: title || "방송 제목 없음",
                 voiceModelID: null
@@ -47,11 +45,10 @@ export const sessionApi = {
         mediaServerId: string = "default",
         pipelineId: string = "default"
     ): Promise<SessionResponse> {
-        const res = await fetch(
+        const res = await apiFetch(
             `/api/v1/sessions/${sessionId}/start`,
             {
                 method: "POST",
-                headers: authHeaders(),
                 body: JSON.stringify({
                     mediaServerId,
                     pipelineId,
@@ -66,11 +63,10 @@ export const sessionApi = {
     // 세션 참여 (API 명세 준수: GET state -> session info)
     async joinLive(channelId: string): Promise<StartOrJoinResponse> {
         // 1. 채널 상태 조회 (백엔드 미구현 시 404 예상)
-        const res = await fetch(
+        const res = await apiFetch(
             `/api/v1/channels/${encodeURIComponent(channelId)}/state`,
             {
                 method: "GET", // GET으로 변경
-                headers: authHeaders(),
             }
         );
 
@@ -104,11 +100,10 @@ export const sessionApi = {
         sessionId: string,
         reason: string = "HOST_ENDED"
     ): Promise<SessionResponse> {
-        const res = await fetch(
+        const res = await apiFetch(
             `/api/v1/sessions/${sessionId}/end`,
             {
                 method: "POST",
-                headers: authHeaders(),
                 body: JSON.stringify({
                     reason
                 }),
