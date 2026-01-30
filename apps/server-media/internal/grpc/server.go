@@ -30,8 +30,7 @@ func NewServer(manager *core.Manager) *MediaServiceServer {
 func (s *MediaServiceServer) CreateRoom(ctx context.Context, req *pb.CreateRoomRequest) (*pb.CreateRoomResponse, error) {
 	roomID := req.RoomId
 	if roomID == "" {
-		// Fallback to HostID if roomID is not specified
-		roomID = req.HostId
+		return nil, status.Error(codes.InvalidArgument, "room_id is required")
 	}
 	hostID := req.HostId
 
@@ -117,8 +116,7 @@ func (s *MediaServiceServer) SubmitIceCandidate(ctx context.Context, req *pb.Sub
 
 	if err := session.AddICECandidate(candidate); err != nil {
 		slog.Warn("Failed to add ICE candidate", "error", err)
-		// ICE failure might not be critical enough to return gRPC error, but let's signal failure in response body
-		return &pb.SubmitIceCandidateResponse{Success: false}, nil
+		return &pb.SubmitIceCandidateResponse{Success: false}, status.Errorf(codes.Internal, "failed to add ICE candidate: %v", err)
 	}
 
 	return &pb.SubmitIceCandidateResponse{Success: true}, nil

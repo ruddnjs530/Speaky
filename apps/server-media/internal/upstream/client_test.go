@@ -19,7 +19,7 @@ import (
 
 // mockVoiceServer implements a simple mock AI server for testing
 type mockVoiceServer struct {
-	pb.UnimplementedMediaControlServiceServer
+	pb.UnimplementedVoiceServiceServer
 	// Track received chunks for verification
 	receivedChunks []*pb.AudioChunk
 }
