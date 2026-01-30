@@ -39,6 +39,9 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
+            // CORS 설정 활성화
+            .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+            
             // CSRF 설정
             .csrf(csrf -> csrf
                 .ignoringRequestMatchers("/h2-console/**")  // H2 콘솔은 CSRF 예외
@@ -70,5 +73,30 @@ public class SecurityConfig {
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         
         return http.build();
+    }
+
+    /**
+     * CORS 상세 설정
+     */
+    @Bean
+    public org.springframework.web.cors.CorsConfigurationSource corsConfigurationSource() {
+        org.springframework.web.cors.CorsConfiguration configuration = new org.springframework.web.cors.CorsConfiguration();
+        
+        // 프론트엔드 출처 허용
+        configuration.addAllowedOrigin("http://localhost:5173");
+        configuration.addAllowedOrigin("http://127.0.0.1:5173");
+        
+        // 모든 HTTP 메서드 허용
+        configuration.addAllowedMethod("*");
+        
+        // 모든 헤더 허용
+        configuration.addAllowedHeader("*");
+        
+        // 인증 정보 포함 허용 (쿠키 등)
+        configuration.setAllowCredentials(true);
+        
+        org.springframework.web.cors.UrlBasedCorsConfigurationSource source = new org.springframework.web.cors.UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", configuration);
+        return source;
     }
 }
