@@ -93,16 +93,6 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
           {isSubmitting ? '로그인 중...' : '로그인'}
         </Button>
       </form>
-
-      {/* TODO : viewer로 연결하는 링크 */}
-      <a href="#" className="login-subtitle" onClick={(e) => e.preventDefault()}>
-        비회원으로 시청하기
-      </a>
-
-      {/* 테스트 계정 힌트 */}
-      <div style={{ marginTop: 12, fontSize: 12, opacity: 0.7 }}>
-        테스트 로그인: id <b>test</b>, pw <b>1234</b>
-      </div>
     </Card>
   );
 }
