@@ -13,7 +13,7 @@ services:
     stdin_open: true # React Hot Reload
     tty: true
     environment:
-      - VITE_API_URL=http://localhost:8080 # Browser accesses API directly
+      - VITE_API_URL=http://localhost:8081 # Browser accesses API directly
     depends_on:
       - server-media
 
@@ -62,7 +62,7 @@ services:
           devices:
             - driver: nvidia
               count: all
-              capabilities: [gpu]
+              capabilities: [ gpu ]
 
   # 4. Spring Signaling Server (Pending)
   server-sc:

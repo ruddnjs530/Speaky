@@ -45,6 +45,23 @@ export function DebugPanel() {
                         <div className="dbgActions">
                             <button
                                 className="dbgBtn"
+                                style={{ color: "#fa0" }}
+                                onClick={() => {
+                                    if (localStorage.getItem("accessToken")) {
+                                        localStorage.removeItem("accessToken");
+                                        console.log("[DevTools] Logout");
+                                    } else {
+                                        localStorage.setItem("accessToken", "dev-token-" + Date.now());
+                                        console.log("[DevTools] Login (Dev)");
+                                    }
+                                    window.dispatchEvent(new Event("auth-change"));
+                                    window.dispatchEvent(new Event("storage"));
+                                }}
+                            >
+                                DevAuth
+                            </button>
+                            <button
+                                className="dbgBtn"
                                 onClick={() => {
                                     setTypeFilter("SYS_ERROR");
                                     setRequestIdFilter("");
@@ -124,8 +141,8 @@ export function DebugPanel() {
                                     {it.sessionId && <span className="dbgChip">sess: {it.sessionId}</span>}
                                     {(it.fromRole || it.fromClientId) && (
                                         <span className="dbgChip">
-                      from: {it.fromRole ?? "?"}/{it.fromClientId ?? "?"}
-                    </span>
+                                            from: {it.fromRole ?? "?"}/{it.fromClientId ?? "?"}
+                                        </span>
                                     )}
                                     {it.summary && <span className="dbgSummary">{it.summary}</span>}
                                 </div>

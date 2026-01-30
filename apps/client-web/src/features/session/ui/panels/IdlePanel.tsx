@@ -21,7 +21,7 @@ export function IdlePanel() {
                 </p>
             </div>
             <div className="idleActions">
-                <button className="idleBtn" onClick={() => { startHost(); setOpen(false); }}>
+                <button className="idleBtn" onClick={() => { startHost("Host Session"); setOpen(false); }}>
                     Start Live (REST)
                 </button>
             </div>
