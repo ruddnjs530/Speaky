@@ -45,7 +45,7 @@ class SessionControllerTest {
         CreateSessionRequest request = new CreateSessionRequest();
         request.setHostUserId(1L);
         request.setChannelId("ch_test");
-        request.setVoiceModelId(100L);
+        request.setVoiceModelID(100L);
         request.setTitle("Test Session");
         
         SessionEntity session = createTestSession("session-1", 1L, "ch_test", 100L, "Test Session");
