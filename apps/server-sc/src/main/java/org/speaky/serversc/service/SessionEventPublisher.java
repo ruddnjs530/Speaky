@@ -35,7 +35,8 @@ public class SessionEventPublisher {
      * @param payload 이벤트 페이로드
      */
     public void publishSessionEvent(SessionEventPayload payload) {
-        String destination = "/topic/session/" + payload.getSessionId();
+        String channelId = payload.getSessionData().getChannelId();
+        String destination = "/topic/channel/" + channelId;
         
         Envelope envelope = Envelope.builder()
                 .v(PROTOCOL_VERSION)
