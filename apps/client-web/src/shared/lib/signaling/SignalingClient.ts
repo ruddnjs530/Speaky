@@ -28,10 +28,6 @@ export class SignalingClient {
   private hasSentAttach = false;
   private hasConnectedOnce = false; // 첫 연결 vs 재연결 구분 플래그
 
-  private lastWsUrl: string | null = null;
-  private lastToken: string | null = null;
-  private manualClose = false;
-
   private readonly ctx: SessionContext;
   private readonly handlers: Handlers;
 
@@ -48,10 +44,6 @@ export class SignalingClient {
       console.warn("STOMP Client already active");
       return;
     }
-
-    this.manualClose = false;
-    this.lastWsUrl = baseWsUrl;
-    this.lastToken = token;
 
     const url = buildWsUrl(baseWsUrl, token);
     const brokerURL = url.replace(/^http/, 'ws');
@@ -89,7 +81,7 @@ export class SignalingClient {
         console.error('Additional details: ' + frame.body);
       },
 
-      onWebSocketClose: (evt) => {
+      onWebSocketClose: () => {
         signalingTrace.pushWs("CLOSE", "STOMP WebSocket Closed");
         this.handlers.onClose?.(0, "STOMP_CLOSE");
       },
@@ -121,8 +113,7 @@ export class SignalingClient {
     this.sendRaw(env, { requireAttachFirst: type !== "SYS_ATTACH" });
   }
 
-  close(code?: number, reason?: string) {
-    this.manualClose = true;
+  close() {
     if (this.client) {
       this.client.deactivate();
       this.client = null;

@@ -4,7 +4,6 @@ import StreamPreview from '../../screenShare/ui/StreamPreview';
 import AudioControl from './AudioControl';
 import ReconnectBanner from './ReconnectBanner';
 import type { ConnectionStatus } from '../model/useConnectionStatus';
-import type { RoomPhase } from '../../screenShare/api/roomStatus';
 
 type Props = {
   status: ConnectionStatus;
@@ -13,9 +12,6 @@ type Props = {
   muted?: boolean;
   onRetry?: () => void;
   onReload?: () => void;
-  phase?: RoomPhase;
-
-
 };
 
 function getErrorName(e: unknown): string | undefined {
@@ -32,13 +28,13 @@ function isAutoplayBlocked(e: unknown): boolean {
 }
 
 export default function ViewerMediaPanel({
-                                           status,
-                                           stream,
-                                           title = '시청 화면(서버 출력)',
-                                           muted = false,
-                                           onRetry,
-                                           onReload,
-                                         }: Props) {
+  status,
+  stream,
+  title = '시청 화면(서버 출력)',
+  muted = false,
+  onRetry,
+  onReload,
+}: Props) {
   const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
   const [needUserGesture, setNeedUserGesture] = useState(false);
   const [playMsg, setPlayMsg] = useState('');
@@ -60,8 +56,8 @@ export default function ViewerMediaPanel({
       });
     } catch (e) {
       const msg = isAutoplayBlocked(e)
-          ? '브라우저 정책으로 자동 재생이 차단되었습니다. 재생 버튼을 눌러주세요.'
-          : '재생에 실패했습니다. 다시 시도해주세요.';
+        ? '브라우저 정책으로 자동 재생이 차단되었습니다. 재생 버튼을 눌러주세요.'
+        : '재생에 실패했습니다. 다시 시도해주세요.';
 
       queueMicrotask(() => {
         setNeedUserGesture(true);
@@ -99,49 +95,49 @@ export default function ViewerMediaPanel({
   }, [tryPlay]);
 
   return (
-      <div style={{ display: 'grid', gap: 10 }}>
-        <ReconnectBanner status={status} onRetry={onRetry} onReload={onReload} />
+    <div style={{ display: 'grid', gap: 10 }}>
+      <ReconnectBanner status={status} onRetry={onRetry} onReload={onReload} />
 
 
-        <div style={{ position: 'relative' }}>
-          <StreamPreview ref={setVideoEl} title={title} stream={stream} muted={muted} />
+      <div style={{ position: 'relative' }}>
+        <StreamPreview ref={setVideoEl} title={title} stream={stream} muted={muted} />
 
-          {needUserGesture && (
-              <div
-                  style={{
-                    position: 'absolute',
-                    inset: 0,
-                    display: 'grid',
-                    placeItems: 'center',
-                    gap: 12,
-                    background: 'rgba(0,0,0,0.55)',
-                    color: '#fff',
-                    padding: 16,
-                    textAlign: 'center',
-                  }}
-              >
-                <div>{playMsg}</div>
-                <button
-                    onClick={handleClickPlay}
-                    style={{
-                      padding: '10px 14px',
-                      borderRadius: 8,
-                      border: '1px solid rgba(255,255,255,0.5)',
-                      background: 'rgba(255,255,255,0.12)',
-                      color: '#fff',
-                      cursor: 'pointer',
-                    }}
-                >
-                  재생하기
-                </button>
-              </div>
-          )}
-        </div>
-
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          {/* AudioControl을 엘리먼트 직접 받도록 수정 필요 */}
-          <AudioControl mediaEl={videoEl} />
-        </div>
+        {needUserGesture && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'grid',
+              placeItems: 'center',
+              gap: 12,
+              background: 'rgba(0,0,0,0.55)',
+              color: '#fff',
+              padding: 16,
+              textAlign: 'center',
+            }}
+          >
+            <div>{playMsg}</div>
+            <button
+              onClick={handleClickPlay}
+              style={{
+                padding: '10px 14px',
+                borderRadius: 8,
+                border: '1px solid rgba(255,255,255,0.5)',
+                background: 'rgba(255,255,255,0.12)',
+                color: '#fff',
+                cursor: 'pointer',
+              }}
+            >
+              재생하기
+            </button>
+          </div>
+        )}
       </div>
+
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        {/* AudioControl을 엘리먼트 직접 받도록 수정 필요 */}
+        <AudioControl mediaEl={videoEl} />
+      </div>
+    </div>
   );
 }

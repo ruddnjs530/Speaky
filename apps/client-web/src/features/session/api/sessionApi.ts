@@ -3,7 +3,9 @@ import { apiFetch } from "../../../shared/lib/apiFetch";
 import { getAccessToken } from "../../../shared/lib/authToken";
 
 
-const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8080/ws';
+import { WS_URL_DEFAULT } from "../../../shared/config";
+
+const WS_URL_FALLBACK = WS_URL_DEFAULT;
 
 async function parseError(res: Response): Promise<{ code: string; message: string }> {
     try {
@@ -17,7 +19,7 @@ async function parseError(res: Response): Promise<{ code: string; message: strin
     }
 }
 
-// 채널 상태 응답 타입 (내부용)
+// 채널 상태 응답 (백엔드 ChannelStateResponse)
 type ChannelStateResponse = {
     hostLoginId: string;
     activeSessionId: string | null;
@@ -25,7 +27,7 @@ type ChannelStateResponse = {
 
 export const sessionApi = {
 
-    // 세션 생성 (대기방 만들기)
+    // 1. 세션 생성 (대기방 만들기)
     async createSession(title: string): Promise<SessionResponse> {
         const res = await apiFetch('/api/v1/sessions', {
             method: 'POST',
@@ -60,42 +62,39 @@ export const sessionApi = {
         return (await res.json()) as SessionResponse;
     },
 
-    // 세션 참여 (API 명세 준수: GET state -> session info)
+    // 3. 세션 참여 (API 명세 준수: GET state -> session info)
     async joinLive(channelId: string): Promise<StartOrJoinResponse> {
-        // 1. 채널 상태 조회 (백엔드 미구현 시 404 예상)
-        const res = await apiFetch(
-            `/api/v1/channels/${encodeURIComponent(channelId)}/state`,
-            {
-                method: "GET", // GET으로 변경
-            }
-        );
-
-        if (!res.ok) throw await parseError(res);
-
-        const data = (await res.json()) as { data: ChannelStateResponse }; // 공통 응답 래퍼 고려
-        const state = data.data || data; // 구조에 따라 유연하게
-
+        // (A) 채널 상태 조회
+        const stateRes = await apiFetch(`/api/v1/channels/${encodeURIComponent(channelId)}/state`, { method: "GET" });
+        if (!stateRes.ok) throw await parseError(stateRes);
+        const state = (await stateRes.json()) as ChannelStateResponse;
         if (!state.activeSessionId) {
             throw { code: "SESSION_NOT_ACTIVE", message: "방송 중이 아닙니다." };
         }
-
-        const token = getAccessToken();
-        if (!token) {
+        const sessionId = state.activeSessionId;
+        // (B) 세션 상세 정보 조회 (wsUrl, token 획득 목적)
+        const sessionRes = await apiFetch(`/api/v1/sessions/${sessionId}`, { method: 'GET' });
+        if (!sessionRes.ok) throw await parseError(sessionRes);
+        const session = (await sessionRes.json()) as SessionResponse;
+        // 로그인된 사용자 토큰 (백엔드 signalingToken이 없으면 이걸 fallback으로 사용)
+        const userToken = getAccessToken();
+        /*
+         * 만약 비로그인 사용자도 시청 가능하다면 userToken 체크는 제거하거나,
+         * 백엔드에서 주는 session.signalingToken을 전적으로 신뢰해야 합니다.
+         */
+        if (!session.signalingToken && !userToken) {
             throw { code: "UNAUTHORIZED", message: "로그인 후 이용해주세요." };
         }
-
-        // 2. 참여 정보 구성 (Viewer용 Response)
-        // 백엔드에서 아직 wsUrl 등을 안주므로 Client 로직에서 구성해야 함
         return {
-            channelId: state.hostLoginId,
-            sessionId: state.activeSessionId,
+            channelId: state.hostLoginId || channelId, // hostLoginId를 우선
+            sessionId: sessionId,
             role: "GUEST",
-            wsUrl: WS_URL,
-            token: token
+            wsUrl: session.wsUrl || WS_URL_FALLBACK,
+            token: session.signalingToken || userToken || ""
         };
     },
 
-    // 방송 종료 (파라미터화)
+    // 4. 방송 종료 (파라미터화)
     async endBroadcast(
         sessionId: string,
         reason: string = "HOST_ENDED"
