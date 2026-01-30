@@ -45,6 +45,7 @@ public class SecurityConfig {
             // CSRF 설정
             .csrf(csrf -> csrf
                 .ignoringRequestMatchers("/h2-console/**")  // H2 콘솔은 CSRF 예외
+                .ignoringRequestMatchers("/api/v1/auth/**")  // 인증 API는 CSRF 예외
             )
             
             // Session 사용 안 함 (Stateless)
