@@ -3,7 +3,6 @@ import { apiFetch } from '../../../shared/lib/apiFetch';
 
 type LoginRequest = { loginId: string; password: string };
 
-// 서버 응답 형태에 맞춰 수정해줘.
 type LoginResponse = { accessToken: string };
 
 export async function login(req: LoginRequest) {
