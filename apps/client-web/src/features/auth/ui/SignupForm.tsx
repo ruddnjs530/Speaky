@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Mail, Lock, User, Eye, EyeOff } from 'lucide-react';
+import { User, Lock, Eye, EyeOff } from 'lucide-react';
 import Button from '../../../shared/ui/Button';
 import Input from '../../../shared/ui/Input';
 import Label from '../../../shared/ui/Label';
 import Card from '../../../shared/ui/Card';
 import Checkbox from '../../../shared/ui/Checkbox';
+import { signup } from '../api/signup';
 
 interface SignupFormProps {
     onNavigateToLogin: () => void;
@@ -14,7 +15,7 @@ interface SignupFormProps {
 export default function SignupForm({ onNavigateToLogin, onSignupSuccess }: SignupFormProps) {
     const [formData, setFormData] = useState({
         name: '',
-        email: '',
+        loginId: '',
         password: '',
         confirmPassword: '',
     });
@@ -27,7 +28,7 @@ export default function SignupForm({ onNavigateToLogin, onSignupSuccess }: Signu
         setFormData((prev) => ({ ...prev, [field]: value }));
     };
 
-    const handleSignup = (e: React.FormEvent) => {
+    const handleSignup = async (e: React.FormEvent) => {
         e.preventDefault();
 
         // 유효성 검사
@@ -41,10 +42,20 @@ export default function SignupForm({ onNavigateToLogin, onSignupSuccess }: Signu
             return;
         }
 
-        // 실제 회원가입 로직은 여기에 구현
-        console.log('회원가입:', formData);
-        alert('회원가입 완료! 로그인 페이지로 이동합니다.');
-        onSignupSuccess();
+        try {
+            await signup({
+                loginId: formData.loginId.trim(),
+                password: formData.password,
+                name: formData.name
+            });
+
+            console.log('회원가입 성공:', formData);
+            alert('회원가입 완료! 로그인 페이지로 이동합니다.');
+            onSignupSuccess();
+        } catch (error: any) {
+            console.error(error);
+            alert(error.message || '회원가입 중 오류가 발생했습니다.');
+        }
     };
 
     return (
@@ -74,17 +85,17 @@ export default function SignupForm({ onNavigateToLogin, onSignupSuccess }: Signu
                     </div>
                 </div>
 
-                {/* 이메일 입력 */}
+                {/* 아이디 입력 */}
                 <div className="space-y-2">
-                    <Label htmlFor="email">이메일</Label>
+                    <Label htmlFor="loginId">아이디</Label>
                     <div className="relative">
-                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                        <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
                         <Input
-                            id="email"
-                            type="email"
-                            placeholder="example@email.com"
-                            value={formData.email}
-                            onChange={(e) => handleChange('email', e.target.value)}
+                            id="loginId"
+                            type="text"
+                            placeholder="아이디를 입력하세요"
+                            value={formData.loginId}
+                            onChange={(e) => handleChange('loginId', e.target.value)}
                             className="pl-10"
                             required
                         />

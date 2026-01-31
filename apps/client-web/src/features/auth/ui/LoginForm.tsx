@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Mail, Lock, Eye, EyeOff } from 'lucide-react';
+import { User, Lock, Eye, EyeOff } from 'lucide-react';
 import Button from '../../../shared/ui/Button';
 import Input from '../../../shared/ui/Input';
 import Label from '../../../shared/ui/Label';
 import Card from '../../../shared/ui/Card';
 import Checkbox from '../../../shared/ui/Checkbox';
+import { login } from '../api/login';
 
 interface LoginFormProps {
   onNavigateToSignup: () => void;
@@ -12,21 +13,23 @@ interface LoginFormProps {
 }
 
 export default function LoginForm({ onNavigateToSignup, onLoginSuccess }: LoginFormProps) {
-  const [email, setEmail] = useState('');
+  const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    // 실제 로그인 로직 (토큰 저장)
-    const token = "dev-token-" + Date.now();
-    localStorage.setItem("accessToken", token);
-    window.dispatchEvent(new Event("auth-change"));
 
-    console.log('로그인 성공:', { email, rememberMe, token });
+    try {
+      await login({ loginId: loginId.trim(), password });
 
-    onLoginSuccess();
+      console.log('로그인 성공:', { loginId, rememberMe });
+      onLoginSuccess();
+    } catch (error) {
+      console.error(error);
+      alert('로그인에 실패했습니다. 아이디와 비밀번호를 확인해주세요.');
+    }
   };
 
   return (
@@ -40,15 +43,15 @@ export default function LoginForm({ onNavigateToSignup, onLoginSuccess }: LoginF
       {/* 로그인 폼 */}
       <form onSubmit={handleLogin} className="space-y-6">
         <div className="space-y-2">
-          <Label htmlFor="email">이메일</Label>
+          <Label htmlFor="loginId">아이디</Label>
           <div className="relative">
-            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+            <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
             <Input
-              id="email"
-              type="email"
-              placeholder="example@email.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              id="loginId"
+              type="text"
+              placeholder="아이디를 입력하세요"
+              value={loginId}
+              onChange={(e) => setLoginId(e.target.value)}
               className="pl-10"
               required
             />
