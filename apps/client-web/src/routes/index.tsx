@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import AppLayout from "../App";
 import HomePage from "../pages/HomePage";
 import LoginPage from "../pages/LoginPage";
+import SignupPage from "../pages/SignupPage";
 import ProfilePage from "../pages/ProfilePage";
 
 import ProtectedRoute from "./ProtectedRoute";
@@ -21,6 +22,7 @@ export default function AppRoutes() {
                 {/* Public */}
                 <Route path="/" element={<HomePage />} />
                 <Route path="/login" element={<LoginPage />} />
+                <Route path="/signup" element={<SignupPage />} />
 
                 {/* Protected 영역 */}
                 <Route element={<ProtectedRoute />}>

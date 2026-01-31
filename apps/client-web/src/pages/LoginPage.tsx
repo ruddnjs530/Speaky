@@ -1,23 +1,45 @@
-import { useLocation, useNavigate } from "react-router-dom";
-import LoginForm from "../features/auth/ui/LoginForm";
+import { useNavigate } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
+import Button from '../shared/ui/Button';
+import LoginForm from '../features/auth/ui/LoginForm';
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const location = useLocation();
 
-  const from = (location.state as { from?: { pathname?: string } })?.from?.pathname ?? "/";
-
-  const handleSuccess = () => {
-    // ✅ 백엔드 전: devAuth 플래그만 세팅
-    localStorage.setItem("devAuth", "1");
-
-    // ✅ 원래 가려던 곳으로 복귀
-    navigate(from, { replace: true });
+  const handleBack = () => {
+    navigate('/');
   };
 
+  const handleNavigateToSignup = () => {
+    navigate('/signup');
+  };
+
+  const handleLoginSuccess = () => {
+    navigate('/', { replace: true });
+  }
+
   return (
-    <div className="page page--center">
-      <LoginForm onSuccess={handleSuccess} />
+    <div className="min-h-screen bg-gradient-to-br from-orange-50 to-amber-50 flex flex-col font-sans">
+      {/* 헤더 */}
+      <header className="px-8 py-6 flex justify-start">
+        <Button
+          variant="ghost"
+          fullWidth={false}
+          onClick={handleBack}
+          className="gap-2 hover:bg-orange-100 hover:text-[#E8753A] transition-colors text-gray-600"
+        >
+          <ArrowLeft className="h-5 w-5" />
+          홈으로
+        </Button>
+      </header>
+
+      {/* 메인 콘텐츠 */}
+      <main className="flex-1 flex items-center justify-center px-8 pb-20">
+        <LoginForm
+          onNavigateToSignup={handleNavigateToSignup}
+          onLoginSuccess={handleLoginSuccess}
+        />
+      </main>
     </div>
   );
 }
