@@ -82,6 +82,9 @@ export const sessionApi = {
         const session = (await sessionRes.json()) as SessionResponse;
         // 로그인된 사용자 토큰 (백엔드 signalingToken이 없으면 이걸 fallback으로 사용)
         const userToken = getAccessToken();
+        if (!userToken) {
+            throw { code: "UNAUTHORIZED", message: "로그인이 필요합니다." };
+        }
 
         return {
             channelId: state.hostLoginId || channelId, // hostLoginId를 우선

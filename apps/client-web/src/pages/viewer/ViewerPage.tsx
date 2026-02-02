@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { Volume2, VolumeX, Users, RefreshCcw, LogOut, Maximize, Minimize } from 'lucide-react';
 import ViewerMediaPanel from '../../features/media/ui/ViewerMediaPanel';
 import Card from '../../shared/ui/Card';
@@ -9,6 +9,7 @@ import { sessionApi } from '../../features/session/api/sessionApi';
 import { getErrorCode, getErrorMessage } from '../../shared/lib/errorUtils';
 import { SignalingClient } from '../../shared/lib/signaling/SignalingClient';
 import { getAccessToken } from '../../shared/lib/authToken';
+import { useAuthRedirect } from '../../features/auth/lib/useAuthRedirect';
 import { WS_URL_DEFAULT } from '../../shared/config';
 
 import './ViewerPage.css';
@@ -47,16 +48,11 @@ function joinReducer(_state: JoinUiState, action: JoinAction): JoinUiState {
 export default function ViewerPage() {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
-  const location = useLocation();
+  // const location = useLocation(); // 인증 리팩토링 후 미사용
   const channelId = roomId ?? '';
   const { remoteStream, status, connect } = useScreenShare();
 
-  useEffect(() => {
-    if (!getAccessToken()) {
-      // 로그인 후 다시 이 페이지(/viewer/:roomId)로 돌아오기 위해 현재 경로를 state로 전달
-      navigate('/login', { state: { from: location.pathname } });
-    }
-  }, [navigate, location]);
+  useAuthRedirect();
 
   // 초기 mount에서 joining 상태로 시작 (effect에서 동기 setState를 피하기 위함)
   const [joinUi, dispatch] = useReducer(
@@ -247,7 +243,7 @@ export default function ViewerPage() {
   return (
     <div className="viewerPage">
 
-      {/* 1. 상단 정보 바 (Top Info Bar) */}
+      {/* 1. 상단 정보 바 */}
       <div className="viewerPage__topBar">
         <div className="viewerPage__titleGroup">
           <h1 className="viewerPage__title">
@@ -295,7 +291,7 @@ export default function ViewerPage() {
           </div>
         )}
 
-        {/* 오버레이: 오류 발생 (Overlay: Error) */}
+        {/* 오버레이: 오류 발생 */}
         {joinUi.kind === 'error' && (
           <div className="viewerPage__overlay viewerPage__overlay--error">
             <h2 className="viewerPage__overlayTitle" style={{ color: '#ef4444' }}>오류 발생</h2>
