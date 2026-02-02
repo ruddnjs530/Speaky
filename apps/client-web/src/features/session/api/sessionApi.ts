@@ -1,6 +1,6 @@
 import type { ApiErrorResponse, StartOrJoinResponse, SessionResponse } from "./sessionApi.types";
 import { apiFetch } from "../../../shared/lib/apiFetch";
-import { getAccessToken } from "../../../shared/lib/authToken";
+import { getAccessToken, getUserIdFromToken } from "../../../shared/lib/authToken";
 
 
 import { WS_URL_DEFAULT } from "../../../shared/config";
@@ -29,9 +29,13 @@ export const sessionApi = {
 
     // 1. 세션 생성 (대기방 만들기)
     async createSession(title: string): Promise<SessionResponse> {
+        const userId = getUserIdFromToken();
+        if (!userId) throw new Error("로그인이 필요합니다.");
+
         const res = await apiFetch('/api/v1/sessions', {
             method: 'POST',
             body: JSON.stringify({
+                hostUserId: userId,
                 title: title || "방송 제목 없음",
                 voiceModelID: null
             }),

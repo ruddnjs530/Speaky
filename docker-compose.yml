@@ -13,7 +13,7 @@ services:
     stdin_open: true # React Hot Reload
     tty: true
     environment:
-      - VITE_API_URL=http://localhost:8081 # Browser accesses API directly
+      - VITE_API_URL=http://localhost:8080 # Browser accesses API directly
     depends_on:
       - server-media
 
@@ -24,7 +24,7 @@ services:
       dockerfile: apps/server-media/Dockerfile
       target: dev
     ports:
-      - "8080:8080" # REST/gRPC
+      - "8082:8080" # REST/gRPC (Mapped to 8082 to avoid conflict with local SC)
       - "8081:8081" # HTTP (Test)
       - "50000-50010:50000-50010/udp" # WebRTC
     volumes:
