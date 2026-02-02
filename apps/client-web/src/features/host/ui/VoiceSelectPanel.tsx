@@ -7,13 +7,23 @@ import voice2 from "./assets/voice-ai-2-CSW.jpg";
 import voice3 from "./assets/voice-ai-3-IU.webp";
 import voice4 from "./assets/voice-ai-4-ANYA.webp";
 
-// 간단한 아바타 매핑 (ID 기반)
-const AVATARS = [voice1, voice2, voice3, voice4];
+// 간단한 아바타 매핑 (서버 imageUrl 키값 -> 로컬 에셋)
+const AVATAR_MAP: Record<string, string> = {
+    "avatar_1": voice1,
+    "avatar_2": voice2,
+    "avatar_3": voice3,
+    "avatar_4": voice4,
+};
 
-function getAvatar(id: number) {
-    // 1-based index to 0-based array
-    const index = (id - 1) % AVATARS.length;
-    return AVATARS[index] || voice1;
+function getAvatar(voice: Voice) {
+    // 1. 서버에서 내려준 키값으로 매핑 시도
+    if (voice.imageUrl && AVATAR_MAP[voice.imageUrl]) {
+        return AVATAR_MAP[voice.imageUrl];
+    }
+    // 2. Fallback: ID 기반 모듈러 연산 (기존 로직 유지)
+    const values = Object.values(AVATAR_MAP);
+    const index = (voice.id - 1) % values.length;
+    return values[index] || voice1;
 }
 
 interface Props {
@@ -35,7 +45,7 @@ export default function VoiceSelectPanel({ voices, voiceId, onSelect }: Props) {
         );
     }
 
-    const selectedAvatar = getAvatar(selected.id);
+    const selectedAvatar = getAvatar(selected);
 
     return (
         <Card className="voicePanel" title="③ AI 보이스 선택">
@@ -66,7 +76,7 @@ export default function VoiceSelectPanel({ voices, voiceId, onSelect }: Props) {
             <div className="voicePanel__grid2x2" role="list">
                 {voices.map((v) => {
                     const active = v.id === voiceId;
-                    const avatar = getAvatar(v.id);
+                    const avatar = getAvatar(v);
                     return (
                         <button
                             key={v.id}
