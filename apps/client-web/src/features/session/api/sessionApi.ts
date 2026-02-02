@@ -28,7 +28,7 @@ type ChannelStateResponse = {
 export const sessionApi = {
 
     // 1. 세션 생성 (대기방 만들기)
-    async createSession(title: string): Promise<SessionResponse> {
+    async createSession(title: string, voiceModelId: number | null): Promise<SessionResponse> {
         const userId = getUserIdFromToken();
         if (!userId) throw new Error("로그인이 필요합니다.");
 
@@ -37,7 +37,7 @@ export const sessionApi = {
             body: JSON.stringify({
                 hostUserId: userId,
                 title: title || "방송 제목 없음",
-                voiceModelID: null
+                voiceModelID: voiceModelId
             }),
         });
 
@@ -94,7 +94,8 @@ export const sessionApi = {
             sessionId: sessionId,
             role: "GUEST",
             wsUrl: session.wsUrl || WS_URL_FALLBACK,
-            token: session.signalingToken || userToken || ""
+            token: session.signalingToken || userToken || "",
+            voiceModelId: session.voiceModelId ?? null
         };
     },
 

@@ -28,9 +28,6 @@ export default function HealthBadgesPanel({ health, viewers }: Props) {
                 <Badge label="AI" value={safeHealth.ai} />
             </div>
 
-            <p className="healthBadges__note">
-                안내: MIC/LEVEL은 현재 더미 상태와 연결되어 있습니다. NETWORK/AI는 일단 UNKNOWN으로 표시합니다.
-            </p>
         </Card>
     );
 }
