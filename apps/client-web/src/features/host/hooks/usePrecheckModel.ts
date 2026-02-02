@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState, useEffect } from "react";
+import { voiceApi, type Voice } from "../api/voiceApi";
 
 export type InputSource = "screen" | "mp4";
 
@@ -19,20 +20,21 @@ export interface MicState {
 export interface HealthState {
     mic: "ok" | "warn" | "fail" | "unknown";
     level: "ok" | "warn" | "fail" | "unknown";
-    network: "unknown";
-    ai: "unknown";
+    network: "ok" | "warn" | "fail" | "unknown";
+    ai: "ok" | "warn" | "fail" | "unknown";
 }
 
 export interface PrecheckModel {
     inputSource: InputSource;
-    voiceId: string;
+    voiceId: number; // Changed to number
+    voices: Voice[]; // Added voices list
     devices: AudioDevice[];
     mic: MicState;
     health: HealthState;
     canProceed: boolean;
     actions: {
         selectInputSource: (next: InputSource) => void;
-        selectVoice: (voiceId: string) => void;
+        selectVoice: (voiceId: number) => void;
         requestMicPermission: () => void;
         selectMicDevice: (deviceId: string) => void;
         startLevelMonitor: () => void;
@@ -42,16 +44,57 @@ export interface PrecheckModel {
     };
 }
 
-export function usePrecheckModel(opts?: { onNext?: () => void }): PrecheckModel {
+export function usePrecheckModel(opts?: { onNext?: (voiceId: number) => void }): PrecheckModel {
     const onNext = opts?.onNext;
-    const onNextRef = useRef(onNext);
+    const onNextRef = useRef<((voiceId: number) => void) | undefined>(onNext);
 
     useEffect(() => {
         onNextRef.current = onNext;
     }, [onNext]);
 
     const [inputSource, setInputSource] = useState<InputSource>("screen");
-    const [voiceId, setVoiceId] = useState<string>("AI 보이스 1");
+    const [voiceId, setVoiceId] = useState<number>(1); // Default to ID 1
+    const [voices, setVoices] = useState<Voice[]>([]);
+
+
+
+    // Voices Fetching
+    useEffect(() => {
+        voiceApi.getVoices()
+            .then(data => {
+                setVoices(data);
+                if (data.length > 0) {
+                    setVoiceId(data[0].id);
+                }
+            })
+            .catch(err => console.error("Failed to load voices", err));
+    }, []);
+
+    // [NEW] Network & AI 상태 체크
+    useEffect(() => {
+        // 1. AI 체크: 보이스 목록이 있으면 OK
+        if (voices.length > 0) {
+            setHealth(prev => ({ ...prev, ai: "ok" }));
+        }
+
+        // 2. Network 체크
+        const updateNetwork = () => {
+            setHealth(prev => ({
+                ...prev,
+                network: navigator.onLine ? "ok" : "fail"
+            }));
+        };
+
+        window.addEventListener('online', updateNetwork);
+        window.addEventListener('offline', updateNetwork);
+        updateNetwork();
+
+        return () => {
+            window.removeEventListener('online', updateNetwork);
+            window.removeEventListener('offline', updateNetwork);
+        };
+    }, [voices]);
+
     // 초기에는 빈 목록
     const [devices, setDevices] = useState<AudioDevice[]>([]);
 
@@ -147,26 +190,15 @@ export function usePrecheckModel(opts?: { onNext?: () => void }): PrecheckModel 
 
             selectMicDevice: (deviceId) => {
                 setMic((prev) => ({ ...prev, selectedDeviceId: deviceId }));
-                // 장치가 변경되면 모니터링 재시작이 필요할 수 있으나,
-                // 보통 AudioCheckCard 흐름상 사용자가 변경 후 다시 '확인'하거나
-                // 자동으로 반응하게 하려면 여기서 stop -> start를 호출해야 함.
-                // 일단은 상태만 변경. (스트림은 startLevelMonitor가 호출될 때 해당 ID 사용)
-
-                // 만약 실시간 반영을 원한다면 아래 주석 해제:
-                // stopLevelMonitorImpl(); 
-                // actions.startLevelMonitor(); // (주의: 비동기/순환 참조 문제 가능성)
             },
 
             startLevelMonitor: async () => {
-                // 이미 실행 중이면 중복 실행 방지 (단, 장치가 바뀌었을 수 있으므로 체크 필요)
-                // 여기서는 간단히: 실행 중이면 일단 pass (stop 후 다시 해야 함)
                 if (audioContextRef.current?.state === 'running') return;
-
                 if (!mic.selectedDeviceId) return;
 
                 try {
                     const stream = await navigator.mediaDevices.getUserMedia({
-                        audio: { deviceId: { exact: mic.selectedDeviceId } } // exact: ID 강제
+                        audio: { deviceId: { exact: mic.selectedDeviceId } }
                     });
                     streamRef.current = stream;
 
@@ -193,7 +225,7 @@ export function usePrecheckModel(opts?: { onNext?: () => void }): PrecheckModel 
                         }
                         const average = sum / dataArray.length;
 
-                        // 0~100으로 정규화 (보정값 적용)
+                        // 0~100으로 정규화
                         const normalizedLevel = Math.min(100, Math.floor((average / 128) * 100 * 1.5));
 
                         setMic((prev) => ({ ...prev, level: normalizedLevel }));
@@ -208,7 +240,6 @@ export function usePrecheckModel(opts?: { onNext?: () => void }): PrecheckModel 
                     updateLevel();
                 } catch (err) {
                     console.error("Failed to start level monitor", err);
-                    // 특정 장치 실패 시 폴백(선택사항)이나 에러 표시
                     setHealth((prev) => ({ ...prev, mic: "fail", level: "fail" }));
                 }
             },
@@ -220,8 +251,8 @@ export function usePrecheckModel(opts?: { onNext?: () => void }): PrecheckModel 
             reset: () => {
                 stopLevelMonitorImpl();
                 setInputSource("screen");
-                setVoiceId("AI 보이스 1");
-                setDevices([]); // 장치 목록 초기화
+                setVoiceId(1); // Reset to ID 1
+                setDevices([]);
                 setMic({
                     permission: "idle",
                     selectedDeviceId: null,
@@ -238,24 +269,33 @@ export function usePrecheckModel(opts?: { onNext?: () => void }): PrecheckModel 
 
             goNext: () => {
                 stopLevelMonitorImpl();
-                onNextRef.current?.();
+                onNextRef.current?.(voiceId);
             },
         };
-    }, [mic.selectedDeviceId]); // Remove onNext dependency
+    }, [mic.selectedDeviceId]);
 
-    // 컴포넌트가 언마운트되거나 액션이 변경될 때(예: 장치 변경) 클린업을 수행합니다.
-    // 이를 통해 컴포넌트가 사라지거나 장치가 바뀔 때 리소스가 확실히 해제되도록 보장합니다.
     useEffect(() => {
         return () => {
             actions.stopLevelMonitor();
         };
     }, [actions]);
 
+    // [NEW] 권한이 승인되면 자동으로 레벨 모니터링 시작
+    useEffect(() => {
+        if (mic.permission === "granted" && mic.selectedDeviceId) {
+            const timer = setTimeout(() => {
+                actions.startLevelMonitor();
+            }, 100);
+            return () => clearTimeout(timer);
+        }
+    }, [mic.permission, mic.selectedDeviceId, actions]); // actions 의존성 추가
+
     const canProceed = mic.permission === "granted";
 
     return {
         inputSource,
         voiceId,
+        voices, // Return voices
         devices,
         mic,
         health,

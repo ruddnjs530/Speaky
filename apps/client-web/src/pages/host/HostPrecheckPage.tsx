@@ -12,7 +12,7 @@ export default function HostPrecheckPage() {
     const navigate = useNavigate();
 
     const model = usePrecheckModel({
-        onNext: () => navigate("/host/studio"),
+        onNext: (voiceId) => navigate("/host/studio", { state: { voiceId } }),
     });
 
     return (
@@ -45,6 +45,7 @@ export default function HostPrecheckPage() {
                 {/* 우측(③ + 상태 + 버튼) */}
                 <div className="precheck-col">
                     <VoiceSelectPanel
+                        voices={model.voices}
                         voiceId={model.voiceId}
                         onSelect={model.actions.selectVoice}
                     />

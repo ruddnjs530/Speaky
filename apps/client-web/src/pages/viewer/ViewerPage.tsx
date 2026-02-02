@@ -58,6 +58,7 @@ export default function ViewerPage() {
 
   // effect 트리거용 attempt 카운터
   const [attempt, setAttempt] = useState(() => (channelId ? 1 : 0));
+  const [voiceModelId, setVoiceModelId] = useState<number | null>(null);
   /**
    * 재시도(=reconnect): UI 상태 전환 + attempt 증가
    * - 여기서 상태를 바꾸므로, effect에서는 동기 setState를 하지 않습니다.
@@ -102,6 +103,7 @@ export default function ViewerPage() {
           channelId: res.channelId,
           sessionId: res.sessionId,
         });
+        setVoiceModelId(res.voiceModelId);
 
       } catch (e: any) {
         if (!isActive) return;
@@ -214,6 +216,10 @@ export default function ViewerPage() {
         <div className="viewerPage__infoRow">
           <span className="viewerPage__infoLabel">Status:</span>
           <span>{status}</span>
+        </div>
+        <div className="viewerPage__infoRow">
+          <span className="viewerPage__infoLabel">Voice:</span>
+          <span>{voiceModelId ? `AI 보이스 ${voiceModelId}` : '정보 없음'}</span>
         </div>
 
         {joinUi.kind === 'joining' && <div className="viewerPage__infoRow">세션 확인 중...</div>}

@@ -14,7 +14,7 @@ import { sessionApi } from '../../features/session/api/sessionApi';
 import './HostPage.css';
 import HealthBadgesPanel from '../../features/host/ui/HealthBadgesPanel';
 import { usePrecheckModel } from '../../features/host/hooks/usePrecheckModel';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import Modal from '../../shared/ui/Modal';
 import { getErrorMessage } from '../../shared/lib/errorUtils';
 
@@ -26,6 +26,8 @@ const WS_URL = WS_URL_DEFAULT;
 
 export default function HostPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const precheckedVoiceId = (location.state as { voiceId?: string })?.voiceId;
   const [step, setStep] = useState<Step>('setup');
   const [title, setTitle] = useState('');
   // 종료 모달
@@ -36,6 +38,15 @@ export default function HostPage() {
 
   // 헬스 체크 모델 (마이크 모니터링용)
   const { health, actions, mic } = usePrecheckModel();
+
+  // 초기 voiceModelId 설정
+  const [voiceModelId, setVoiceModelId] = useState<number | null>(() => {
+    if (precheckedVoiceId !== undefined && precheckedVoiceId !== null) {
+      if (typeof precheckedVoiceId === 'number') return precheckedVoiceId;
+      return parseInt(String(precheckedVoiceId).replace(/[^0-9]/g, ""), 10) || 1;
+    }
+    return 1;
+  });
 
   // Live 상태 진입 시 마이크 모니터링 시작
   useEffect(() => {
@@ -67,7 +78,8 @@ export default function HostPage() {
   const handleConnect = async () => {
     try {
       // 1. 세션 생성 (REST) -> 대기방
-      const session = await sessionApi.createSession(title);
+      // voiceModelId는 state에서 가져옴 (초기화됨)
+      const session = await sessionApi.createSession(title, voiceModelId);
       console.log('Session Created: ', session);
       setSessionId(session.sessionId);
 
@@ -144,6 +156,9 @@ export default function HostPage() {
               onChange={(e) => setTitle(e.target.value)}
               placeholder="방송 제목을 입력하세요"
             />
+            <div style={{ marginTop: '10px', fontSize: '14px', color: '#555' }}>
+              선택된 AI 보이스: <strong>AI 보이스 {voiceModelId}</strong>
+            </div>
 
             <div className="hostPage__actions">
               <Button
@@ -191,6 +206,7 @@ export default function HostPage() {
           <div>
             <div className="hostPage__liveTitle">{title}</div>
             <div className="hostPage__liveSub">연결 상태: {status}</div>
+            <div className="hostPage__liveSub">AI 보이스: {voiceModelId ? `AI 보이스 ${voiceModelId}` : '없음'}</div>
           </div>
 
           <div className="hostPage__liveActions">

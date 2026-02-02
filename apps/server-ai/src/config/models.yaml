@@ -32,7 +32,7 @@ models:
   - model_name: "child_voice"
     voice_model_id: 4
     model_path: "/rvc-code/assets/weights/0127_child.pth"
-    index_path: "/rvc-code/assets/indices/0127_child.pth"
+    index_path: "/rvc-code/assets/indices/0127_child.index"
     index_rate: 0.9
     pitch: 6
     protect: 0.20
@@ -42,7 +42,7 @@ models:
   - model_name: "trump_voice"
     voice_model_id: 5
     model_path: "/rvc-code/assets/weights/0129_trump.pth"
-    index_path: "/rvc-code/assets/indices/0129_trump.pth"
+    index_path: "/rvc-code/assets/indices/0129_trump.index"
     index_rate: 0.85
     pitch: -2
     protect: 0.3
