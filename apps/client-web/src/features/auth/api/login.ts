@@ -3,7 +3,13 @@ import { apiFetch } from '../../../shared/lib/apiFetch';
 
 type LoginRequest = { loginId: string; password: string };
 
-type LoginResponse = { accessToken: string };
+type LoginResponse = {
+  success: boolean;
+  data: {
+    accessToken: string;
+  };
+  error: string | null;
+};
 
 export async function login(req: LoginRequest) {
 
@@ -15,10 +21,14 @@ export async function login(req: LoginRequest) {
 
   if (!res.ok) throw new Error('로그인 실패');
 
-  const data = (await res.json()) as LoginResponse;
+  const responseBody = (await res.json()) as LoginResponse;
+
+  if (!responseBody.success || !responseBody.data) {
+    throw new Error(responseBody.error || '로그인 응답 형식이 올바르지 않습니다.');
+  }
 
   // 여기서 저장
-  setAccessToken(data.accessToken);
+  setAccessToken(responseBody.data.accessToken);
 
-  return data;
+  return responseBody.data;
 }
