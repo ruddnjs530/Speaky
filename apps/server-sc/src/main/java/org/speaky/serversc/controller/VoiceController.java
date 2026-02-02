@@ -17,16 +17,17 @@ import java.util.List;
 public class VoiceController {
 
     // Hardcoded list matching server-ai/src/config/models.yaml
+    // imageUrl is used as a key for frontend asset mapping
     private final List<VoiceDto> STATIC_VOICES = Arrays.asList(
-            VoiceDto.builder().id(1L).name("Korone Voice").status("READY").build(),
-            VoiceDto.builder().id(2L).name("aru_voice").status("READY").build(),
-            VoiceDto.builder().id(3L).name("baekjongwon_voice").status("READY").build(),
-            VoiceDto.builder().id(4L).name("child_voice").status("READY").build(),
-            VoiceDto.builder().id(5L).name("trump_voice").status("READY").build(),
-            VoiceDto.builder().id(6L).name("criss").status("READY").build());
+            VoiceDto.builder().id(1L).name("Korone Voice").status("READY").imageUrl("avatar_1").build(),
+            VoiceDto.builder().id(2L).name("aru_voice").status("READY").imageUrl("avatar_2").build(),
+            VoiceDto.builder().id(3L).name("baekjongwon_voice").status("READY").imageUrl("avatar_3").build(),
+            VoiceDto.builder().id(4L).name("child_voice").status("READY").imageUrl("avatar_4").build(),
+            VoiceDto.builder().id(5L).name("trump_voice").status("READY").imageUrl("avatar_1").build(),
+            VoiceDto.builder().id(6L).name("criss").status("READY").imageUrl("avatar_2").build());
 
     @GetMapping
-    public ResponseEntity<ApiResponse<java.util.Map<String, Object>>> getVoices() {
-        return ResponseEntity.ok(ApiResponse.success(java.util.Map.of("items", STATIC_VOICES)));
+    public ResponseEntity<ApiResponse<org.speaky.serversc.dto.VoiceListResponseDto>> getVoices() {
+        return ResponseEntity.ok(ApiResponse.success(new org.speaky.serversc.dto.VoiceListResponseDto(STATIC_VOICES)));
     }
 }
