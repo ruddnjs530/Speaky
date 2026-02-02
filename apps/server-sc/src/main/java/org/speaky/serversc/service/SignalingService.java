@@ -1,5 +1,6 @@
 package org.speaky.serversc.service;
 
+import org.speaky.serversc.client.MediaServerClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.speaky.serversc.domain.SessionEntity;
@@ -35,6 +36,7 @@ public class SignalingService {
     
     private final SessionRepository sessionRepository;
     private final SimpMessagingTemplate messagingTemplate;
+    private final MediaServerClient mediaServerClient;
     
     /**
      * SYS_ATTACH 처리: 세션에 클라이언트 바인딩
@@ -98,33 +100,47 @@ public class SignalingService {
      * 
      * @param envelope SDP Offer 메시지
      */
+    @SuppressWarnings("unchecked")
     public void handleOffer(Envelope envelope) {
-        // TODO: Media Server gRPC 호출
-        log.info("Received SDP Offer: sessionId={}, payload={}", 
-                envelope.getSessionId(), envelope.getPayload());
+        String sessionId = envelope.getSessionId();
+        String clientId = envelope.getFrom().getClientId();
+        Map<String, Object> payload = (Map<String, Object>) envelope.getPayload();
+        String sdpOffer = (String) payload.get("sdp");
         
-        // Mock SIG_ANSWER 응답 (Media Server 연동 전)
-        Envelope response = Envelope.builder()
-                .v(PROTOCOL_VERSION)
-                .type("SIG_ANSWER")
-                .requestId(UUID.randomUUID().toString())
-                .ts(System.currentTimeMillis())
-                .channelId(envelope.getChannelId())
-                .sessionId(envelope.getSessionId())
-                .from(From.builder()
-                        .role(SERVER_ROLE)
-                        .clientId(SERVER_CLIENT_ID)
-                        .build())
-                .payload(Map.of(
-                        "sdpType", "answer",
-                        "sdp", "mock-sdp-answer"  // TODO: 실제 Media Server 응답
-                ))
-                .build();
+        log.info("Received SDP Offer: sessionId={}, clientId={}", sessionId, clientId);
         
-        String destination = "/topic/channel/" + envelope.getChannelId();
-        messagingTemplate.convertAndSend(destination, response);
-        
-        log.info("Sent mock SIG_ANSWER: sessionId={}", envelope.getSessionId());
+        try {
+            // Media Server에 Join 요청 (SDP Offer 전달 및 Answer 수신)
+            String sdpAnswer = mediaServerClient.joinRoom(sessionId, clientId, sdpOffer);
+            
+            // SIG_ANSWER 응답 생성
+            Envelope response = Envelope.builder()
+                    .v(PROTOCOL_VERSION)
+                    .type("SIG_ANSWER")
+                    .requestId(envelope.getRequestId()) // 요청 ID 유지
+                    .ts(System.currentTimeMillis())
+                    .channelId(envelope.getChannelId())
+                    .sessionId(sessionId)
+                    .from(From.builder()
+                            .role(SERVER_ROLE)
+                            .clientId(SERVER_CLIENT_ID) 
+                            .build())
+                    .payload(Map.of(
+                            "sdpType", "answer",
+                            "sdp", sdpAnswer
+                    ))
+                    .build();
+            
+            // 특정 채널 subscriber에게 전송
+            String destination = "/topic/channel/" + envelope.getChannelId();
+            messagingTemplate.convertAndSend(destination, response);
+            
+            log.info("Sent SIG_ANSWER: sessionId={}", sessionId);
+            
+        } catch (Exception e) {
+            log.error("Failed to handle SDP Offer: {}", e.getMessage(), e);
+            sendError(envelope, "SYS_ERROR", "Media Server Error: " + e.getMessage());
+        }
     }
     
     /**
@@ -147,10 +163,34 @@ public class SignalingService {
      * 
      * @param envelope ICE Candidate 메시지
      */
+    @SuppressWarnings("unchecked")
     public void handleIce(Envelope envelope) {
-        // TODO: Media Server gRPC 호출
-        log.info("Received ICE Candidate: sessionId={}, payload={}", 
-                envelope.getSessionId(), envelope.getPayload());
+        String sessionId = envelope.getSessionId();
+        String clientId = envelope.getFrom().getClientId();
+        Map<String, Object> payload = (Map<String, Object>) envelope.getPayload();
+        
+        String candidate = (String) payload.get("candidate");
+        String sdpMid = (String) payload.get("sdpMid");
+        Integer sdpMLineIndex = (Integer) payload.get("sdpMLineIndex");
+        
+        log.debug("Received ICE Candidate: sessionId={}, clientId={}, sdpMid={}", 
+                sessionId, clientId, sdpMid);
+        
+        try {
+            if (candidate != null && sdpMLineIndex != null) {
+                mediaServerClient.submitIceCandidate(
+                        sessionId, 
+                        clientId, 
+                        candidate, 
+                        sdpMid, 
+                        sdpMLineIndex
+                );
+            } else {
+                log.warn("Invalid ICE Candidate payload: {}", payload);
+            }
+        } catch (Exception e) {
+            log.error("Failed to submit ICE Candidate: {}", e.getMessage());
+        }
     }
     
     /**

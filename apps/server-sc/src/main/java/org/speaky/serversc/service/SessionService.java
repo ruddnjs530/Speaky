@@ -11,6 +11,8 @@ import org.speaky.serversc.exception.SessionNotFoundException;
 import org.speaky.serversc.repository.SessionRepository;
 import org.springframework.stereotype.Service;
 
+import org.speaky.serversc.client.MediaServerClient;
+
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -28,6 +30,7 @@ public class SessionService {
     
     private final SessionRepository sessionRepository;
     private final SessionEventPublisher eventPublisher;
+    private final MediaServerClient mediaServerClient;
     
     /**
      * 새 방송 세션 생성
@@ -123,6 +126,15 @@ public class SessionService {
             );
         }
         
+        // Media Server에 Room 생성 요청
+        try {
+            mediaServerClient.createRoom(sessionId, String.valueOf(session.getHostUserId()));
+        } catch (Exception e) {
+            log.error("Failed to create room in Media Server: {}", e.getMessage());
+            // 필요한 경우 여기서 예외를 던져서 방송 시작을 막을 수 있음
+            throw new RuntimeException("Failed to start broadcast: Media Server error", e);
+        }
+
         session.setStatus(SessionStatus.LIVE);
         session.setStartedAt(LocalDateTime.now());
         session.setMediaServerId(mediaServerId);
