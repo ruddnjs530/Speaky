@@ -12,6 +12,8 @@ type Props = {
   muted?: boolean;
   onRetry?: () => void;
   onReload?: () => void;
+  onVideoElement?: (el: HTMLVideoElement | null) => void;
+  showAudioControl?: boolean;
 };
 
 function getErrorName(e: unknown): string | undefined {
@@ -34,7 +36,10 @@ export default function ViewerMediaPanel({
   muted = false,
   onRetry,
   onReload,
-}: Props) {
+  onVideoElement,
+  showAudioControl = true,
+  className,
+}: Props & { className?: string }) {
   const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
   const [needUserGesture, setNeedUserGesture] = useState(false);
   const [playMsg, setPlayMsg] = useState('');
@@ -88,6 +93,11 @@ export default function ViewerMediaPanel({
     };
   }, [videoEl, stream, status, tryPlay]);
 
+  // Expose video element to parent
+  useEffect(() => {
+    onVideoElement?.(videoEl);
+  }, [videoEl, onVideoElement]);
+
   const handleClickPlay = useCallback(async () => {
     // TODO(Day3-B): 클릭 재생 성공 후 muted 해제 정책 결정 필요.
     // if (videoEl) videoEl.muted = false;
@@ -95,12 +105,17 @@ export default function ViewerMediaPanel({
   }, [tryPlay]);
 
   return (
-    <div style={{ display: 'grid', gap: 10 }}>
+    <div className={className} style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
       <ReconnectBanner status={status} onRetry={onRetry} onReload={onReload} />
 
-
-      <div style={{ position: 'relative' }}>
-        <StreamPreview ref={setVideoEl} title={title} stream={stream} muted={muted} />
+      <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+        <StreamPreview
+          ref={setVideoEl}
+          title={title}
+          stream={stream}
+          muted={muted}
+          variant="minimal"
+        />
 
         {needUserGesture && (
           <div
@@ -114,6 +129,7 @@ export default function ViewerMediaPanel({
               color: '#fff',
               padding: 16,
               textAlign: 'center',
+              zIndex: 20
             }}
           >
             <div>{playMsg}</div>
@@ -134,10 +150,12 @@ export default function ViewerMediaPanel({
         )}
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        {/* AudioControl을 엘리먼트 직접 받도록 수정 필요 */}
-        <AudioControl mediaEl={videoEl} />
-      </div>
+      {showAudioControl && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '10px 0' }}>
+          {/* AudioControl을 엘리먼트 직접 받도록 수정 필요 */}
+          <AudioControl mediaEl={videoEl} />
+        </div>
+      )}
     </div>
   );
 }
