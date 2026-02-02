@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import sys
 import time
@@ -10,6 +11,8 @@ from typing import Optional
 
 import numpy as np
 import torch
+
+logger = logging.getLogger(__name__)
 
 @dataclass
 class _RVCPaths:
@@ -298,7 +301,7 @@ class RVCConverter:
             )
         
         if out16_i16 is None:
-             print("[ERROR] RVC pipeline returned None")
+             logger.error("RVC pipeline returned None")
              return pcm_bytes # Fallback
 
         # 5) Extract valid tail (in target sample_rate domain)
