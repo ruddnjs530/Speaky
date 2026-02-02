@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { Volume2, VolumeX, Users, RefreshCcw, LogOut, Maximize, Minimize } from 'lucide-react';
 import ViewerMediaPanel from '../../features/media/ui/ViewerMediaPanel';
 import Card from '../../shared/ui/Card';
 import Button from '../../shared/ui/Button';
-import Modal from '../../shared/ui/Modal';
 import { useScreenShare } from '../../features/screenShare/model/useScreenShare';
 import { sessionApi } from '../../features/session/api/sessionApi';
 import { getErrorCode, getErrorMessage } from '../../shared/lib/errorUtils';
 import { SignalingClient } from '../../shared/lib/signaling/SignalingClient';
 import { getAccessToken } from '../../shared/lib/authToken';
+import { useAuthRedirect } from '../../features/auth/lib/useAuthRedirect';
 import { WS_URL_DEFAULT } from '../../shared/config';
 
 import './ViewerPage.css';
@@ -47,8 +48,11 @@ function joinReducer(_state: JoinUiState, action: JoinAction): JoinUiState {
 export default function ViewerPage() {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
+  // const location = useLocation(); // 인증 리팩토링 후 미사용
   const channelId = roomId ?? '';
-  const { remoteStream, status, error, connect } = useScreenShare();
+  const { remoteStream, status, connect } = useScreenShare();
+
+  useAuthRedirect();
 
   // 초기 mount에서 joining 상태로 시작 (effect에서 동기 setState를 피하기 위함)
   const [joinUi, dispatch] = useReducer(
@@ -82,7 +86,7 @@ export default function ViewerPage() {
 
     let isActive = true; // 언마운트 체크용
 
-    // 🛠 개선: 이 effect 실행 주기에서 만든 소켓을 추적
+    // 개선: 이 effect 실행 주기에서 만든 소켓을 추적
     let mySc: SignalingClient | null = null;
     const tryJoin = async () => {
       try {
@@ -155,7 +159,6 @@ export default function ViewerPage() {
 
     return () => {
       isActive = false;
-      // 🛠 개선: "내가 만든 소켓"일 때만 닫음 (다른 effect 주기의 소켓 건드리지 않음)
       if (mySc) {
         mySc.close();
         if (waitingScRef.current === mySc) {
@@ -165,86 +168,202 @@ export default function ViewerPage() {
     };
   }, [channelId, attempt, connect]);
   const reload = useCallback(() => window.location.reload(), []);
-  // ---- 화면 분기 (REST join 결과 기준) ----
+  // ---- 오디오 제어 로직 ----
+  const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
+  const [volume, setVolume] = useState(0.5);
+  const [muted, setMuted] = useState(false);
+
+  // 전체 화면 로직
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    if (!videoEl) return;
+    videoEl.volume = volume;
+    videoEl.muted = muted || volume === 0;
+  }, [videoEl, volume, muted]);
+
+  useEffect(() => {
+    const handleFsChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFsChange);
+    return () => document.removeEventListener('fullscreenchange', handleFsChange);
+  }, []);
+
+  const toggleMute = () => setMuted((prev) => !prev);
+  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = parseFloat(e.target.value);
+    setVolume(v);
+    if (v > 0) setMuted(false);
+  };
+
+  const toggleFullscreen = async () => {
+    if (!containerRef.current) return;
+
+    if (!document.fullscreenElement) {
+      try {
+        await containerRef.current.requestFullscreen();
+      } catch (err) {
+        console.error('전체 화면 전환 실패:', err);
+      }
+    } else {
+      if (document.exitFullscreen) {
+        await document.exitFullscreen();
+      }
+    }
+  };
+
+  // ---- 레이아웃 렌더링 ----
   if (!channelId) {
     return (
-      <div className="viewerPage__paramError">
-        <Card className="p-3">
-          <h2>잘못된 접근</h2>
-          <p>channelId(roomId)가 없습니다.</p>
+      <div className="viewerPage__container">
+        <Card className="viewerPage__card">
+          <h2 className="viewerPage__title" style={{ marginBottom: '0.5rem' }}>잘못된 접근</h2>
+          <p style={{ color: '#9ca3af' }}>channelId(roomId)가 없습니다.</p>
         </Card>
       </div>
     );
   }
+
   // 로그인 필요 분기
   if (joinUi.kind === 'unauthorized') {
     return (
-      <div className="viewerPage__paramError">
-        <Card className="p-3">
-          <h2>로그인이 필요합니다.</h2>
-          <p>채널: {channelId}</p>
-          <Button onClick={() => (window.location.href = '/login')}>로그인</Button>
+      <div className="viewerPage__container">
+        <Card className="viewerPage__card">
+          <h2 className="viewerPage__title" style={{ marginBottom: '1rem' }}>로그인이 필요합니다</h2>
+          <Button onClick={() => (window.location.href = '/login')} variant="primary">
+            로그인 하러 가기
+          </Button>
         </Card>
       </div>
     );
   }
-  if (joinUi.kind === 'error') {
-    return (
-      <div className="viewerPage__paramError">
-        <Card className="p-3">
-          <h2>오류</h2>
-          <p>{joinUi.message}</p>
-          <Button onClick={startJoin}>다시 시도</Button>
-          <Button onClick={reload}>새로고침</Button>
-        </Card>
-      </div>
-    );
-  }
-  // ---- 정상 화면 ----
+
   return (
     <div className="viewerPage">
-      {/* 헤더 영역 */}
-      <div className="viewerPage__header">
-        <h1 className="viewerPage__title">Viewer</h1>
-      </div>
-      {/* 상태 정보 카드 */}
-      <Card className="p-3 viewerPage__statusCard">
-        <div className="viewerPage__infoRow">
-          <span className="viewerPage__infoLabel">Channel ID:</span>
-          <span>{channelId}</span>
-        </div>
-        <div className="viewerPage__infoRow">
-          <span className="viewerPage__infoLabel">Status:</span>
-          <span>{status}</span>
+
+      {/* 1. 상단 정보 바 */}
+      <div className="viewerPage__topBar">
+        <div className="viewerPage__titleGroup">
+          <h1 className="viewerPage__title">
+            {/* TODO: 실제 방 제목 연동 필요 */}
+            {channelId}의 방송
+          </h1>
+          {joinUi.kind === 'joined' ? (
+            <span className="viewerPage__badge viewerPage__badge--live">
+              LIVE
+            </span>
+          ) : (
+            <span className="viewerPage__badge viewerPage__badge--offline">
+              OFFLINE
+            </span>
+          )}
         </div>
         <div className="viewerPage__infoRow">
           <span className="viewerPage__infoLabel">Voice:</span>
           <span>{voiceModelId ? `AI 보이스 ${voiceModelId}` : '정보 없음'}</span>
         </div>
 
-        {joinUi.kind === 'joining' && <div className="viewerPage__infoRow">세션 확인 중...</div>}
-        {error && <div className="viewerPage__error">{error}</div>}
-      </Card>
-      {/* 미디어 영역 */}
-      <div className="viewerPage__mediaArea">
+        {/* 지연 시간 (더미 데이터) */}
+        <div className="viewerPage__latency">
+          지연 시간: <span className="viewerPage__latencyValue">25ms</span>
+        </div>
+      </div>
+
+      {/* 2. 메인 비디오 영역 */}
+      <div className="viewerPage__videoArea" ref={containerRef}>
         <ViewerMediaPanel
           status={status}
           stream={remoteStream}
-          muted={false}
-          onRetry={startJoin}          // ✅ reconnect
-          onReload={reload}            // ✅ fallback
+          muted={muted} // 단방향 prop (초기값 등)
+          onVideoElement={setVideoEl} // 제어권을 위해 element 확보
+          showAudioControl={false} // 하단 바에서 제어하므로 숨김
+          onRetry={startJoin}
+          onReload={reload}
         />
+
+        {/* 오버레이: 방송 대기 중 */}
+        {joinUi.kind === 'notActive' && (
+          <div className="viewerPage__overlay viewerPage__overlay--wait">
+            <h2 className="viewerPage__overlayTitle">대기 화면입니다</h2>
+            <p className="viewerPage__overlayText">호스트가 송출을 시작하면 자동으로 갱신 됩니다.</p>
+          </div>
+        )}
+
+        {/* 오버레이: 오류 발생 */}
+        {joinUi.kind === 'error' && (
+          <div className="viewerPage__overlay viewerPage__overlay--error">
+            <h2 className="viewerPage__overlayTitle" style={{ color: '#ef4444' }}>오류 발생</h2>
+            <p className="viewerPage__overlayText" style={{ marginBottom: '1.5rem' }}>{joinUi.message}</p>
+            <div className="viewerPage__overlayActions">
+              <Button onClick={startJoin} variant="secondary">재시도</Button>
+              <Button onClick={reload} variant="secondary">새로고침</Button>
+            </div>
+          </div>
+        )}
+
+        {/* 전체 화면 버튼 */}
+        <button
+          onClick={toggleFullscreen}
+          className="viewerPage__fsOverlayBtn"
+          title="전체 화면"
+        >
+          {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
+        </button>
       </div>
-      {/* 방송 종료 감지 시 모달 표시 */}
-      <Modal
-        open={joinUi.kind === 'notActive'}
-        title="방송 대기중"
-        primaryLabel="홈으로 이동"
-        onPrimary={() => navigate('/', { replace: true })}
-      >
-        <p>호스트가 방송을 준비하고 있습니다.</p>
-        <p>방송이 시작되면 자동으로 연결됩니다.</p>
-      </Modal>
+
+      {/* 3. 하단 컨트롤 바 */}
+      <div className="viewerPage__controlBar">
+
+        {/* 좌측하단 볼륨 */}
+        <div className="viewerPage__controlSection viewerPage__controlSection--left">
+          <button
+            onClick={toggleMute}
+            className="viewerPage__volumeBtn"
+          >
+            {muted || volume === 0 ? (
+              <VolumeX size={24} />
+            ) : (
+              <Volume2 size={24} />
+            )}
+          </button>
+          <input
+            type="range"
+            min="0" max="1" step="0.01"
+            value={muted ? 0 : volume}
+            onChange={handleVolumeChange}
+            className="viewerPage__volumeSlider"
+          />
+        </div>
+
+        {/* 중앙: 입장 인원 (더미 데이터) */}
+        <div className="viewerPage__controlSection viewerPage__controlSection--center">
+          <Users size={20} />
+          <span>입장 인원 <span className="viewerPage__countHighlight">1,234</span>명</span>
+        </div>
+
+        {/* 우측하단 액션 버튼 */}
+        <div className="viewerPage__controlSection viewerPage__controlSection--right">
+          <button
+            onClick={reload}
+            className="viewerPage__btnSync" // 디자인 일치를 위한 커스텀 클래스
+          >
+            <RefreshCcw size={16} />
+            싱크 맞추기
+          </button>
+
+          <button
+            onClick={() => navigate('/')}
+            className="viewerPage__btnExit" // 디자인 일치를 위한 커스텀 클래스
+          >
+            <LogOut size={16} />
+            종료
+          </button>
+        </div>
+
+      </div>
+
     </div>
   );
 }

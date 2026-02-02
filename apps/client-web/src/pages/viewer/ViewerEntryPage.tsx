@@ -1,13 +1,16 @@
-import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Card from '../../shared/ui/Card';
 import Input from '../../shared/ui/Input';
 import Button from '../../shared/ui/Button';
+import { useState } from 'react';
+import { useAuthRedirect } from '../../features/auth/lib/useAuthRedirect';
 
 export default function ViewerEntryPage() {
     const navigate = useNavigate();
     const [channelIdInput, setChannelIdInput] = useState('');
     const [error, setError] = useState('');
+
+    useAuthRedirect();
 
     const handleJoinChannel = () => {
         if (!channelIdInput.trim()) {
@@ -21,7 +24,7 @@ export default function ViewerEntryPage() {
         <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4 font-sans">
             <div className="w-full max-w-md space-y-8">
 
-                {/* Header / Banner */}
+                {/* 헤더 / 배너 */}
                 <div className="text-center space-y-4">
                     <div className="inline-block bg-orange-50 border border-orange-200 rounded-full px-6 py-2">
                         <span className="text-[#E8753A] font-medium text-sm">
@@ -33,7 +36,7 @@ export default function ViewerEntryPage() {
                     <p className="text-gray-500">시청할 채널 ID를 입력해주세요.</p>
                 </div>
 
-                {/* Input Card */}
+                {/* 입력 카드 */}
                 <Card className="p-8 shadow-lg border-0">
                     <div className="space-y-6">
                         <div className="space-y-2">

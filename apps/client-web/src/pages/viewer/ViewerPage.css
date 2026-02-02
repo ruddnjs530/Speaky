@@ -1,68 +1,321 @@
 .viewerPage {
-    padding: 24px;
+    /* Flexbox 중앙 정렬을 사용한 전체 화면 다크 레이아웃 */
+    min-height: 100vh;
+    background-color: #111827;
+    /* gray-900 */
     display: flex;
     flex-direction: column;
-    gap: 1.5rem;
-    max-width: 1200px;
-    margin: 0 auto;
-    width: 100%;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: #fff;
     box-sizing: border-box;
 }
 
-.viewerPage__header {
+/* 대체, 오류 상태 컨테이너 */
+.viewerPage__container {
+    min-height: 100vh;
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    justify-content: center;
+    background-color: #111827;
+    /* gray-900 */
+    color: #fff;
 }
 
-.viewerPage__title {
-    margin: 0;
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: #111;
+.viewerPage__card {
+    padding: 2rem;
+    text-align: center;
+    background-color: #1f2937;
+    /* gray-800 */
+    border: 1px solid #374151;
+    /* gray-700 */
+    border-radius: 0.5rem;
 }
 
-.viewerPage__statusCard {
-    background-color: #fff;
-    border-radius: 8px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+/* 1. 상단 정보 바 */
+.viewerPage__topBar {
+    width: 100%;
+    max-width: 64rem;
+    /* max-w-5xl */
+    background-color: #1f2937;
+    /* gray-800 */
+    border-top-left-radius: 0.75rem;
+    /* rounded-t-xl */
+    border-top-right-radius: 0.75rem;
+    border-bottom: 1px solid #374151;
+    /* gray-700 */
+    padding: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
 }
 
-.viewerPage__infoRow {
+.viewerPage__titleGroup {
     display: flex;
     align-items: center;
     gap: 1rem;
-    font-size: 0.95rem;
-    color: #444;
 }
 
-.viewerPage__infoLabel {
-    font-weight: 600;
-    color: #666;
+.viewerPage__title {
+    font-size: 1.125rem;
+    /* text-lg */
+    font-weight: 700;
+    margin: 0;
 }
 
-.viewerPage__error {
-    color: #e11d48;
-    background-color: #ffe4e6;
-    padding: 8px 12px;
-    border-radius: 6px;
-    font-size: 0.9rem;
-    margin-top: 0.5rem;
+.viewerPage__badge {
+    padding: 0.125rem 0.5rem;
+    font-size: 0.75rem;
+    /* text-xs */
+    font-weight: 700;
+    border-radius: 0.25rem;
 }
 
-.viewerPage__mediaArea {
+.viewerPage__badge--live {
+    background-color: #dc2626;
+    /* red-600 */
+    color: #fff;
+    animation: viewerPagePulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.viewerPage__badge--offline {
+    background-color: #4b5563;
+    /* gray-600 */
+    color: #d1d5db;
+    /* gray-300 */
+}
+
+@keyframes viewerPagePulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: .5;
+    }
+}
+
+.viewerPage__latency {
+    font-size: 0.875rem;
+    /* text-sm */
+    color: #9ca3af;
+    /* gray-400 */
+}
+
+.viewerPage__latencyValue {
+    color: #4ade80;
+    /* green-400 */
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+/* 2. 메인 비디오 영역 */
+.viewerPage__videoArea {
     width: 100%;
+    max-width: 64rem;
+    /* max-w-5xl */
     aspect-ratio: 16 / 9;
     background-color: #000;
-    border-radius: 12px;
-    overflow: hidden;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    position: relative;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    /* shadow-2xl */
 }
 
-/* Fallback / Error states container (optional centering) */
-.viewerPage__paramError {
-    padding: 24px;
-    display: grid;
-    place-items: center;
-    min-height: 50vh;
+/* 오버레이 */
+.viewerPage__overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    padding: 1rem;
+    text-align: center;
+}
+
+.viewerPage__overlay--wait {
+    background-color: rgba(0, 0, 0, 0.8);
+}
+
+.viewerPage__overlay--error {
+    background-color: rgba(0, 0, 0, 0.9);
+}
+
+.viewerPage__overlayTitle {
+    font-size: 1.5rem;
+    /* text-2xl */
+    font-weight: 700;
+    color: #e5e7eb;
+    /* gray-200 */
+    margin-bottom: 0.5rem;
+}
+
+.viewerPage__overlayText {
+    color: #9ca3af;
+    /* gray-400 */
+}
+
+.viewerPage__overlayActions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 1.5rem;
+}
+
+/* 전체 화면 버튼 오버레이 */
+.viewerPage__fsOverlayBtn {
+    position: absolute;
+    bottom: 1rem;
+    right: 1rem;
+    z-index: 30;
+    /* 오버레이보다 높게 */
+    padding: 0.5rem;
+    background-color: rgba(0, 0, 0, 0.5);
+    border-radius: 0.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #fff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.viewerPage__fsOverlayBtn:hover {
+    background-color: rgba(0, 0, 0, 0.8);
+    transform: scale(1.05);
+}
+
+/* 3. 하단 컨트롤 바 */
+.viewerPage__controlBar {
+    width: 100%;
+    max-width: 64rem;
+    /* max-w-5xl */
+    background-color: #1f2937;
+    /* gray-800 */
+    border-bottom-left-radius: 0.75rem;
+    /* rounded-b-xl */
+    border-bottom-right-radius: 0.75rem;
+    border-top: 1px solid #374151;
+    /* gray-700 */
+    padding: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+/* 하단 바 구역 */
+.viewerPage__controlSection {
+    display: flex;
+    align-items: center;
+    width: 33.333%;
+}
+
+.viewerPage__controlSection--left {
+    justify-content: flex-start;
+    gap: 1rem;
+}
+
+.viewerPage__controlSection--center {
+    justify-content: center;
+    gap: 0.5rem;
+    color: #d1d5db;
+    /* gray-300 */
+    font-weight: 500;
+}
+
+.viewerPage__controlSection--right {
+    justify-content: flex-end;
+    gap: 0.75rem;
+}
+
+/* 볼륨 제어 */
+.viewerPage__volumeBtn {
+    padding: 0.5rem;
+    border-radius: 9999px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: #9ca3af;
+    /* gray-400 */
+    transition: background-color 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.viewerPage__volumeBtn:hover {
+    background-color: #374151;
+    /* gray-700 */
+    color: #fff;
+}
+
+.viewerPage__volumeSlider {
+    width: 8rem;
+    /* w-32 */
+    height: 0.25rem;
+    /* h-1 */
+    background-color: #4b5563;
+    /* gray-600 */
+    border-radius: 0.5rem;
+    appearance: none;
+    cursor: pointer;
+}
+
+.viewerPage__volumeSlider::-webkit-slider-thumb {
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #E8753A;
+    /* accent color */
+    cursor: pointer;
+}
+
+.viewerPage__countHighlight {
+    color: #fff;
+    font-weight: 700;
+    margin-left: 0.25rem;
+}
+
+/* 하단 바 커스텀 버튼 스타일 */
+.viewerPage__btnSync {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background-color: #374151;
+    /* gray-700 */
+    color: #fff;
+    font-size: 0.875rem;
+    border: none;
+    border-radius: 0.375rem;
+    cursor: pointer;
+}
+
+.viewerPage__btnSync:hover {
+    background-color: #4b5563;
+    /* gray-600 */
+}
+
+.viewerPage__btnExit {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background-color: #dc2626;
+    /* red-600 */
+    color: #fff;
+    font-size: 0.875rem;
+    border: none;
+    border-radius: 0.375rem;
+    cursor: pointer;
+}
+
+.viewerPage__btnExit:hover {
+    background-color: #b91c1c;
+    /* red-700 */
 }

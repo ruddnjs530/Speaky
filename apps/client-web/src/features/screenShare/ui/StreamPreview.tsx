@@ -6,6 +6,7 @@ type Props = {
     title: string;
     stream: MediaStream | null;
     muted?: boolean;
+    variant?: 'card' | 'minimal';
 };
 
 function setRef<T>(ref: ForwardedRef<T>, value: T) {
@@ -19,7 +20,7 @@ function setRef<T>(ref: ForwardedRef<T>, value: T) {
 }
 
 const StreamPreview = forwardRef<HTMLVideoElement, Props>(
-    ({ title, stream, muted = false }, ref) => {
+    ({ title, stream, muted = false, variant = 'card' }, ref) => {
         const localRef = useRef<HTMLVideoElement | null>(null);
 
         useEffect(() => {
@@ -35,35 +36,42 @@ const StreamPreview = forwardRef<HTMLVideoElement, Props>(
             };
         }, [stream, muted]);
 
+        const content = stream ? (
+            <video
+                ref={(el) => {
+                    localRef.current = el;
+                    setRef(ref, el);
+                }}
+                autoPlay
+                playsInline
+                muted={muted}
+                className="w-full h-full object-cover"
+                style={variant === 'card' ? { background: '#000', borderRadius: 8 } : { background: '#000' }}
+            />
+        ) : (
+            <div
+                style={{
+                    width: '100%',
+                    height: variant === 'card' ? 360 : '100%',
+                    background: variant === 'card' ? '#eee' : '#000',
+                    borderRadius: variant === 'card' ? 8 : 0,
+                    display: 'grid',
+                    placeItems: 'center',
+                    color: variant === 'card' ? '#000' : '#444',
+                }}
+            >
+                {variant === 'card' ? '서버 미리보기가 여기에 표시됩니다.' : '신호 없음'}
+            </div>
+        );
+
+        if (variant === 'minimal') {
+            return <div className="w-full h-full relative">{content}</div>;
+        }
+
         return (
             <Card className="p-3">
                 <div style={{ fontWeight: 700, marginBottom: 8 }}>{title}</div>
-
-                {stream ? (
-                    <video
-                        ref={(el) => {
-                            localRef.current = el;
-                            setRef(ref, el);
-                        }}
-                        autoPlay
-                        playsInline
-                        muted={muted}
-                        style={{ width: '100%', background: '#000', borderRadius: 8 }}
-                    />
-                ) : (
-                    <div
-                        style={{
-                            width: '100%',
-                            height: 360,
-                            background: '#eee',
-                            borderRadius: 8,
-                            display: 'grid',
-                            placeItems: 'center',
-                        }}
-                    >
-                        서버 미리보기가 여기에 표시됩니다.
-                    </div>
-                )}
+                {content}
             </Card>
         );
     }
