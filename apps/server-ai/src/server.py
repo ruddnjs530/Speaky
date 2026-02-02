@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import signal
 import traceback
@@ -14,6 +15,9 @@ from shared_proto import voice_pb2, voice_pb2_grpc
 # RVC 모델 관리자 import
 from src.services.model_manager import VoiceModelManager, load_models_from_config
 from src.services.rvc_converter import RVCConverter
+
+# 로깅 설정
+logger = logging.getLogger(__name__)
 
 
 class VoiceService(voice_pb2_grpc.VoiceServiceServicer):
@@ -108,9 +112,9 @@ class VoiceService(voice_pb2_grpc.VoiceServiceServicer):
                 model_initialized = True
                 
                 if model_name:
-                    print(f"[AI Worker] Using model: {model_name}")
+                    logger.info(f"Using model: {model_name}")
                 elif converter is None:
-                    print(f"[AI Worker] No model available, using pass-through")
+                    logger.info("No model available, using pass-through")
             
             # 이후 청크들은 첫 번째에서 선택한 모델 재사용
             converter = current_converter
@@ -132,7 +136,7 @@ class VoiceService(voice_pb2_grpc.VoiceServiceServicer):
                 if sample_rate not in [16000, 24000]:
                     # 첫 번째 경고만 출력 (로그 과다 방지)
                     if not self._first_sample_rate_warning_logged:
-                        print(f"[WARNING] Sample rate {sample_rate}Hz may not work optimally. RVC expects 16kHz or 24kHz.")
+                        logger.warning(f"Sample rate {sample_rate}Hz may not work optimally. RVC expects 16kHz or 24kHz.")
                         self._first_sample_rate_warning_logged = True
                 
                 out_pcm = await asyncio.to_thread(
@@ -145,24 +149,26 @@ class VoiceService(voice_pb2_grpc.VoiceServiceServicer):
                 # 변환 성공 확인 (원본과 동일하면 변환이 안 된 것일 수 있음)
                 # 단, 매우 짧은 청크나 무음은 원본과 같을 수 있으므로 경고만 출력
                 if len(chunk.pcm) > 1000 and out_pcm == chunk.pcm:
-                    print(f"[WARNING] Output is identical to input - conversion may have failed or returned original")
+                    logger.warning("Output is identical to input - conversion may have failed or returned original")
                     
             except Exception as e:
                 # 에러 정보 수집
                 error_type = type(e).__name__
                 error_msg = str(e) if e else ""
                 
-                # 에러 메시지 출력
-                if not error_msg or len(error_msg.strip()) == 0:
-                    print(f"[ERROR] Conversion failed: {error_type} (no message)")
-                else:
-                    print(f"[ERROR] Conversion failed: {error_type}: {error_msg}")
-                
                 # 에러 타입별로 첫 번째 발생 시에만 traceback 출력 (로그 과다 방지)
                 if error_type not in self._logged_error_types:
-                    print(f"[ERROR] First {error_type} traceback:")
-                    traceback.print_exc()
+                    if error_msg and len(error_msg.strip()) > 0:
+                        logger.error(f"Conversion failed: {error_type}: {error_msg}", exc_info=True)
+                    else:
+                        logger.error(f"Conversion failed: {error_type} (no message)", exc_info=True)
                     self._logged_error_types.add(error_type)
+                else:
+                    # 이미 로그된 에러 타입은 메시지만 출력
+                    if error_msg and len(error_msg.strip()) > 0:
+                        logger.error(f"Conversion failed: {error_type}: {error_msg}")
+                    else:
+                        logger.error(f"Conversion failed: {error_type} (no message)")
                 
                 # 변환 실패 시 pass-through
                 out_pcm = chunk.pcm
@@ -173,6 +179,29 @@ class VoiceService(voice_pb2_grpc.VoiceServiceServicer):
                 channels=chunk.channels,
                 timestamp=chunk.timestamp,
             )
+
+
+def _setup_logging() -> None:
+    """로깅 시스템 설정"""
+    log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+    log_format = os.getenv(
+        "LOG_FORMAT",
+        "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
+    )
+    
+    # 로그 레벨 설정
+    numeric_level = getattr(logging, log_level, logging.INFO)
+    
+    # 루트 로거 설정
+    logging.basicConfig(
+        level=numeric_level,
+        format=log_format,
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    
+    # 외부 라이브러리 로그 레벨 조정 (너무 많은 로그 방지)
+    logging.getLogger("grpc").setLevel(logging.WARNING)
+    logging.getLogger("asyncio").setLevel(logging.WARNING)
 
 
 async def serve(host: str = "0.0.0.0", port: int = 50051) -> None:
@@ -189,18 +218,18 @@ async def serve(host: str = "0.0.0.0", port: int = 50051) -> None:
     
     # 모든 모델 로딩
     if configs:
-        print(f"[AI Worker] Loading {len(configs)} models...")
+        logger.info(f"Loading {len(configs)} models...")
         await model_manager.load_all_models()
         models = model_manager.list_models()
         ready_models = [m["model_name"] for m in models.values() if m["status"] == "READY"]
         error_models = [m["model_name"] for m in models.values() if m["status"] == "ERROR"]
         
         if ready_models:
-            print(f"[AI Worker] Ready models ({len(ready_models)}): {ready_models}")
+            logger.info(f"Ready models ({len(ready_models)}): {ready_models}")
         if error_models:
-            print(f"[AI Worker] Failed models ({len(error_models)}): {error_models}")
+            logger.error(f"Failed models ({len(error_models)}): {error_models}")
     else:
-        print("[AI Worker] No models configured, running in pass-through mode")
+        logger.info("No models configured, running in pass-through mode")
     
     # gRPC 서버 설정
     server = grpc.aio.server(
@@ -220,7 +249,7 @@ async def serve(host: str = "0.0.0.0", port: int = 50051) -> None:
 
     await server.start()
     rvc_status = "ON" if configs else "OFF"
-    print(f"[AI Worker] gRPC server started at {listen_addr} (RVC={rvc_status})")
+    logger.info(f"gRPC server started at {listen_addr} (RVC={rvc_status})")
 
     # Ctrl+C graceful shutdown
     stop_event = asyncio.Event()
@@ -237,9 +266,10 @@ async def serve(host: str = "0.0.0.0", port: int = 50051) -> None:
             pass
 
     await stop_event.wait()
-    print("[AI Worker] shutting down...")
+    logger.info("Shutting down...")
     await server.stop(grace=3)
 
 
 if __name__ == "__main__":
+    _setup_logging()
     asyncio.run(serve())

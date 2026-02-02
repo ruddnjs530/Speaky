@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import yaml
 from typing import Dict, Optional
 from pathlib import Path
 import threading
 
 from src.services.rvc_converter import RVCConverter
+
+logger = logging.getLogger(__name__)
 
 
 class VoiceModelConfig:
@@ -52,7 +55,7 @@ class VoiceModelManager:
     async def load_model(self, voice_model_id: int) -> bool:
         """모델 로딩"""
         if voice_model_id not in self._configs:
-            print(f"[ERROR] Model not registered: voice_model_id={voice_model_id}")
+            logger.error(f"Model not registered: voice_model_id={voice_model_id}")
             return False
         
         config = self._configs[voice_model_id]
@@ -79,17 +82,17 @@ class VoiceModelManager:
                 self._status[voice_model_id] = "READY"
             
             # 모델 정보 출력
-            print(f"[AI Worker] Model loaded: {config.model_name} (voice_model_id={voice_model_id})")
+            logger.info(f"Model loaded: {config.model_name} (voice_model_id={voice_model_id})")
             # 타겟 샘플레이트 출력
             if converter._loaded and converter._vc and hasattr(converter._vc, 'tgt_sr'):
-                print(f"[AI Worker]   Target Sample Rate: {converter._vc.tgt_sr}Hz")
+                logger.info(f"  Target Sample Rate: {converter._vc.tgt_sr}Hz")
             
             return True
             
         except Exception as e:
             with self._lock:
                 self._status[voice_model_id] = "ERROR"
-            print(f"[ERROR] Failed to load model {config.model_name} (voice_model_id={voice_model_id}): {e}")
+            logger.error(f"Failed to load model {config.model_name} (voice_model_id={voice_model_id}): {e}", exc_info=True)
             return False
     
     async def load_all_models(self) -> None:
@@ -145,7 +148,7 @@ def load_models_from_config(config_path: str) -> list[VoiceModelConfig]:
     """YAML 설정 파일에서 모델 목록 로드"""
     config_file = Path(config_path)
     if not config_file.exists():
-        print(f"[WARNING] Config file not found: {config_path}")
+        logger.warning(f"Config file not found: {config_path}")
         return []
     
     with open(config_file, 'r', encoding='utf-8') as f:
@@ -155,7 +158,7 @@ def load_models_from_config(config_path: str) -> list[VoiceModelConfig]:
     for model_config in config.get('models', []):
         # voice_model_id는 필수값
         if 'voice_model_id' not in model_config:
-            print(f"[ERROR] Model '{model_config.get('model_name', 'unknown')}' is missing required 'voice_model_id', skipping")
+            logger.error(f"Model '{model_config.get('model_name', 'unknown')}' is missing required 'voice_model_id', skipping")
             continue
         
         model = VoiceModelConfig(
