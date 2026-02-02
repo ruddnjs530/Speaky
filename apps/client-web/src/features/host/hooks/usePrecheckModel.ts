@@ -44,9 +44,9 @@ export interface PrecheckModel {
     };
 }
 
-export function usePrecheckModel(opts?: { onNext?: () => void }): PrecheckModel {
+export function usePrecheckModel(opts?: { onNext?: (voiceId: number) => void }): PrecheckModel {
     const onNext = opts?.onNext;
-    const onNextRef = useRef(onNext);
+    const onNextRef = useRef<((voiceId: number) => void) | undefined>(onNext);
 
     useEffect(() => {
         onNextRef.current = onNext;
@@ -269,7 +269,7 @@ export function usePrecheckModel(opts?: { onNext?: () => void }): PrecheckModel 
 
             goNext: () => {
                 stopLevelMonitorImpl();
-                onNextRef.current?.();
+                onNextRef.current?.(voiceId);
             },
         };
     }, [mic.selectedDeviceId]);

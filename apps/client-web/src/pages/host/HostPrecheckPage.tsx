@@ -12,7 +12,7 @@ export default function HostPrecheckPage() {
     const navigate = useNavigate();
 
     const model = usePrecheckModel({
-        onNext: () => navigate("/host/studio", { state: { voiceId: model.voiceId } }),
+        onNext: (voiceId) => navigate("/host/studio", { state: { voiceId } }),
     });
 
     return (
