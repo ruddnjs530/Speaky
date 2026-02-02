@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Volume2, VolumeX, Users, RefreshCcw, LogOut, Maximize, Minimize } from 'lucide-react';
 import ViewerMediaPanel from '../../features/media/ui/ViewerMediaPanel';
 import Card from '../../shared/ui/Card';
@@ -47,8 +47,16 @@ function joinReducer(_state: JoinUiState, action: JoinAction): JoinUiState {
 export default function ViewerPage() {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const channelId = roomId ?? '';
   const { remoteStream, status, connect } = useScreenShare();
+
+  useEffect(() => {
+    if (!getAccessToken()) {
+      // 로그인 후 다시 이 페이지(/viewer/:roomId)로 돌아오기 위해 현재 경로를 state로 전달
+      navigate('/login', { state: { from: location.pathname } });
+    }
+  }, [navigate, location]);
 
   // 초기 mount에서 joining 상태로 시작 (effect에서 동기 setState를 피하기 위함)
   const [joinUi, dispatch] = useReducer(

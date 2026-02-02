@@ -1,10 +1,11 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import Button from '../shared/ui/Button';
 import LoginForm from '../features/auth/ui/LoginForm';
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleBack = () => {
     navigate('/');
@@ -15,7 +16,9 @@ export default function LoginPage() {
   };
 
   const handleLoginSuccess = () => {
-    navigate('/', { replace: true });
+    // 이전 페이지 정보가 있다면 거기로, 없다면 홈으로
+    const from = location.state?.from || '/';
+    navigate(from, { replace: true });
   }
 
   return (

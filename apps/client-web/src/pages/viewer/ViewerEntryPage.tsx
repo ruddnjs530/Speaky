@@ -1,13 +1,22 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import Card from '../../shared/ui/Card';
 import Input from '../../shared/ui/Input';
 import Button from '../../shared/ui/Button';
+import { getAccessToken } from '../../shared/lib/authToken';
 
 export default function ViewerEntryPage() {
     const navigate = useNavigate();
+    const location = useLocation();
     const [channelIdInput, setChannelIdInput] = useState('');
     const [error, setError] = useState('');
+
+    useEffect(() => {
+        if (!getAccessToken()) {
+            // 로그인 후 다시 이 페이지로 돌아오기 위해 현재 경로를 state로 전달
+            navigate('/login', { state: { from: location.pathname } });
+        }
+    }, [navigate, location]);
 
     const handleJoinChannel = () => {
         if (!channelIdInput.trim()) {

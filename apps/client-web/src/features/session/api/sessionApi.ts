@@ -82,13 +82,7 @@ export const sessionApi = {
         const session = (await sessionRes.json()) as SessionResponse;
         // 로그인된 사용자 토큰 (백엔드 signalingToken이 없으면 이걸 fallback으로 사용)
         const userToken = getAccessToken();
-        /*
-         * 만약 비로그인 사용자도 시청 가능하다면 userToken 체크는 제거하거나,
-         * 백엔드에서 주는 session.signalingToken을 전적으로 신뢰해야 합니다.
-         */
-        if (!session.signalingToken && !userToken) {
-            throw { code: "UNAUTHORIZED", message: "로그인 후 이용해주세요." };
-        }
+
         return {
             channelId: state.hostLoginId || channelId, // hostLoginId를 우선
             sessionId: sessionId,
