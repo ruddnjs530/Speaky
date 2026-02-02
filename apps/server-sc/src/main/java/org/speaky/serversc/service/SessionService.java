@@ -176,6 +176,16 @@ public class SessionService {
         
         sessionRepository.save(session);
         
+        // Media Server Room 정리
+        try {
+            mediaServerClient.deleteRoom(sessionId);
+            log.info("Media server room deleted: sessionId={}", sessionId);
+        } catch (Exception e) {
+            // deleteRoom 실패는 비치명적 - 로깅만 하고 계속 진행
+            log.warn("Failed to delete media server room: sessionId={}, error={}", 
+                    sessionId, e.getMessage());
+        }
+        
         // WebSocket 이벤트 발행
         eventPublisher.publishSessionEvent(
             SessionEventPayload.builder()
