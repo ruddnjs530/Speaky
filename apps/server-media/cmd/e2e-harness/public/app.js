@@ -3,11 +3,22 @@ const remoteVideo = document.getElementById('remoteVideo');
 const logDiv = document.getElementById('logs');
 const btnJoin = document.getElementById('btnJoin');
 
-function log(msg) {
-    const time = new Date().toISOString().split('T')[1];
-    logDiv.innerHTML += `<div>[${time}] ${msg}</div>`;
+function log(msg, type = '') {
+    if (!logDiv) {
+        console.log(`[LOG] ${msg}`);
+        return;
+    }
+    const time = new Date().toLocaleTimeString('en-GB', { hour12: false });
+    const logItem = document.createElement('div');
+
+    let colorClass = '';
+    if (msg.toLowerCase().includes('error') || msg.toLowerCase().includes('failed')) colorClass = 'log-error';
+    if (msg.toLowerCase().includes('success') || msg.toLowerCase().includes('complete')) colorClass = 'log-success';
+
+    logItem.innerHTML = `<span class="log-time">[${time}]</span> <span class="${colorClass}">${msg}</span>`;
+    logDiv.appendChild(logItem);
     logDiv.scrollTop = logDiv.scrollHeight;
-    console.log(msg);
+    console.log(`[${time}] ${msg}`);
 }
 
 let pc;
@@ -49,17 +60,17 @@ async function startCamera() {
             // Stop existing tracks to release hardware
             localStream.getTracks().forEach(t => t.stop());
         }
-        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        localVideo.srcObject = localStream;
-        log('Camera acquiring success');
-        btnJoin.disabled = false;
+        localStream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720 }, audio: true });
+        if (localVideo) localVideo.srcObject = localStream;
+        log('Camera acquisition success');
+        if (btnJoin) btnJoin.disabled = false;
 
         // Dynamic Switch Support
         if (pc && pc.connectionState !== 'closed') {
             await updateTracks(localStream);
         }
     } catch (e) {
-        log(`Camera Error: ${e.message}`);
+        log(`Camera Error: ${e.message}`, 'error');
     }
 }
 
@@ -69,27 +80,34 @@ async function startScreenShare() {
             localStream.getTracks().forEach(t => t.stop());
         }
         localStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-        localVideo.srcObject = localStream;
-        log('Screen Share acquiring success');
-        btnJoin.disabled = false;
+        if (localVideo) localVideo.srcObject = localStream;
+        log('Screen Share acquisition success');
+        if (btnJoin) btnJoin.disabled = false;
 
         // Dynamic Switch Support
         if (pc && pc.connectionState !== 'closed') {
             await updateTracks(localStream);
         }
     } catch (e) {
-        log(`Screen Share Error: ${e.message}`);
+        log(`Screen Share Error: ${e.message}`, 'error');
     }
 }
 
 async function joinRoom() {
-    const roomId = document.getElementById('roomId').value;
-    const userId = document.getElementById('userId').value;
+    const roomIdInput = document.getElementById('roomId');
+    const userIdInput = document.getElementById('userId');
+    if (!roomIdInput || !userIdInput) {
+        log('Room ID or User ID input not found.', 'error');
+        return;
+    }
+
+    const roomId = roomIdInput.value;
+    const userId = userIdInput.value;
 
     // Check for Observer Mode
     const isObserver = !localStream;
-    log(isObserver ? `Joining as Observer (No Input)...` : `Joining with Media...`);
-    btnJoin.disabled = true;
+    log(isObserver ? `Joining as Guest Observer...` : `Joining as Host...`);
+    if (btnJoin) btnJoin.disabled = true;
 
     try {
         // 1. Create PeerConnection
@@ -111,7 +129,7 @@ async function joinRoom() {
                 if (!params.encodings) params.encodings = [{}];
                 params.encodings[0].maxBitrate = 2500000; // 2.5 Mbps
                 await videoSender.setParameters(params);
-                log('Video Bitrate forced to 2.5 Mbps');
+                log('Video bit rate optimized to 2.5 Mbps');
             }
         } else {
             // Observer: Add RecvOnly Transceivers
@@ -122,9 +140,9 @@ async function joinRoom() {
         // 3. Handle Remote Stream
         pc.ontrack = (event) => {
             log(`Remote track received: ${event.track.kind}`);
-            if (remoteVideo.srcObject !== event.streams[0]) {
+            if (remoteVideo && remoteVideo.srcObject !== event.streams[0]) {
                 remoteVideo.srcObject = event.streams[0];
-                log('Set remote video stream');
+                log('Synchronized remote media stream');
             }
         };
 
@@ -143,21 +161,21 @@ async function joinRoom() {
                         })
                     });
                 } catch (e) {
-                    log('Failed to send candidate');
+                    log('ICE Candidate signaling failed', 'error');
                 }
             } else {
-                log('ICE gathering complete (local)');
+                log('ICE gathering complete');
             }
         };
 
         pc.oniceconnectionstatechange = () => {
-            log(`ICE State: ${pc.iceConnectionState}`);
+            log(`ICE connection state: ${pc.iceConnectionState}`);
         };
 
         // 5. Create Offer
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
-        log('Created and set local SDP Offer');
+        log('Generated local SDP offer');
 
         // 6. Send to Server via Harness
         log('Sending Offer to Server...');
@@ -171,35 +189,42 @@ async function joinRoom() {
         });
 
         if (!response.ok) {
-            throw new Error(`Server returned ${response.status}: ${await response.text()}`);
+            throw new Error(`Server Exception: ${response.status}`);
         }
 
         const data = await response.json();
-        log('Received SDP Answer from Server');
+        log('SDP Handshake complete');
 
         // 7. Set Remote Description
         await pc.setRemoteDescription(new RTCSessionDescription({
             type: 'answer',
             sdp: data.sdpAnswer
         }));
-        log('Set remote description. Connection establishment in progress...');
+        log('Secure connection established');
 
     } catch (e) {
-        log(`ERROR: ${e.message}`);
-        btnJoin.disabled = false;
+        log(`CRITICAL ERROR: ${e.message}`, 'error');
+        if (btnJoin) btnJoin.disabled = false;
     }
 }
 
 async function negotiate() {
     if (!pc) return; // Not joined yet
-    log('Renegotiating...');
+    log('Spontaneously renegotiating session...');
 
     try {
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
 
-        const roomId = document.getElementById('roomId').value;
-        const userId = document.getElementById('userId').value;
+        const roomIdInput = document.getElementById('roomId');
+        const userIdInput = document.getElementById('userId');
+        if (!roomIdInput || !userIdInput) {
+            log('Room ID or User ID input not found for renegotiation.', 'error');
+            return;
+        }
+
+        const roomId = roomIdInput.value;
+        const userId = userIdInput.value;
 
         const response = await fetch('/api/renegotiate', {
             method: 'POST',
@@ -211,30 +236,27 @@ async function negotiate() {
         });
 
         if (!response.ok) {
-            throw new Error(`Renegotiate failed: ${response.status}`);
+            throw new Error(`Renegotiation failed: ${response.status}`);
         }
 
         const data = await response.json();
-        log(`Received Renegotiation Answer. Type: ${data.sdpAnswer ? 'Found' : 'Missing'}`);
-        // Log m-lines for debugging
-        if (data.sdpAnswer) {
-            data.sdpAnswer.split('\r\n').forEach(l => {
-                if (l.startsWith('m=') || l.startsWith('a=direction') || l.startsWith('a=send') || l.startsWith('a=recv')) log(l);
-            });
-        }
-
         await pc.setRemoteDescription(new RTCSessionDescription({
             type: 'answer',
             sdp: data.sdpAnswer
         }));
-        log('Renegotiation complete');
+        log('Renegotiation successful');
     } catch (e) {
-        log(`Renegotiation Error: ${e.message}`);
+        log(`Renegotiation failed: ${e.message}`, 'error');
     }
 }
 
 // Auto-Randomize ID for Test Convenience
 window.onload = () => {
-    const randomSuffix = Math.floor(Math.random() * 10000);
-    document.getElementById('userId').value = `user-${randomSuffix.toString().padStart(4, '0')}`;
+    const userIdInput = document.getElementById('userId');
+    if (userIdInput) {
+        const randomSuffix = Math.floor(Math.random() * 10000);
+        // Hint at role based on page
+        const prefix = window.location.pathname.includes('host') ? 'host' : 'guest';
+        userIdInput.value = `user-${prefix}-${randomSuffix.toString().padStart(4, '0')}`;
+    }
 };

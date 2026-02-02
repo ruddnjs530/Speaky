@@ -20,7 +20,9 @@ import { getErrorMessage } from '../../shared/lib/errorUtils';
 
 type Step = 'setup' | 'live';
 
-const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8080/ws';
+import { WS_URL_DEFAULT } from '../../shared/config';
+
+const WS_URL = WS_URL_DEFAULT;
 
 export default function HostPage() {
   const navigate = useNavigate();
@@ -69,22 +71,22 @@ export default function HostPage() {
       console.log('Session Created: ', session);
       setSessionId(session.sessionId);
 
-      // 2. 토큰 확인
-      const token = getAccessToken();
-      if (!token) {
-        alert('로그인 후 이용해주세요');
+      // 2. 토큰 및 URL 결정
+      // 백엔드가 준 signalingToken이 있으면 최우선 사용, 없으면 내 로그인 토큰(fallback)
+      const userToken = getAccessToken();
+      const finalToken = session.signalingToken || userToken;
+      const finalWsUrl = session.wsUrl || WS_URL; // WS_URL은 상단에 정의된 fallback
+      if (!finalToken) {
+        alert('로그인 후 이용해주세요 (또는 서버 토큰 발급 실패)');
         return;
       }
 
       // 3. WS 연결 (Signaling)
-      // connect 호출 시 필요한 정보 전달
       await connect({
         role: 'host',
-        // 주의: 백엔드가 wsUrl을 주지 않으므로 로컬 테스트용 URL 사용 (배포 시 수정 필요)
-        wsUrl: WS_URL,
-        token: token,
-        // 임시 채널 ID: "host-{userId}" 형식 사용
-        channelId: `host-${session.hostUserId}`,
+        wsUrl: finalWsUrl,
+        token: finalToken,
+        channelId: session.channelId || `host-${session.hostUserId}`, // 서버가 준 channelId 우선
         sessionId: session.sessionId
       });
     } catch (e) {

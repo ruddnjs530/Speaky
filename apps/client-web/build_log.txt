@@ -1,0 +1,5 @@
+
+> client-web@0.0.0 build
+> tsc -b && vite build
+
+src/features/session/ui/panels/IdlePanel.tsx(24,62): error TS2554: Expected 1 arguments, but got 0.

@@ -7,7 +7,6 @@ type ApiFetchOptions = RequestInit & {
 export async function apiFetch(input: RequestInfo | URL, options: ApiFetchOptions = {}) {
   const { auth = true, headers, ...rest } = options;
 
-  const token = auth ? getAccessToken() : null;
 
   // 1. URL에 VITE_API_URL 환경 변수 적용
   let url = input;

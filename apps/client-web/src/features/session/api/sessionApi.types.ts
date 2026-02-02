@@ -27,6 +27,7 @@ export type SessionResponse = {
     pipelineId?: string;
     createdAt: string;
 
-    // 🚨 중요: 현재 백엔드 응답에는 연결 정보(token, wsUrl)가 없습니다.
-    // 따라서 HostPage에서 이 정보를 별도로 구성해야 합니다.
+    wsUrl?: string;          // 서버가 주는 WebSocket URL
+    signalingToken?: string; // 서버가 발급한 토큰
+    channelId?: string;
 };

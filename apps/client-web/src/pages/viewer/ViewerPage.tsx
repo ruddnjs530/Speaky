@@ -9,6 +9,7 @@ import { sessionApi } from '../../features/session/api/sessionApi';
 import { getErrorCode, getErrorMessage } from '../../shared/lib/errorUtils';
 import { SignalingClient } from '../../shared/lib/signaling/SignalingClient';
 import { getAccessToken } from '../../shared/lib/authToken';
+import { WS_URL_DEFAULT } from '../../shared/config';
 
 import './ViewerPage.css';
 
@@ -117,7 +118,7 @@ export default function ViewerPage() {
 
           console.log('[AutoRouting] 방송 대기 모드: WS 연결 시작');
 
-          const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:8080/ws';
+          const wsUrl = WS_URL_DEFAULT;
 
           const token = getAccessToken() ?? '';
           const sc = new SignalingClient({
