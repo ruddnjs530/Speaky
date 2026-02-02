@@ -3,7 +3,7 @@ package org.speaky.serversc.dto;
 import java.util.List;
 import lombok.*;
 
-@Getter
+@Data
 @NoArgsConstructor
 @AllArgsConstructor
 public class VoiceListResponseDto {
