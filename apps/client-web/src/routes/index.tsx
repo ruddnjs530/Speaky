@@ -11,6 +11,7 @@ import HostPrecheckPage from "../pages/host/HostPrecheckPage";
 
 import HostPage from "../pages/host/HostPage";
 import ViewerPage from "../pages/viewer/ViewerPage";
+import ViewerEntryPage from "../pages/viewer/ViewerEntryPage";
 import SessionLayout from "../layouts/SessionLayout.tsx";
 import SessionProviderLayout from "../layouts/SessionProviderLayout.tsx";
 
@@ -34,15 +35,16 @@ export default function AppRoutes() {
 
                         {/* Gate는 studio/viewer만: 단계 안내 UX 적용 */}
                         <Route element={<SessionLayout />}>
-                            <Route path="/viewer/:roomId" element={<ViewerPage />} />
                             <Route path="/host/studio" element={<HostPage />} />
+                            <Route path="/viewer/entry" element={<ViewerEntryPage />} />
+                            <Route path="/viewer/:roomId" element={<ViewerPage />} />
                         </Route>
                     </Route>
+
+
+                    {/* fallback */}
+                    <Route path="*" element={<Navigate to="/" replace />} />
                 </Route>
-
-
-                {/* fallback */}
-                <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
         </Routes>
     );

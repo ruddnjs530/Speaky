@@ -5,8 +5,7 @@ import { RoleCard } from '../features/home/ui/RoleCard';
 
 type Role = 'host' | 'viewer';
 
-// TEST_ROOM_ID는 실제 로직에 맞게 추후 수정 필요
-const TEST_ROOM_ID = "test";
+
 
 const isAuthed = () => Boolean(localStorage.getItem("accessToken"));
 
@@ -38,8 +37,8 @@ export default function HomePage() {
       // 호스트는 로그인 확인이나 프리체크 페이지로 이동
       navigate('/host/precheck');
     } else {
-      // 뷰어는 룸 ID가 필요함. 디자인상 룸 ID 입력이 없으므로 일단 테스트 ID로 이동
-      navigate(`/viewer/${TEST_ROOM_ID}`);
+      // 뷰어는 입장 페이지로 이동
+      navigate('/viewer/entry');
     }
   };
 
