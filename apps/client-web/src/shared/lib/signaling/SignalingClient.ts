@@ -1,4 +1,5 @@
 import { Client, type IMessage } from "@stomp/stompjs";
+import SockJS from "sockjs-client";
 import type {
   AnyInbound,
   AnyOutbound,
@@ -45,11 +46,13 @@ export class SignalingClient {
       return;
     }
 
-    const url = buildWsUrl(baseWsUrl, token);
-    const brokerURL = url.replace(/^http/, 'ws');
+    const url = buildWsUrl(baseWsUrl, token).replace(/^ws/, 'http');
+    // SockJS는 http/https 주소를 사용합니다.
+    // brokerURL 대신 webSocketFactory를 사용합니다.
 
     this.client = new Client({
-      brokerURL,
+      // brokerURL: ... (SockJS 사용 시 제거)
+      webSocketFactory: () => new SockJS(url),
       // 기본 하트비트: 수신 10000ms, 발신 10000ms
       // 이 하트비트가 앱 레벨의 ping/pong을 대체합니다.
       heartbeatIncoming: 10000,

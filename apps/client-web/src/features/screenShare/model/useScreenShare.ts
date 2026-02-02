@@ -133,6 +133,9 @@ export function useScreenShare() {
         if (msg.type === 'SIG_ANSWER') {
           try {
             const sdp = (msg.payload as any).sdp;
+            console.log('Received Answer SDP:', sdp);
+            console.log('Current Signaling State:', pc.signalingState);
+
             await pc.setRemoteDescription({ type: 'answer', sdp });
 
             const candidates = pendingRemoteIceRef.current;
@@ -141,7 +144,8 @@ export function useScreenShare() {
 
             setInternalStatus('connected');
           } catch (e) {
-            console.error('Remote Desc Error', e);
+            console.error('Remote Desc Error Details:', e);
+            console.error('Failed SDP:', (msg.payload as any).sdp);
             setError('Answer 처리 실패');
             setInternalStatus('error');
           }

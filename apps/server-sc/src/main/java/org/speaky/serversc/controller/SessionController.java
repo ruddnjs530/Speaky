@@ -54,7 +54,7 @@ public class SessionController {
 
                 // Response 생성 및 WebSocket 정보 추가
                 SessionResponse response = SessionResponse.from(session);
-                response.setWsUrl("ws://localhost:8080/ws"); // TODO: 환경 설정에서 읽어오기
+                response.setWsUrl("ws://localhost:8080/ws/signaling"); // TODO: 환경 설정에서 읽어오기
                 response.setSignalingToken("temp_token_" + session.getSessionId()); // TODO: 실제 JWT 토큰 생성
 
                 return ResponseEntity.status(HttpStatus.CREATED)

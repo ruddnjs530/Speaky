@@ -55,6 +55,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/auth/**").permitAll() // 로그인/회원가입
                         .requestMatchers("/api/v1/voice-models").permitAll() // 보이스팩 목록
                         .requestMatchers("/api/v1/channels/*/state").permitAll() // 채널 상태 조회
+                        .requestMatchers("/ws/signaling/**").permitAll() // WebSocket 연결 허용
 
                         // 나머지는 인증 필요
                         .anyRequest().authenticated())
