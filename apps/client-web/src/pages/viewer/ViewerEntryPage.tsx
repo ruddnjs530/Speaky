@@ -7,10 +7,11 @@ import Button from '../../shared/ui/Button';
 export default function ViewerEntryPage() {
     const navigate = useNavigate();
     const [channelIdInput, setChannelIdInput] = useState('');
+    const [error, setError] = useState('');
 
     const handleJoinChannel = () => {
         if (!channelIdInput.trim()) {
-            alert('채널 ID를 입력해주세요.');
+            setError('참여하실 채널 ID를 입력해주세요.');
             return;
         }
         navigate(`/viewer/${channelIdInput.trim()}`);
@@ -40,7 +41,11 @@ export default function ViewerEntryPage() {
                                 label="채널 ID (Host ID)"
                                 placeholder="예: ch_user_1"
                                 value={channelIdInput}
-                                onChange={(e) => setChannelIdInput(e.target.value)}
+                                error={error}
+                                onChange={(e) => {
+                                    setChannelIdInput(e.target.value);
+                                    if (error) setError('');
+                                }}
                                 onKeyDown={(e) => {
                                     if (e.key === 'Enter') handleJoinChannel();
                                 }}
