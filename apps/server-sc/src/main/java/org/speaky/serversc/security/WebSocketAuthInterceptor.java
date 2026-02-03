@@ -16,7 +16,8 @@ import java.util.Map;
  * STOMP 메시지 레벨에서 인증을 검증하는 Interceptor
  * 
  * - CONNECT 프레임: Handshake에서 저장된 session attributes 확인
- * - SEND 프레임: 선택적 추가 검증 가능
+ * - SUBSCRIBE 프레임: 구독 권한 검증 및 destination별 접근 제어
+ * - SEND 프레임: 메시지 전송 권한 검증
  * - 인증 실패 시 예외 발생하여 메시지 전송 차단
  */
 @Slf4j
@@ -31,6 +32,7 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
      * @param channel 메시지 채널
      * @return 원본 메시지 (검증 통과 시)
      * @throws IllegalStateException 인증 실패 시
+     * @throws java.nio.file.AccessDeniedException 권한 부족 시
      */
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
@@ -48,7 +50,12 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
             validateConnect(accessor);
         }
         
-        // SEND 프레임: 추가 검증 (필요 시)
+        // SUBSCRIBE 프레임: 구독 권한 검증
+        if (StompCommand.SUBSCRIBE.equals(command)) {
+            validateSubscribe(accessor);
+        }
+        
+        // SEND 프레임: 메시지 전송 권한 검증
         if (StompCommand.SEND.equals(command)) {
             validateSend(accessor);
         }
@@ -79,7 +86,37 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
     }
     
     /**
-     * STOMP SEND 프레임 추가 검증
+     * STOMP SUBSCRIBE 프레임 권한 검증
+     * 
+     * 인증된 사용자만 구독 가능하며, destination별 접근 제어 수행
+     */
+    private void validateSubscribe(StompHeaderAccessor accessor) {
+        Map<String, Object> sessionAttributes = accessor.getSessionAttributes();
+        
+        // 기본 인증 확인
+        if (sessionAttributes == null || !sessionAttributes.containsKey("userId")) {
+            log.warn("STOMP SUBSCRIBE rejected: No userId in session");
+            throw new IllegalStateException("Unauthorized subscription: authentication required");
+        }
+        
+        Long userId = (Long) sessionAttributes.get("userId");
+        String destination = accessor.getDestination();
+        String role = (String) sessionAttributes.get("role");
+        
+        // destination별 권한 검증
+        if (destination != null && destination.startsWith("/topic/admin/")) {
+            if (!"ADMIN".equals(role)) {
+                log.warn("STOMP SUBSCRIBE rejected: userId={} attempted to subscribe to admin topic: {}",
+                        userId, destination);
+                throw new IllegalStateException("Admin role required for this topic");
+            }
+        }
+        
+        log.info("STOMP SUBSCRIBE authorized: userId={}, destination={}", userId, destination);
+    }
+    
+    /**
+     * STOMP SEND 프레임 권한 검증
      * 
      * 현재는 session에 userId가 있는지만 확인
      * 필요 시 메시지 destination별 권한 검증 추가 가능
@@ -94,10 +131,10 @@ public class WebSocketAuthInterceptor implements ChannelInterceptor {
         
         // 필요 시 destination별 권한 검증
         // String destination = accessor.getDestination();
-        // if ("/app/admin/*".matches(destination)) {
+        // if (destination != null && destination.startsWith("/app/admin/")) {
         //     String role = (String) sessionAttributes.get("role");
         //     if (!"ADMIN".equals(role)) {
-        //         throw new AccessDeniedException("Admin role required");
+        //         throw new IllegalStateException("Admin role required");
         //     }
         // }
     }
