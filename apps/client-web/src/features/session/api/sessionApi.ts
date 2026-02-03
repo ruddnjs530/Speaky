@@ -92,7 +92,8 @@ export const sessionApi = {
             role: "GUEST",
             wsUrl: session.wsUrl || WS_URL_FALLBACK,
             token: session.signalingToken || userToken || "",
-            voiceModelId: session.voiceModelId ?? null
+            voiceModelId: session.voiceModelId ?? null,
+            title: session.title
         };
     },
 

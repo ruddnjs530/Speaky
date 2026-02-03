@@ -8,6 +8,7 @@ export type StartOrJoinResponse = {
     wsUrl: string;     // wss://{sc-domain}/ws/signaling
     token: string;     // signaling token
     voiceModelId: number | null;
+    title: string;
 };
 
 // 서버 에러 바디가 정해져 있으면 여기에 맞추세요
