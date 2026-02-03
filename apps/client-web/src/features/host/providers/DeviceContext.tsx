@@ -120,6 +120,7 @@ export function DeviceContextProvider({ children }: { children: React.ReactNode 
         setSelectedDeviceId(null);
         setDevices([]);
         setLastError(null);
+        sessionStorage.removeItem('MIC_GRANTED_IN_SESSION');
     }, []);
 
     const value = useMemo(() => ({
