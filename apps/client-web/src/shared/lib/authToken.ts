@@ -23,3 +23,16 @@ export function getUserIdFromToken(): number | null {
     return null;
   }
 }
+
+export function isTokenValid(): boolean {
+  const token = getAccessToken();
+  if (!token) return false;
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    if (!payload.exp) return true; // 만료 시간 없으면 유효
+    const currentTime = Math.floor(Date.now() / 1000);
+    return payload.exp > currentTime;
+  } catch (e) {
+    return false;
+  }
+}
