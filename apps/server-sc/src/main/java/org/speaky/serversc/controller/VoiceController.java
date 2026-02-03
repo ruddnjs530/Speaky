@@ -27,14 +27,14 @@ public class VoiceController {
     public void init() {
         if (voiceModelRepository.count() == 0) {
             voiceModelRepository.saveAll(Arrays.asList(
-                    VoiceModel.builder().name("Korone Voice").description("Cute doggo voice").isPublic(true).build(),
-                    VoiceModel.builder().name("aru_voice").description("Aru voice").isPublic(true).build(),
-                    VoiceModel.builder().name("baekjongwon_voice").description("Paik's cuisine voice").isPublic(true)
+                    VoiceModel.builder().name("Korone").description("Cute doggo voice").isPublic(true).build(),
+                    VoiceModel.builder().name("Aru").description("Aru voice").isPublic(true).build(),
+                    VoiceModel.builder().name("Baek Jong Won").description("Paik's cuisine voice").isPublic(true)
                             .build(),
-                    VoiceModel.builder().name("child_voice").description("Child like voice").isPublic(true).build(),
-                    VoiceModel.builder().name("trump_voice").description("Make voice great again").isPublic(true)
+                    VoiceModel.builder().name("Child").description("Child like voice").isPublic(true).build(),
+                    VoiceModel.builder().name("Trump").description("Make voice great again").isPublic(true)
                             .build(),
-                    VoiceModel.builder().name("criss").description("Criss voice").isPublic(true).build()));
+                    VoiceModel.builder().name("Criss").description("Criss voice").isPublic(true).build()));
         }
     }
 
@@ -55,16 +55,18 @@ public class VoiceController {
     }
 
     private String mapImageKey(String name) {
-        if (name.contains("Korone"))
+        if (name.toLowerCase().contains("korone"))
             return "avatar_1";
-        if (name.contains("aru"))
+        if (name.toLowerCase().contains("aru"))
             return "avatar_2";
-        if (name.contains("baek"))
+        if (name.toLowerCase().contains("baek"))
             return "avatar_3";
-        if (name.contains("child"))
+        if (name.toLowerCase().contains("child"))
             return "avatar_4";
-        if (name.contains("trump"))
-            return "avatar_1";
-        return "avatar_2"; // Default
+        if (name.toLowerCase().contains("trump"))
+            return "avatar_5";
+        if (name.toLowerCase().contains("criss"))
+            return "avatar_6";
+        return "avatar_1"; // Default
     }
 }
