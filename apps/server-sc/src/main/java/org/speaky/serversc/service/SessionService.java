@@ -8,6 +8,7 @@ import org.speaky.serversc.domain.SessionStatus;
 import org.speaky.serversc.dto.SessionEventPayload;
 import org.speaky.serversc.exception.InvalidSessionStateException;
 import org.speaky.serversc.exception.SessionNotFoundException;
+import org.speaky.serversc.exception.MediaServerException;
 import org.speaky.serversc.repository.SessionRepository;
 import org.springframework.stereotype.Service;
 
@@ -175,6 +176,21 @@ public class SessionService {
         session.setEndedReason(endedReason);
         
         sessionRepository.save(session);
+        
+        // Media Server Room 정리
+        try {
+            mediaServerClient.deleteRoom(sessionId);
+            log.info("Media server room deleted: sessionId={}", sessionId);
+        } catch (MediaServerException e) {
+            // deleteRoom 실패는 비치명적 - 로깅하고 계속 진행
+            // 미디어 서버 장애나 일시적 통신 문제로 실패할 수 있음
+            log.warn("Failed to delete media server room: sessionId={}, errorCode={}", 
+                    sessionId, e.getErrorCode(), e);
+            
+            // TODO: 주기적인 cleanup 배치 작업 고려
+            // - 미디어 서버의 고아 Room 목록 조회 및 정리
+            // - 실패한 deleteRoom 재시도 큐 구현
+        }
         
         // WebSocket 이벤트 발행
         eventPublisher.publishSessionEvent(
