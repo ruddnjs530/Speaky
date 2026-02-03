@@ -18,7 +18,6 @@ import Modal from '../../shared/ui/Modal';
 import { getErrorMessage } from '../../shared/lib/errorUtils';
 
 import { WS_URL_DEFAULT } from '../../shared/config';
-import { Maximize, Minimize } from 'lucide-react';
 
 type Step = 'setup' | 'live';
 
@@ -42,7 +41,7 @@ export default function HostPage() {
   const { health, actions, mic } = usePrecheckModel();
 
   // 초기 voiceModelId 설정
-  const [voiceModelId, setVoiceModelId] = useState<number | null>(() => {
+  const [voiceModelId] = useState<number | null>(() => {
     if (precheckedVoiceId !== undefined && precheckedVoiceId !== null) {
       if (typeof precheckedVoiceId === 'number') return precheckedVoiceId;
       return parseInt(String(precheckedVoiceId).replace(/[^0-9]/g, ""), 10) || 1;
