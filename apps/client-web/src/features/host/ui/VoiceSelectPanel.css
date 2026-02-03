@@ -1,7 +1,3 @@
-.voicePanel {
-    min-height: 420px; /* 우측 패널이 크게 보이도록 */
-}
-
 /* 상단: 선택된 보이스 요약 */
 .voicePanel__selectedRow {
     display: flex;
@@ -62,6 +58,13 @@
 .voicePanel__badge.is-ready {
     background: #f2fff4;
     border-color: #cfead6;
+}
+
+.voicePanel__badge.is-selected {
+    background: #e6fcf5;
+    border-color: #20c997;
+    color: #0ca678;
+    font-weight: 700;
 }
 
 .voicePanel__badge.is-loading {
@@ -130,6 +133,7 @@
     white-space: nowrap;
     word-break: keep-all;
 }
+
 .voiceCard__avatar {
     width: 44px;
     height: 44px;
@@ -142,6 +146,13 @@
 .voiceCard.is-ready .voicePanel__badge {
     background: #f2fff4;
     border-color: #cfead6;
+}
+
+.voiceCard.is-selected-card .voicePanel__badge {
+    background: #e6fcf5;
+    border-color: #20c997;
+    color: #0ca678;
+    font-weight: 700;
 }
 
 .voiceCard.is-loading .voicePanel__badge {

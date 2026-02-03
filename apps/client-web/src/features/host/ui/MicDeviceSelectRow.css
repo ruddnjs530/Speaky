@@ -27,5 +27,11 @@
     border-radius: 10px;
     border: 1px solid #ddd;
     background: #fff;
-    min-width: 220px;
+    /* min-width 제거, flex-item으로서 줄어들도록 */
+    /* min-width: 220px; */
+    max-width: 240px;
+    /* 너무 늘어나지 않게 제한 */
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow: hidden;
 }
