@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 
 import Card from '../../shared/ui/Card';
 import Input from '../../shared/ui/Input';
@@ -35,7 +35,7 @@ export default function HostPage() {
   const [sessionId, setSessionId] = useState('');
 
   // 헬스 체크 모델 (마이크 모니터링용)
-  const { health, actions, mic } = usePrecheckModel();
+  const { health, actions, mic, voices } = usePrecheckModel();
 
   // 초기 voiceModelId 설정
   const [voiceModelId] = useState<number | null>(() => {
@@ -45,6 +45,8 @@ export default function HostPage() {
     }
     return 1;
   });
+
+  const selectedVoice = useMemo(() => voices?.find(v => v.id === voiceModelId), [voices, voiceModelId]);
 
   // Live 상태 진입 시 마이크 모니터링 시작
   useEffect(() => {
@@ -220,7 +222,7 @@ export default function HostPage() {
                   />
                   <div className="text-sm text-gray-600 bg-gray-50 p-2.5 rounded-lg border border-gray-100 flex items-center justify-between">
                     <span>선택된 AI 보이스</span>
-                    <strong className="text-orange-600">AI 보이스 {voiceModelId}</strong>
+                    <strong className="text-orange-600">{selectedVoice ? selectedVoice.name : `AI 보이스 ${voiceModelId}`}</strong>
                   </div>
                 </div>
               </div>
@@ -301,7 +303,7 @@ export default function HostPage() {
                 <div className="flex items-col gap-1">
                   <h3 className="text-lg font-bold text-gray-900">{title}</h3>
                   <div className="flex items-center gap-3 text-sm text-gray-500">
-                    <span>AI 보이스 {voiceModelId}</span>
+                    <span>{selectedVoice ? selectedVoice.name : `AI 보이스 ${voiceModelId}`}</span>
                     <span className="w-px h-3 bg-gray-300" />
                     <span>{status}</span>
                   </div>
