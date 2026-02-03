@@ -1,6 +1,10 @@
 package org.speaky.serversc.config;
 
+import lombok.RequiredArgsConstructor;
+import org.speaky.serversc.security.JwtHandshakeInterceptor;
+import org.speaky.serversc.security.WebSocketAuthInterceptor;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
@@ -10,10 +14,15 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
  * WebSocket 설정
  * 
  * STOMP over WebSocket을 사용한 실시간 메시징 구성
+ * JWT 인증 적용 (HandshakeInterceptor + ChannelInterceptor)
  */
 @Configuration
 @EnableWebSocketMessageBroker
+@RequiredArgsConstructor
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
+    
+    private final JwtHandshakeInterceptor jwtHandshakeInterceptor;
+    private final WebSocketAuthInterceptor webSocketAuthInterceptor;
     
     /**
      * 메시지 브로커 설정
@@ -34,13 +43,25 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     /**
      * STOMP 엔드포인트 등록
      * 
-     * WebSocket 연결 경로: ws://localhost:8080/ws
+     * WebSocket 연결 경로: ws://localhost:8080/ws/signaling?token=xxx
+     * JWT 인증: Query parameter로 토큰 전달 (SockJS 호환)
      * SockJS fallback 지원으로 WebSocket 미지원 브라우저도 사용 가능
      */
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         registry.addEndpoint("/ws/signaling")
                 .setAllowedOriginPatterns("*") // MVP: 모든 origin 허용 (나중에 제한 필요)
+                .addInterceptors(jwtHandshakeInterceptor) // JWT 인증 Interceptor
                 .withSockJS(); // WebSocket 미지원 시 폴링 등으로 fallback
+    }
+    
+    /**
+     * 클라이언트 메시지 채널 설정
+     * 
+     * STOMP 메시지 레벨에서 인증 검증
+     */
+    @Override
+    public void configureClientInboundChannel(ChannelRegistration registration) {
+        registration.interceptors(webSocketAuthInterceptor);
     }
 }
