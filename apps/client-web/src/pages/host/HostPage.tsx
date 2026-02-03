@@ -71,27 +71,27 @@ export default function HostPage() {
 
   const { remoteStream, status, error, startCapture, connect, stopAll } = useScreenShare();
 
-
-  // stopAll이 재생성되어도 effect가 다시 실행되지 않도록 ref 사용
-  const stopAllRef = useRef(stopAll);
-  useEffect(() => {
-    stopAllRef.current = stopAll;
-  }, [stopAll]);
-
-  // 컴포넌트 언마운트 시에만 정리 로직 실행
+  // stopAll이 이제 안정화되었으므로 바로 의존성에 포함 (ref 제거)
   useEffect(() => {
     return () => {
-      stopAllRef.current();
+      stopAll();
     };
-  }, []);
+  }, [stopAll]);
 
   // 송출 가능 조건: 타이틀 O, 연결 O, 세션 생성됨
   const canGoLive = title.trim().length > 0 && status === 'connected' && sessionId !== '';
 
+  // 정상 종료 의도인지 확인하는 ref
+  const intendedExitRef = useRef(false);
+
   // 이탈 방지 블로커
   const blocker = useBlocker(
-    ({ currentLocation, nextLocation }) =>
-      sessionId !== '' && currentLocation.pathname !== nextLocation.pathname
+    ({ currentLocation, nextLocation }) => {
+      // 정상 종료 의도라면 차단하지 않음
+      if (intendedExitRef.current) return false;
+      // 세션이 있고 경로가 바뀔 때 차단
+      return sessionId !== '' && currentLocation.pathname !== nextLocation.pathname;
+    }
   );
 
   // 블로커가 'blocked' 상태일 때 모달 표시
@@ -163,7 +163,8 @@ export default function HostPage() {
   // 종료 모달 확인 핸들러
   const confirmEnd = () => {
     setShowEndModal(false);
-    navigate('/', { replace: true }); // 홈으로 이동
+    intendedExitRef.current = true; // 정상 종료 플래그 설정
+    navigate('/', { replace: true });
   };
 
   // 렌더링 컨텐츠 결정

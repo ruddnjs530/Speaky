@@ -35,6 +35,9 @@ export function useScreenShare() {
   const [internalStatus, setInternalStatus] = useState<InternalStatus>('idle');
   const [error, setError] = useState('');
 
+  // localStream의 트랙 종료를 위해 ref 사용 (stopAll의 의존성을 제거하기 위함)
+  const localStreamRef = useRef<MediaStream | null>(null);
+
   const cleanup = useCallback(() => {
     scRef.current?.close();
     scRef.current = null;
@@ -48,10 +51,13 @@ export function useScreenShare() {
     try {
       const s = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30 }, audio: true });
       setLocalStream(s);
+      localStreamRef.current = s; // Ref 동기화
+
       setInternalStatus('captured');
       s.getVideoTracks()[0].onended = () => {
         s.getTracks().forEach((t) => t.stop());
         setLocalStream(null);
+        localStreamRef.current = null;
         setRemoteStream(null);
         cleanup();
         setInternalStatus('idle');
@@ -65,6 +71,16 @@ export function useScreenShare() {
     }
   }, [cleanup]);
 
+  // ... connect ... (omitted, no change needed if it only reads state, but wait, connect reads localStream)
+  // connect also needs to use the stream passed in args OR localStream.
+  // connect dependency list has [localStream].
+  // If we change connect to use localStreamRef, we can remove dependency?
+  // But connect is usually called ONCE.
+  // Let's check connect signature. It takes 'stream' arg.
+  // The 'connect' function uses: `const outbound = role === 'host' ? (stream ?? localStream) : null;`
+  // Use `localStreamRef.current` there too to be safe?
+  // But purely for `stopAll` stability, we just need `stopAll` changed.
+
   const connect = useCallback(async (args: ConnectArgs) => {
     const { role, stream, wsUrl, token, channelId, sessionId } = args;
     setError('');
@@ -76,7 +92,8 @@ export function useScreenShare() {
       return;
     }
 
-    const outbound = role === 'host' ? (stream ?? localStream) : null;
+    // localStream 대신 ref 사용 (의존성 제거)
+    const outbound = role === 'host' ? (stream ?? localStreamRef.current) : null;
     if (role === 'host' && !outbound) {
       setError('호스트는 화면 공유 스트림이 필요합니다.');
       setInternalStatus('error');
@@ -181,16 +198,17 @@ export function useScreenShare() {
 
     sc.connect(wsUrl, token);
 
-  }, [localStream, cleanup]);
+  }, [cleanup]); // localStream 의존성 제거
 
   const stopAll = useCallback(() => {
     cleanup();
-    localStream?.getTracks().forEach(t => t.stop());
+    localStreamRef.current?.getTracks().forEach(t => t.stop());
     setLocalStream(null);
+    localStreamRef.current = null;
     setRemoteStream(null);
     setInternalStatus('idle');
     setError('');
-  }, [localStream, cleanup]);
+  }, [cleanup]);
 
   return { localStream, remoteStream, status: mapToConnectionStatus(internalStatus), error, startCapture, connect, stopAll };
 }
