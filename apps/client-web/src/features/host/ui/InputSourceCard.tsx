@@ -22,7 +22,13 @@ export default function InputSourceCard({ inputSource, onSelect, onOpenScreenSha
                         .join(" ")}
                     onClick={async () => {
                         console.log('CLICK startCapture (InputSourceCard)');
-                        await onOpenScreenShare?.();
+                        onSelect("screen");
+                        try {
+                            await onOpenScreenShare?.();
+                        } catch (e) {
+                            console.warn("Screen share cancelled or failed", e);
+                            onSelect("mp4"); // 실패 시 원복 (또는 이전 상태 저장 필요하나 일단 mp4로)
+                        }
                     }}
                     aria-pressed={inputSource === "screen"}
                 >
