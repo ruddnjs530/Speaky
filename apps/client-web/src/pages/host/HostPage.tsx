@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 import Card from '../../shared/ui/Card';
 import Input from '../../shared/ui/Input';
@@ -14,7 +14,7 @@ import { sessionApi } from '../../features/session/api/sessionApi';
 import './HostPage.css';
 import HealthBadgesPanel from '../../features/host/ui/HealthBadgesPanel';
 import { usePrecheckModel } from '../../features/host/hooks/usePrecheckModel';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useBlocker } from 'react-router-dom';
 import Modal from '../../shared/ui/Modal';
 import { getErrorMessage } from '../../shared/lib/errorUtils';
 
@@ -71,8 +71,31 @@ export default function HostPage() {
 
   const { remoteStream, status, error, startCapture, connect, stopAll } = useScreenShare();
 
+
+  // stopAll이 재생성되어도 effect가 다시 실행되지 않도록 ref 사용
+  const stopAllRef = useRef(stopAll);
+  useEffect(() => {
+    stopAllRef.current = stopAll;
+  }, [stopAll]);
+
+  // 컴포넌트 언마운트 시에만 정리 로직 실행
+  useEffect(() => {
+    return () => {
+      stopAllRef.current();
+    };
+  }, []);
+
   // 송출 가능 조건: 타이틀 O, 연결 O, 세션 생성됨
   const canGoLive = title.trim().length > 0 && status === 'connected' && sessionId !== '';
+
+  // 이탈 방지 블로커
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      sessionId !== '' && currentLocation.pathname !== nextLocation.pathname
+  );
+
+  // 블로커가 'blocked' 상태일 때 모달 표시
+  const showBlockerModal = blocker.state === 'blocked';
 
   // [핸들러 1] "서버 연결" 버튼 핸들러
   const handleConnect = async () => {
@@ -143,9 +166,10 @@ export default function HostPage() {
     navigate('/', { replace: true }); // 홈으로 이동
   };
 
-  if (step === 'setup') {
-    return (
-      <div className="hostPage">
+  // 렌더링 컨텐츠 결정
+  const renderContent = () => {
+    if (step === 'setup') {
+      return (
         <div className="hostPage__content">
           <h2 className="hostPage__title">Host - 시작</h2>
 
@@ -193,12 +217,11 @@ export default function HostPage() {
             muted={false}
           />
         </div>
-      </div>
-    );
-  }
+      );
+    }
 
-  return (
-    <div className="hostPage">
+    // Live Step
+    return (
       <div className="hostPage__content">
         <h2 className="hostPage__title">Host - 송출 중</h2>
 
@@ -242,8 +265,14 @@ export default function HostPage() {
             health={health}
           />
         </div>
-
       </div>
+    );
+  };
+
+  return (
+    <div className="hostPage">
+      {renderContent()}
+
       <Modal
         open={showEndModal}
         title="방송 종료"
@@ -252,6 +281,30 @@ export default function HostPage() {
       >
         <p>방송이 종료되었습니다.</p>
         <p>수고하셨습니다 👏</p>
+      </Modal>
+
+      {/* 이탈 방지 모달 */}
+      <Modal
+        open={showBlockerModal}
+        title="방송 종료 확인"
+        primaryLabel="종료하고 나가기"
+        secondaryLabel="계속 방송하기"
+        onPrimary={() => {
+          // 진행 (이동 허용) -> useEffect cleanup에서 stopAll 호출됨
+          if (blocker.state === 'blocked') {
+            blocker.proceed();
+          }
+        }}
+        onSecondary={() => {
+          // 취소 (현재 페이지 유지)
+          if (blocker.state === 'blocked') {
+            blocker.reset();
+          }
+        }}
+      >
+        <p>방송 중입니다.</p>
+        <p>페이지를 벗어나면 방송이 종료됩니다.</p>
+        <p style={{ color: '#ef4444', marginTop: '0.5rem' }}>정말 나가시겠습니까?</p>
       </Modal>
     </div>
   );
