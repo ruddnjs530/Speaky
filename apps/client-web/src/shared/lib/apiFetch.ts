@@ -46,7 +46,8 @@ export async function apiFetch(input: RequestInfo | URL, options: ApiFetchOption
   // 토큰 만료/인증 실패 처리
   if (res.status === 401) {
     clearAccessToken();
-    // 여기서 라우터 이동/로그아웃 처리 해도 됨
+    // 로그인 페이지로 강제 이동 및 히스토리 보존 (선택사항)
+    window.location.href = '/login';
   }
 
   return res;
