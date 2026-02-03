@@ -22,6 +22,7 @@ export default function InputSourceCard({ inputSource, onSelect, onOpenScreenSha
                         .join(" ")}
                     onClick={async () => {
                         console.log('CLICK startCapture (InputSourceCard)');
+                        onSelect("screen");
                         await onOpenScreenShare?.();
                     }}
                     aria-pressed={inputSource === "screen"}
