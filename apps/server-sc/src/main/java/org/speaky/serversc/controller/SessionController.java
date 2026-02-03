@@ -5,8 +5,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.speaky.serversc.domain.SessionEntity;
 import org.speaky.serversc.domain.SessionStatus;
+import org.speaky.serversc.domain.User;
 import org.speaky.serversc.dto.*;
 import org.speaky.serversc.exception.SessionNotFoundException;
+import org.speaky.serversc.repository.UserRepository;
+import org.speaky.serversc.security.JwtTokenProvider;
 import org.speaky.serversc.service.SessionService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -27,6 +30,8 @@ import java.util.stream.Collectors;
 public class SessionController {
 
         private final SessionService sessionService;
+        private final JwtTokenProvider jwtTokenProvider;
+        private final UserRepository userRepository;
 
         /**
          * 세션 생성
@@ -52,10 +57,17 @@ public class SessionController {
                                 request.getVoiceModelID(), // 새 필드명 사용
                                 request.getTitle());
 
+                // 사용자 정보 조회하여 JWT 토큰 생성
+                User user = userRepository.findById(request.getHostUserId())
+                                .orElseThrow(() -> new IllegalArgumentException(
+                                                "User not found: " + request.getHostUserId()));
+                
+                String jwtToken = jwtTokenProvider.generateAccessToken(user);
+
                 // Response 생성 및 WebSocket 정보 추가
                 SessionResponse response = SessionResponse.from(session);
                 response.setWsUrl("ws://localhost:8080/ws/signaling"); // TODO: 환경 설정에서 읽어오기
-                response.setSignalingToken("temp_token_" + session.getSessionId()); // TODO: 실제 JWT 토큰 생성
+                response.setSignalingToken(jwtToken); // 실제 JWT 토큰 사용
 
                 return ResponseEntity.status(HttpStatus.CREATED)
                                 .body(response);
