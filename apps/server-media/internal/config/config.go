@@ -45,7 +45,7 @@ func Load() (*Config, error) {
 		// General
 		GoEnv:    getEnv("GO_ENV", "local"),
 		LogLevel: getEnv("LOG_LEVEL", "INFO"),
-		Port:     getEnv("PORT", "8081"),
+		Port:     getEnv("PORT", "8090"),  // Changed from 8081 to 8090
 
 		// AI Server
 		AIServerAddr: getEnv("AI_SERVER_ADDR", "localhost:50051"),

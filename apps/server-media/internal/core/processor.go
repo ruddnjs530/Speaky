@@ -99,8 +99,10 @@ func (p *AudioProcessor) UpdateConfig(voiceModelID string, pitchScale float32) {
 
 // Start begins the processing loop.
 func (p *AudioProcessor) Start(ctx context.Context, input <-chan pipeline.RTPPacket) error {
+    slog.Info("AP: Starting AudioProcessor")
     stream, err := p.aiClient.NewStream(ctx)
     if err != nil {
+        slog.Error("AP: Failed to create AI stream", "error", err)
         return err
     }
     defer stream.Close()
@@ -108,15 +110,22 @@ func (p *AudioProcessor) Start(ctx context.Context, input <-chan pipeline.RTPPac
     errChan := make(chan error, 1)
     go p.readLoop(ctx, stream, errChan)
 
+    packetCount := 0
     for {
         select {
         case <-ctx.Done():
+            slog.Info("AP: Context done, stopping", "packetCount", packetCount)
             return ctx.Err()
         case err := <-errChan:
             return err
         case pkt, ok := <-input:
             if !ok {
+                slog.Info("AP: Input channel closed", "packetCount", packetCount)
                 return nil
+            }
+            packetCount++
+            if packetCount <= 5 || packetCount%100 == 0 {
+                slog.Debug("AP: Received packet", "count", packetCount, "dataLen", len(pkt.Data))
             }
             if err := p.processInputPacket(stream, pkt); err != nil {
                 slog.Error("Failed to process input packet", "error", err)
@@ -171,6 +180,7 @@ func (p *AudioProcessor) processInputPacket(stream upstream.VoiceStream, pipePkt
         // Reset Buffer
         p.pcmBuffer = p.pcmBuffer[:0] // Keep capacity, reset length
 
+        slog.Info("AP: Sending chunk to AI", "bytes", len(pcmBytes), "modelID", modelID, "sampleRate", p.cfg.AudioSampleRate)
         return stream.Send(chunk)
     }
 

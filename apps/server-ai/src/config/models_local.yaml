@@ -1,0 +1,60 @@
+models:
+  - model_name: "Korone Voice"
+    voice_model_id: 1
+    model_path: "/home/iidx/Retrieval-based-Voice-Conversion-WebUI/assets/weights/Korone.pth"
+    index_path: "/home/iidx/Retrieval-based-Voice-Conversion-WebUI/assets/indices/korone.index"
+    index_rate: 0.75
+    pitch: 0
+    protect: 0.33
+    rms_mix_rate: 1.0
+    device: "cuda"
+
+  - model_name: "aru_voice"
+    voice_model_id: 2
+    model_path: "/home/iidx/Retrieval-based-Voice-Conversion-WebUI/assets/weights/0129_aru2.pth"
+    index_path: "/home/iidx/Retrieval-based-Voice-Conversion-WebUI/assets/indices/0129_aru2.index"
+    index_rate: 0.8
+    pitch: 12
+    protect: 0.25
+    rms_mix_rate: 1.0
+    device: "cuda"
+
+  - model_name: "baekjongwon_voice"
+    voice_model_id: 3
+    model_path: "/home/iidx/Retrieval-based-Voice-Conversion-WebUI/assets/weights/0128_baek.pth"
+    index_path: "/home/iidx/Retrieval-based-Voice-Conversion-WebUI/assets/indices/0128_baek.index"
+    index_rate: 0.9
+    pitch: -2
+    protect: 0.2
+    rms_mix_rate: 1.0
+    device: "cuda"
+
+  - model_name: "child_voice"
+    voice_model_id: 4
+    model_path: "/home/iidx/Retrieval-based-Voice-Conversion-WebUI/assets/weights/0127_child.pth"
+    index_path: "/home/iidx/Retrieval-based-Voice-Conversion-WebUI/assets/indices/0127_child.index"
+    index_rate: 0.9
+    pitch: 6
+    protect: 0.20
+    rms_mix_rate: 1.0
+    device: "cuda"
+
+  - model_name: "trump_voice"
+    voice_model_id: 5
+    model_path: "/home/iidx/Retrieval-based-Voice-Conversion-WebUI/assets/weights/0129_trump.pth"
+    index_path: "/home/iidx/Retrieval-based-Voice-Conversion-WebUI/assets/indices/0129_trump.index"
+    index_rate: 0.85
+    pitch: -2
+    protect: 0.3
+    rms_mix_rate: 1.0
+    device: "cuda"
+
+  - model_name: "criss"
+    voice_model_id: 6
+    model_path: "/home/iidx/Retrieval-based-Voice-Conversion-WebUI/assets/weights/0130_criss01.pth"
+    index_path: "/home/iidx/Retrieval-based-Voice-Conversion-WebUI/assets/indices/0130_criss01.index"
+    index_rate: 0.85
+    pitch: 8
+    protect: 0.3
+    rms_mix_rate: 1.0
+    device: "cuda"

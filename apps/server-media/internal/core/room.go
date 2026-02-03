@@ -71,6 +71,13 @@ type RoomStats struct {
 func NewRoom(id, hostID string, cfg *config.Config, api *webrtc.API, aiClient ai.Client, voiceProcessor upstream.VoiceProcessor) *Room {
 	ctx, cancel := context.WithCancel(context.Background())
 
+	// DEBUG: Check if voiceProcessor was passed
+	if voiceProcessor != nil {
+		slog.Info("NewRoom: voiceProcessor is available", "roomID", id)
+	} else {
+		slog.Warn("NewRoom: voiceProcessor is NIL - AudioProcessor will NOT start!", "roomID", id)
+	}
+
 	return &Room{
 		ID:             id,
 		HostID:         hostID,
@@ -101,6 +108,7 @@ func (r *Room) Stats() RoomStats {
 func (r *Room) BroadcastTrack(fromUserID string, track *webrtc.TrackRemote, ctx context.Context) error {
 	// Create child context for this specific track
 	trackCtx, cancel := context.WithCancel(ctx)
+	slog.Info("DEBUG: trackCtx created", "fromUser", fromUserID)
 
 	r.mu.Lock()
 
@@ -117,8 +125,20 @@ func (r *Room) BroadcastTrack(fromUserID string, track *webrtc.TrackRemote, ctx 
 
 	// 2. Add existing participants as subscribers
 	for userID, session := range r.sessions {
-		if userID == fromUserID {
-			continue // Don't send track back to sender
+		// For normal broadcasts: Don't send track back to sender
+		// EXCEPTION: Host needs to receive their own track for PREVIEW functionality
+		// The host sends media -> Server processes (AI voice) -> Host receives preview
+		isHost := userID == r.HostID
+		isSender := userID == fromUserID
+		
+		if isSender && !isHost {
+			continue // Skip non-host senders (guests don't need their own track)
+		}
+		
+		// Host DOES receive their own track (for preview)
+		if isSender && isHost {
+			slog.Info("Subscribing host to their own track for preview", 
+				"hostID", userID, "trackKind", track.Kind().String())
 		}
 
 		if err := r.subscribeToTrack(session, activeTrack); err != nil {
@@ -191,6 +211,7 @@ func (r *Room) BroadcastTrack(fromUserID string, track *webrtc.TrackRemote, ctx 
 
 		// Initialize AudioProcessor if VoiceProcessor is available
 		if r.voiceProcessor != nil {
+			slog.Info("Audio track received - creating AudioProcessor", "trackID", activeTrack.Remote.ID())
 			processor, err := NewAudioProcessor(r.cfg, r.voiceProcessor, activeTrack.audioQueue)
 			if err != nil {
 				slog.Error("Failed to create AudioProcessor", "error", err)
@@ -201,10 +222,13 @@ func (r *Room) BroadcastTrack(fromUserID string, track *webrtc.TrackRemote, ctx 
 				inputChan := make(chan pipeline.RTPPacket, 100)
 
 				// Start processor (Async)
+				slog.Info("DEBUG: About to launch AudioProcessor goroutine", "trackID", activeTrack.Remote.ID())
 				go func() {
+					slog.Info("DEBUG: AudioProcessor goroutine STARTED", "trackID", activeTrack.Remote.ID())
 					if err := processor.Start(trackCtx, inputChan); err != nil {
 						slog.Error("AudioProcessor stopped", "error", err)
 					}
+					slog.Info("DEBUG: AudioProcessor goroutine EXITED", "trackID", activeTrack.Remote.ID())
 				}()
 
 				// Store input channel in ActiveTrack context or similar?
@@ -214,6 +238,8 @@ func (r *Room) BroadcastTrack(fromUserID string, track *webrtc.TrackRemote, ctx 
 				// Let's add `processorInput` to ActiveTrack.
 				activeTrack.processorInput = inputChan
 			}
+		} else {
+			slog.Warn("Audio track received but voiceProcessor is NIL - skipping AudioProcessor creation", "trackID", activeTrack.Remote.ID())
 		}
 
 		// Start Audio Pump (Async)
@@ -533,7 +559,7 @@ func (r *Room) processRTP(ctx context.Context, activeTrack *ActiveTrack) {
 				select {
 				case activeTrack.processorInput <- pkt:
 				default:
-					slog.Warn("Audio processor input full, dropping packet")
+					slog.Debug("Audio processor input full, dropping packet")
 				}
 			} else if activeTrack.audioQueue != nil {
 				if err := activeTrack.audioQueue.Push(pkt); err != nil {

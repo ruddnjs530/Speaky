@@ -1,7 +1,7 @@
 models:
   - model_name: "Korone Voice"
     voice_model_id: 1
-    model_path: "/rvc-code/assets/weights/korone.pth"
+    model_path: "/rvc-code/assets/weights/Korone.pth"
     index_path: "/rvc-code/assets/indices/korone.index"
     index_rate: 0.75
     pitch: 0

@@ -155,45 +155,46 @@ func (s *Session) HandleOffer(offerSDP string) (string, error) {
 		return "", fmt.Errorf("%w: %v", ErrInvalidSDP, err)
 	}
 
-	// SSRC Allocation Strategy for Guests:
+	// SSRC Allocation Strategy for ALL roles:
 	// Inject "Dummy" (Silent/Black) tracks into the PeerConnection.
 	// This forces Pion to allocate SSRCs and include them in the SDP Answer.
 	// Without this, the SDP Answer would have no SSRC information for the empty slots,
-	// causing the Client to drop future incoming media packets from the Host.
+	// causing the Client to drop future incoming media packets.
+	// 
+	// CRITICAL: Host also needs dummy tracks for PREVIEW functionality.
+	// The dummy tracks will be replaced with actual broadcast tracks later.
 	slog.Info("HandleOffer: Injecting dummy tracks to ensure SSRC allocation", "role", s.Role)
 
-	if s.Role == "guest" {
-		s.mu.Lock() // Protect map access
+	s.mu.Lock() // Protect map access
 
-		// Audio Dummy (Opus)
-		audioCap := webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus}
-		dummyAudio, err := webrtc.NewTrackLocalStaticRTP(audioCap, "dummy-audio", "dummy-stream")
-		if err != nil {
-			slog.Warn("Failed to create dummy audio", "error", err)
+	// Audio Dummy (Opus)
+	audioCap := webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus}
+	dummyAudio, err := webrtc.NewTrackLocalStaticRTP(audioCap, "dummy-audio", "dummy-stream")
+	if err != nil {
+		slog.Warn("Failed to create dummy audio", "error", err)
+	} else {
+		if _, err := s.pc.AddTrack(dummyAudio); err != nil {
+			slog.Warn("Failed to add dummy audio track", "error", err)
 		} else {
-			if _, err := s.pc.AddTrack(dummyAudio); err != nil {
-				slog.Warn("Failed to add dummy audio track", "error", err)
-			} else {
-				s.dummyTrackIDs[dummyAudio.ID()] = struct{}{}
-				slog.Debug("Added dummy audio track", "trackID", dummyAudio.ID())
-			}
+			s.dummyTrackIDs[dummyAudio.ID()] = struct{}{}
+			slog.Debug("Added dummy audio track", "trackID", dummyAudio.ID(), "role", s.Role)
 		}
-
-		// Video Dummy (VP8)
-		videoCap := webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8}
-		dummyVideo, err := webrtc.NewTrackLocalStaticRTP(videoCap, "dummy-video", "dummy-stream")
-		if err != nil {
-			slog.Warn("Failed to create dummy video", "error", err)
-		} else {
-			if _, err := s.pc.AddTrack(dummyVideo); err != nil {
-				slog.Warn("Failed to add dummy video track", "error", err)
-			} else {
-				s.dummyTrackIDs[dummyVideo.ID()] = struct{}{}
-				slog.Debug("Added dummy video track", "trackID", dummyVideo.ID())
-			}
-		}
-		s.mu.Unlock()
 	}
+
+	// Video Dummy (VP8)
+	videoCap := webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8}
+	dummyVideo, err := webrtc.NewTrackLocalStaticRTP(videoCap, "dummy-video", "dummy-stream")
+	if err != nil {
+		slog.Warn("Failed to create dummy video", "error", err)
+	} else {
+		if _, err := s.pc.AddTrack(dummyVideo); err != nil {
+			slog.Warn("Failed to add dummy video track", "error", err)
+		} else {
+			s.dummyTrackIDs[dummyVideo.ID()] = struct{}{}
+			slog.Debug("Added dummy video track", "trackID", dummyVideo.ID(), "role", s.Role)
+		}
+	}
+	s.mu.Unlock()
 
 	// Create answer
 	answer, err := s.pc.CreateAnswer(nil)

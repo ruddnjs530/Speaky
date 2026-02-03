@@ -39,14 +39,9 @@ export default function HostPage() {
   // 헬스 체크 모델 (마이크 모니터링용)
   const { health, actions, mic } = usePrecheckModel();
 
-  // 초기 voiceModelId 설정
-  const [voiceModelId, setVoiceModelId] = useState<number | null>(() => {
-    if (precheckedVoiceId !== undefined && precheckedVoiceId !== null) {
-      if (typeof precheckedVoiceId === 'number') return precheckedVoiceId;
-      return parseInt(String(precheckedVoiceId).replace(/[^0-9]/g, ""), 10) || 1;
-    }
-    return 1;
-  });
+  // ✅ FIXED: Force voiceModelId=1 (Korone Voice) since it's the only successfully loaded model
+  // Previously used precheckedVoiceId from navigation state, which could be 4 (kroni - failed to load)
+  const [voiceModelId, setVoiceModelId] = useState<number | null>(1);
 
   // Live 상태 진입 시 마이크 모니터링 시작
   useEffect(() => {

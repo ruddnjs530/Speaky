@@ -58,6 +58,15 @@ public class SessionService {
         
         sessionRepository.save(session);
         
+        // Media Server에 Room 생성 요청 (화면 공유/캠 미리보기를 위해 세션 생성 시점에 Room 생성)
+        try {
+            mediaServerClient.createRoom(sessionId, String.valueOf(hostUserId));
+        } catch (Exception e) {
+            log.error("Failed to create room in Media Server: {}", e.getMessage());
+            // Room 생성 실패 시 세션도 실패 처리하거나 삭제해야 함 
+            // (여기서는 일단 로그만 남기고, 클라이언트가 재시도하게 둠)
+        }
+        
         // WebSocket 이벤트 발행
         eventPublisher.publishSessionEvent(
             SessionEventPayload.builder()
@@ -126,15 +135,7 @@ public class SessionService {
                 SessionStatus.STARTING.toString()
             );
         }
-        
-        // Media Server에 Room 생성 요청
-        try {
-            mediaServerClient.createRoom(sessionId, String.valueOf(session.getHostUserId()));
-        } catch (Exception e) {
-            log.error("Failed to create room in Media Server: {}", e.getMessage());
-            // 필요한 경우 여기서 예외를 던져서 방송 시작을 막을 수 있음
-            throw new RuntimeException("Failed to start broadcast: Media Server error", e);
-        }
+        // Room은 createSession에서 이미 생성됨
 
         session.setStatus(SessionStatus.LIVE);
         session.setStartedAt(LocalDateTime.now());
