@@ -27,10 +27,15 @@ export function DeviceContextProvider({ children }: { children: React.ReactNode 
     const [devices, setDevices] = useState<AudioDevice[]>([]);
     const [lastError, setLastError] = useState<{ code: string; message: string } | null>(null);
 
-    const requestPermission = useCallback(async () => {
+    const requestPermission = useCallback(async (isAutoRestore: boolean = false) => {
         // 이미 권한이 있으면 다시 요청하지 않고 확인만 수행 (장치 목록 갱신)
         if (permission === 'granted' && devices.length > 0) {
             return;
+        }
+
+        // 자동 복구가 아니고, 직접 요청하는 경우라면 플래그 설정
+        if (!isAutoRestore) {
+            sessionStorage.setItem('MIC_GRANTED_IN_SESSION', 'true');
         }
 
         setPermission("requesting");
@@ -69,6 +74,10 @@ export function DeviceContextProvider({ children }: { children: React.ReactNode 
             console.error("Mic permission error:", err);
             setPermission("denied");
             setLastError({ code: "PERMISSION_DENIED", message: err.message });
+            // 실패 시 플래그 제거 (선택사항 - 실패해도 계속 시도하게 둘 지 결정. 여기선 제거)
+            if (!isAutoRestore) {
+                sessionStorage.removeItem('MIC_GRANTED_IN_SESSION');
+            }
         }
     }, [devices.length, permission]);
 
@@ -76,28 +85,30 @@ export function DeviceContextProvider({ children }: { children: React.ReactNode 
     React.useEffect(() => {
         if (!navigator.permissions || !navigator.permissions.query) return;
 
+        // 세션 내에서 명시적으로 권한을 받은 적이 있는지 확인
+        const hasSessionAuth = sessionStorage.getItem('MIC_GRANTED_IN_SESSION') === 'true';
+        if (!hasSessionAuth) return;
+
         navigator.permissions.query({ name: 'microphone' as PermissionName })
             .then((permissionStatus) => {
-                // 이미 브라우저 레벨에서 허용된 상태라면, 자동으로 스트림/장치 목록을 가져옴
                 if (permissionStatus.state === 'granted') {
-                    requestPermission();
+                    requestPermission(true); // true = isAutoRestore
                 }
 
-                // (선택 사항) 권한 변경 감지 리스너
                 permissionStatus.onchange = () => {
                     if (permissionStatus.state === 'granted') {
-                        requestPermission();
+                        // 권한이 외부에서 켜지면, 세션 플래그가 있을 때만 자동 연결
+                        if (sessionStorage.getItem('MIC_GRANTED_IN_SESSION') === 'true') {
+                            requestPermission(true);
+                        }
                     } else {
-                        // 권한이 취소되면 상태 리셋
                         setPermission(permissionStatus.state === 'denied' ? 'denied' : 'idle');
                         setDevices([]);
                         setSelectedDeviceId(null);
                     }
                 };
             })
-            .catch(err => {
-                console.warn("Permission query failed:", err);
-            });
+            .catch(err => console.warn("Permission query failed:", err));
     }, [requestPermission]);
 
     const selectDevice = useCallback((deviceId: string) => {
