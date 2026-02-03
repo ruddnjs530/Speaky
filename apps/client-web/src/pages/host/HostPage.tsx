@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 
 import Card from '../../shared/ui/Card';
 import Input from '../../shared/ui/Input';
@@ -46,7 +46,7 @@ export default function HostPage() {
     return 1;
   });
 
-  const selectedVoice = voices?.find(v => v.id === voiceModelId);
+  const selectedVoice = useMemo(() => voices?.find(v => v.id === voiceModelId), [voices, voiceModelId]);
 
   // Live 상태 진입 시 마이크 모니터링 시작
   useEffect(() => {
