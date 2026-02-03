@@ -1,4 +1,3 @@
-import Card from "../../../shared/ui/Card";
 import Badge from "./Badge";
 import type { HealthState } from "../hooks/usePrecheckModel.ts";
 import "./HealthBadgesPanel.css";
@@ -19,15 +18,12 @@ export default function HealthBadgesPanel({ health, viewers }: Props) {
     } as HealthState;
 
     return (
-        <Card title="상태 표시">
-            <div className="healthBadges">
-                <Badge label="VIEWERS" value={viewers ?? "-"} />
-                <Badge label="MIC" value={safeHealth.mic} />
-                <Badge label="LEVEL" value={safeHealth.level} />
-                <Badge label="NETWORK" value={safeHealth.network} />
-                <Badge label="AI" value={safeHealth.ai} />
-            </div>
-
-        </Card>
+        <div className="healthBadges flex flex-wrap gap-2 items-center">
+            <Badge label="VIEWERS" value={viewers ?? "-"} />
+            <Badge label="MIC" value={safeHealth.mic} />
+            <Badge label="LEVEL" value={safeHealth.level} />
+            <Badge label="NETWORK" value={safeHealth.network} />
+            <Badge label="AI" value={safeHealth.ai} />
+        </div>
     );
 }
