@@ -1,10 +1,10 @@
-import "./VoiceSelectPanel.css";
 import type { Voice } from "../api/voiceApi";
 
 import voice1 from "./assets/voice-ai-1-BJW.webp";
 import voice2 from "./assets/voice-ai-2-CSW.jpg";
 import voice3 from "./assets/voice-ai-3-IU.webp";
 import voice4 from "./assets/voice-ai-4-ANYA.webp";
+import VoiceCardItem from "./VoiceCardItem";
 
 // 간단한 아바타 매핑 (서버 imageUrl 키값 -> 로컬 에셋)
 const AVATAR_MAP: Record<string, string> = {
@@ -45,7 +45,7 @@ export default function VoiceSelectPanel({ voices, voiceId, onSelect }: Props) {
     // voices가 로딩 중이거나 비어있을 때 처리
     if (!selected) {
         return (
-            <section className="voicePanel h-full rounded-xl border bg-white shadow-sm flex flex-col p-6 font-sans">
+            <section className="h-full rounded-xl border bg-white shadow-sm flex flex-col p-6 font-sans">
                 <header className="flex flex-col space-y-1.5 pb-6 flex-none">
                     <h3 className="font-semibold leading-none tracking-tight">③ AI 보이스 선택</h3>
                 </header>
@@ -57,25 +57,29 @@ export default function VoiceSelectPanel({ voices, voiceId, onSelect }: Props) {
     const selectedAvatar = getAvatar(selected);
 
     return (
-        <section className="voicePanel h-full rounded-xl border bg-white shadow-sm flex flex-col font-sans">
+        <section className="h-full rounded-xl border bg-white shadow-sm flex flex-col font-sans">
             <header className="flex flex-col space-y-1.5 p-6 pb-0 flex-none">
                 <h3 className="font-semibold leading-none tracking-tight">③ AI 보이스 선택</h3>
             </header>
 
             <div className="p-6 pt-6 flex-1 flex flex-col min-h-0 overflow-hidden">
                 {/* 상단: 선택된 카드 요약 */}
-                <div className="voicePanel__selectedRow flex-none">
-                    <div className="voicePanel__selectedBox">
-                        <img className="voicePanel__avatarLg" src={selectedAvatar} alt="" />
-                        <div className="voicePanel__selectedText">
-                            <div className="voicePanel__name">{selected.name}</div>
+                <div className="flex flex-col gap-2.5 mb-4 flex-none">
+                    <div className="flex items-center gap-3 border border-gray-100 rounded-xl p-3.5 bg-gray-50 font-bold">
+                        <img
+                            className="w-11 h-11 rounded-full object-cover border border-gray-200 flex-none"
+                            src={selectedAvatar}
+                            alt=""
+                        />
+                        <div className="flex items-center gap-2.5">
+                            <div className="font-bold">{selected.name}</div>
                             <span
                                 className={[
-                                    "voicePanel__badge",
-                                    // 선택된 상태이므로 READY -> is-selected 스타일 적용
-                                    selected.status === "READY" ? "is-selected" : "",
-                                    selected.status === "LOADING" ? "is-loading" : "",
-                                    selected.status === "ERROR" ? "is-unknown" : "", // ERROR -> red
+                                    "inline-flex items-center h-[22px] px-2.5 rounded-full text-xs border",
+                                    selected.status === "READY" ? "bg-teal-50 border-teal-400 text-teal-700 font-bold" : "",
+                                    selected.status === "LOADING" ? "bg-orange-50 border-orange-200" : "",
+                                    selected.status === "ERROR" ? "bg-gray-100 border-gray-200" : "",
+                                    !selected.status || (selected.status !== "READY" && selected.status !== "LOADING" && selected.status !== "ERROR") ? "bg-white border-gray-200" : ""
                                 ]
                                     .filter(Boolean)
                                     .join(" ")}
@@ -89,57 +93,16 @@ export default function VoiceSelectPanel({ voices, voiceId, onSelect }: Props) {
                 </div>
 
                 {/* 그리드: 동적 리스트 */}
-                <div className="voicePanel__grid2x2 flex-1 overflow-y-auto min-h-0 pr-2 custom-scrollbar" role="list">
-                    {voices.map((v) => {
-                        const active = v.id === voiceId;
-                        const avatar = getAvatar(v);
-
-                        // 선택된 항목이이고 READY 상태면 '선택됨' 표시
-                        const isSelectedReady = active && v.status === "READY";
-
-                        // 텍스트 결정: 선택됨 or 한글 상태 or 원본 상태
-                        const statusText = isSelectedReady
-                            ? "선택됨"
-                            : STATUS_LABEL[v.status] || v.status;
-
-                        // 클래스 결정
-                        const statusClass = isSelectedReady
-                            ? "is-selected"
-                            : v.status === "READY" ? "is-ready"
-                                : v.status === "LOADING" ? "is-loading"
-                                    : "is-unknown";
-
-                        return (
-                            <button
-                                key={v.id}
-                                type="button"
-                                role="listitem"
-                                className={[
-                                    "voiceCard",
-                                    active ? "is-active" : "",
-                                    // 카드 자체 상태 클래스 추가가 아니라 배지에 직접 적용하므로 여기선 배지 클래스만 신경씀
-                                    // 하지만 기존 CSS 구조상 voiceCard 상태 클래스가 배지 색상을 덮어쓸 수 있음.
-                                    // voiceCard.is-ready .voicePanel__badge 같은 선택자 확인 필요.
-                                    // 위 CSS 파일에서 .voiceCard.is-ready .voicePanel__badge 등이 있음.
-                                    // 따라서 active 상태일 때의 특수 처리가 필요함.
-                                    active ? "is-selected-card" : "", // 임의 클래스 추가
-                                    !active && v.status === "READY" ? "is-ready" : "",
-                                    v.status === "LOADING" ? "is-loading" : "",
-                                    v.status === "ERROR" ? "is-unknown" : "",
-                                ]
-                                    .filter(Boolean)
-                                    .join(" ")}
-                                onClick={() => onSelect(v.id)}
-                                aria-pressed={active}
-                            >
-                                <img className="voiceCard__avatar" src={avatar} alt="" />
-                                <div className="voiceCard__meta">
-                                    <div className="voiceCard__title">{v.name}</div>
-                                    <span className={`voicePanel__badge ${statusClass}`}>{statusText}</span>
-                                </div>
-                            </button>
-                        );
-                    })}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 flex-1 overflow-y-auto min-h-0 pr-2 custom-scrollbar" role="list">
+                    {voices.map((v) => (
+                        <VoiceCardItem
+                            key={v.id}
+                            voice={v}
+                            isActive={v.id === voiceId}
+                            avatar={getAvatar(v)}
+                            onSelect={onSelect}
+                        />
+                    ))}
                 </div>
             </div>
         </section>

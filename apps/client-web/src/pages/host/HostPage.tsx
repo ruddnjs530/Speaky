@@ -10,7 +10,6 @@ import { useScreenShare } from '../../features/screenShare/model/useScreenShare'
 import { getAccessToken } from '../../shared/lib/authToken';
 import { sessionApi } from '../../features/session/api/sessionApi';
 
-// import './HostPage.css'; // Removed
 import HealthBadgesPanel from '../../features/host/ui/HealthBadgesPanel';
 import { usePrecheckModel } from '../../features/host/hooks/usePrecheckModel';
 import { useNavigate, useLocation, Link, useBlocker } from 'react-router-dom';
@@ -31,8 +30,6 @@ export default function HostPage() {
   const [title, setTitle] = useState('');
   // 종료 모달
   const [showEndModal, setShowEndModal] = useState(false);
-  // 전체 화면 상태 (기능은 제거되었지만 상태는 남겨둠, 필요 시 삭제 가능)
-  // const [isFullscreen, setIsFullscreen] = useState(false);
 
   // 세션 ID 관리
   const [sessionId, setSessionId] = useState('');
