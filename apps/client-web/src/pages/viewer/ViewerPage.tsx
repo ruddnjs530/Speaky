@@ -63,6 +63,7 @@ export default function ViewerPage() {
   // effect 트리거용 attempt 카운터
   const [attempt, setAttempt] = useState(() => (channelId ? 1 : 0));
   const [voiceModelId, setVoiceModelId] = useState<number | null>(null);
+  const [title, setTitle] = useState<string>('');
   /**
    * 재시도(=reconnect): UI 상태 전환 + attempt 증가
    * - 여기서 상태를 바꾸므로, effect에서는 동기 setState를 하지 않습니다.
@@ -108,6 +109,7 @@ export default function ViewerPage() {
           sessionId: res.sessionId,
         });
         setVoiceModelId(res.voiceModelId);
+        setTitle(res.title);
 
       } catch (e: any) {
         if (!isActive) return;
@@ -247,8 +249,7 @@ export default function ViewerPage() {
       <div className="viewerPage__topBar">
         <div className="viewerPage__titleGroup">
           <h1 className="viewerPage__title">
-            {/* TODO: 실제 방 제목 연동 필요 */}
-            {channelId}의 방송
+            {title || `${channelId}의 방송`}
           </h1>
           {joinUi.kind === 'joined' ? (
             <span className="viewerPage__badge viewerPage__badge--live">
