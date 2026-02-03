@@ -21,8 +21,13 @@ export default function AudioControl({ mediaEl, className }: Props) {
     const effectiveMuted = muted || volume === 0;
 
     return (
-        <div className={className ?? ''} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <button type="button" onClick={() => setMuted((v) => !v)}>
+        <div className={`flex items-center gap-2 ${className ?? ''}`}>
+            <button
+                type="button"
+                onClick={() => setMuted((v) => !v)}
+                className="text-white hover:text-orange-400 transition-colors focus:outline-none"
+                title={effectiveMuted ? "음소거 해제" : "음소거"}
+            >
                 {effectiveMuted ? '🔇' : '🔊'}
             </button>
 
@@ -37,12 +42,13 @@ export default function AudioControl({ mediaEl, className }: Props) {
                     setVolume(v);
                     if (v > 0) setMuted(false);
                 }}
+                className="w-24 h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-orange-500"
                 aria-label="volume"
             />
 
-            <span style={{ width: 44, textAlign: 'right', fontSize: 12 }}>
-        {Math.round(volume * 100)}%
-      </span>
+            <span className="w-9 text-right text-xs text-white font-mono">
+                {Math.round(volume * 100)}%
+            </span>
         </div>
     );
 }
