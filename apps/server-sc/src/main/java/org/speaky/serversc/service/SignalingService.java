@@ -1,6 +1,7 @@
 package org.speaky.serversc.service;
 
 import org.speaky.serversc.client.MediaServerClient;
+import org.speaky.serversc.exception.MediaServerException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.speaky.serversc.domain.SessionEntity;
@@ -9,9 +10,11 @@ import org.speaky.serversc.dto.Envelope;
 import org.speaky.serversc.dto.From;
 import org.speaky.serversc.exception.SessionNotFoundException;
 import org.speaky.serversc.repository.SessionRepository;
+import org.springframework.context.event.EventListener;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 
 import java.util.Map;
 import java.util.UUID;
@@ -20,10 +23,12 @@ import java.util.UUID;
  * WebSocket 시그널링 처리 서비스
  * 
  * 클라이언트 메시지 수신 후 처리 로직
+ * WebSocket 연결 해제 시 미디어 서버 정리
  * 
  * 현재 구현:
  * - SYS_ATTACH: 세션 바인딩
- * - SIG_OFFER/ANSWER/ICE: Mock 응답 (Media Server 연동 전)
+ * - SIG_OFFER/ANSWER/ICE: Media Server 연동
+ * - WebSocket Disconnect: leaveRoom 호출
  */
 @Slf4j
 @Service
@@ -37,6 +42,50 @@ public class SignalingService {
     private final SessionRepository sessionRepository;
     private final SimpMessagingTemplate messagingTemplate;
     private final MediaServerClient mediaServerClient;
+    
+    /**
+     * WebSocket 연결 해제 이벤트 처리
+     * 
+     * 클라이언트가 연결을 끊을 때 미디어 서버에 leaveRoom 호출
+     * 
+     * @param event SessionDisconnectEvent
+     */
+    @EventListener
+    public void handleWebSocketDisconnect(SessionDisconnectEvent event) {
+        SimpMessageHeaderAccessor headerAccessor = 
+                SimpMessageHeaderAccessor.wrap(event.getMessage());
+        
+        Map<String, Object> sessionAttributes = headerAccessor.getSessionAttributes();
+        if (sessionAttributes == null) {
+            return;
+        }
+        
+        String sessionId = (String) sessionAttributes.get("sessionId");
+        String clientId = (String) sessionAttributes.get("clientId");
+        
+        if (sessionId == null || clientId == null) {
+            log.debug("WebSocket disconnect without session binding: sessionAttributes={}", 
+                    sessionAttributes);
+            return;
+        }
+        
+        log.info("WebSocket disconnected: sessionId={}, clientId={}", sessionId, clientId);
+        
+        // Media Server에 leaveRoom 호출
+        try {
+            mediaServerClient.leaveRoom(sessionId, clientId);
+            log.info("Media server leaveRoom success: sessionId={}, clientId={}", 
+                    sessionId, clientId);
+        } catch (MediaServerException e) {
+            // leaveRoom 실패는 비치명적 - 로깅하고 계속 진행
+            // 클라이언트는 이미 연결이 끊긴 상태이므로 재시도 불가
+            log.warn("Failed to leave media server room: sessionId={}, clientId={}, errorCode={}", 
+                    sessionId, clientId, e.getErrorCode(), e);
+            
+            // TODO: 주기적인 cleanup 배치 작업에서 처리
+            // - 미디어 서버의 고아 참가자 목록 조회 및 정리
+        }
+    }
     
     /**
      * SYS_ATTACH 처리: 세션에 클라이언트 바인딩
