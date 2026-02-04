@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-export function useIntersectionObserver(options = {}) {
+export function useIntersectionObserver(options: IntersectionObserverInit = {}) {
     const elementRef = useRef<HTMLDivElement>(null);
     const [isVisible, setIsVisible] = useState(false);
 
@@ -8,7 +8,7 @@ export function useIntersectionObserver(options = {}) {
         const observer = new IntersectionObserver(([entry]) => {
             if (entry.isIntersecting) {
                 setIsVisible(true);
-                // Optional: Stop observing once visible if you only want it to trigger once
+                // Stop observing once visible to implement "fade-in once" behavior
                 if (elementRef.current) {
                     observer.unobserve(elementRef.current);
                 }
@@ -24,7 +24,8 @@ export function useIntersectionObserver(options = {}) {
                 observer.unobserve(elementRef.current);
             }
         };
-    }, []);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [JSON.stringify(options)]);
 
     return { elementRef, isVisible };
 }
