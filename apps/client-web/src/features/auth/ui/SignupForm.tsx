@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { User, Lock, Eye, EyeOff } from 'lucide-react';
 import Button from '../../../shared/ui/Button';
 import Input from '../../../shared/ui/Input';
-import Label from '../../../shared/ui/Label';
+import { Label } from '../../../shared/ui/Label';
 import Card from '../../../shared/ui/Card';
 import Checkbox from '../../../shared/ui/Checkbox';
 import { signup } from '../api/signup';

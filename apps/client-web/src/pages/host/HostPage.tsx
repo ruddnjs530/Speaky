@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Monitor } from 'lucide-react'; // Added for floating animation
 
 import Card from '../../shared/ui/Card';
 import Input from '../../shared/ui/Input';
@@ -6,7 +8,6 @@ import Button from '../../shared/ui/Button';
 import HostMediaPanel from '../../features/media/ui/HostMediaPanel';
 
 import { useScreenShare } from '../../features/screenShare/model/useScreenShare';
-
 import { getAccessToken } from '../../shared/lib/authToken';
 import { sessionApi } from '../../features/session/api/sessionApi';
 
@@ -156,9 +157,19 @@ export default function HostPage() {
   };
 
   return (
-    <div className="fixed inset-0 bg-gradient-to-br from-orange-50 to-amber-50 flex flex-col font-sans overflow-hidden">
+    <motion.div
+      className="fixed inset-0 bg-gradient-to-br from-orange-50 to-amber-50 flex flex-col font-sans overflow-hidden"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.5 }}
+    >
       {/* 헤더 */}
-      <header className="flex-none px-4 py-3 flex items-center justify-between border-b border-white/50 bg-white/30 backdrop-blur-sm z-10">
+      <motion.header
+        className="flex-none px-4 py-3 flex items-center justify-between border-b border-white/50 bg-white/30 backdrop-blur-sm z-10"
+        initial={{ y: -20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.5 }}
+      >
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1 text-sm font-medium">
             <Link
@@ -184,30 +195,70 @@ export default function HostPage() {
         {step === 'live' && (
           <HealthBadgesPanel viewers="집계 중" health={health} />
         )}
-      </header>
+      </motion.header>
 
       {/* 메인 컨텐츠 영역 */}
       <main className="flex-1 p-4 overflow-hidden flex flex-col min-h-0 container mx-auto max-w-7xl">
         {step === 'setup' ? (
           // Setup Mode Layout
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 h-full min-h-0">
-            {/* 좌측: 미리보기 (Main) */}
-            <div className="lg:col-span-8 h-full min-h-0 flex flex-col order-first justify-center">
+            {/* 좌측: 미리보기 (Main) - Animated Entrance */}
+            <motion.div
+              className="lg:col-span-8 h-full min-h-0 flex flex-col order-first justify-center"
+              initial={{ x: -30, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              transition={{ duration: 0.6, delay: 0.2 }}
+            >
               <div className="w-full aspect-video bg-black rounded-xl overflow-hidden shadow-lg border border-gray-900/10 relative">
-                <HostMediaPanel
-                  stream={remoteStream}
-                  title="서버 출력 미리보기"
-                  muted={false}
-                  className="w-full h-full object-contain"
-                />
+                <AnimatePresence mode="wait">
+                  {remoteStream ? (
+                    <motion.div
+                      key="preview"
+                      className="w-full h-full"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.5 }}
+                    >
+                      <HostMediaPanel
+                        stream={remoteStream}
+                        title="서버 출력 미리보기"
+                        muted={false}
+                        className="w-full h-full object-contain"
+                      />
+                    </motion.div>
+                  ) : (
+                    // Placeholder with Floating Monitor Animation
+                    <motion.div
+                      key="placeholder"
+                      className="w-full h-full flex flex-col items-center justify-center text-white"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.5 }}
+                    >
+                      <motion.div
+                        animate={{ y: [0, -10, 0] }}
+                        transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                      >
+                        <Monitor className="h-16 w-16 mb-4 text-gray-500 opacity-80" />
+                      </motion.div>
+                      <p className="mt-2 text-center text-xs text-gray-500">
+                        실제 시청자가 보게 될 변조된 화면/음성입니다.
+                      </p>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
-              <p className="mt-2 text-center text-xs text-gray-500">
-                실제 시청자가 보게 될 변조된 화면/음성입니다.
-              </p>
-            </div>
+            </motion.div>
 
-            {/* 우측: 설정 (Side) */}
-            <div className="lg:col-span-4 flex flex-col h-full min-h-0 overflow-y-auto pr-2 custom-scrollbar justify-center">
+            {/* 우측: 설정 (Side) - Animated Entrance */}
+            <motion.div
+              className="lg:col-span-4 flex flex-col h-full min-h-0 overflow-y-auto pr-2 custom-scrollbar justify-center"
+              initial={{ x: 30, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              transition={{ duration: 0.6, delay: 0.3 }}
+            >
               {/* ① 방송 정보 입력 */}
               <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex-none mb-3">
                 <div className="px-4 py-3 border-b border-gray-100">
@@ -276,11 +327,16 @@ export default function HostPage() {
                   )}
                 </div>
               </div>
-            </div>
+            </motion.div>
           </div>
         ) : (
-          // 생방송 레이아웃
-          <div className="flex flex-col h-full gap-6">
+          // 생방송 레이아웃 (Live Mode)
+          <motion.div
+            className="flex flex-col h-full gap-6"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.5 }}
+          >
             {/* 메인 송출 화면 */}
             <div className="flex-1 bg-black rounded-xl overflow-hidden shadow-2xl relative min-h-0 border border-gray-900/10">
               <HostMediaPanel
@@ -325,7 +381,7 @@ export default function HostPage() {
                 </div>
               </div>
             </Card>
-          </div>
+          </motion.div>
         )}
       </main>
 
@@ -364,6 +420,6 @@ export default function HostPage() {
         <p>페이지를 벗어나면 방송이 종료됩니다.</p>
         <p style={{ color: '#ef4444', marginTop: '0.5rem' }}>정말 나가시겠습니까?</p>
       </Modal>
-    </div>
+    </motion.div>
   );
 }
