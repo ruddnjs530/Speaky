@@ -14,6 +14,28 @@ interface LoginFormProps {
   onLoginSuccess: () => void;
 }
 
+const containerVariants = {
+  hidden: { opacity: 0, y: 30 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      duration: 0.6,
+      when: 'beforeChildren', // 컨테이너가 먼저 나타나거나 동시에 시작
+      staggerChildren: 0.1, // 자식 요소들 0.1초 간격으로 등장
+    },
+  },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.4 }
+  },
+};
+
 export default function LoginForm({ onNavigateToSignup, onLoginSuccess }: LoginFormProps) {
   const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
@@ -36,18 +58,16 @@ export default function LoginForm({ onNavigateToSignup, onLoginSuccess }: LoginF
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 30 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.6, delay: 0.2 }}
       className="w-full max-w-md"
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
     >
       <Card className="p-8 bg-white shadow-xl rounded-2xl w-full">
         {/* 로고 */}
         <motion.div
           className="text-center mb-8"
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.5, delay: 0.4 }}
+          variants={itemVariants}
         >
           <h1 className="text-[#E8753A] mb-2 text-2xl font-bold">Speaky</h1>
           <p className="text-gray-500">계정에 로그인하세요</p>
@@ -55,12 +75,7 @@ export default function LoginForm({ onNavigateToSignup, onLoginSuccess }: LoginF
 
         {/* 로그인 폼 */}
         <form onSubmit={handleLogin} className="space-y-6">
-          <motion.div
-            className="space-y-2"
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.5, delay: 0.5 }}
-          >
+          <motion.div className="space-y-2" variants={itemVariants}>
             <Label htmlFor="loginId">아이디</Label>
             <div className="relative">
               <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
@@ -77,12 +92,7 @@ export default function LoginForm({ onNavigateToSignup, onLoginSuccess }: LoginF
           </motion.div>
 
           {/* 비밀번호 입력 */}
-          <motion.div
-            className="space-y-2"
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.5, delay: 0.6 }}
-          >
+          <motion.div className="space-y-2" variants={itemVariants}>
             <Label htmlFor="password">비밀번호</Label>
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
@@ -112,9 +122,7 @@ export default function LoginForm({ onNavigateToSignup, onLoginSuccess }: LoginF
           {/* 로그인 유지 및 비밀번호 찾기 */}
           <motion.div
             className="flex items-center justify-between"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5, delay: 0.7 }}
+            variants={itemVariants}
           >
             <div className="flex items-center gap-2">
               <Checkbox
@@ -135,11 +143,7 @@ export default function LoginForm({ onNavigateToSignup, onLoginSuccess }: LoginF
           </motion.div>
 
           {/* 로그인 버튼 */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.8 }}
-          >
+          <motion.div variants={itemVariants}>
             <Button
               type="submit"
               className="w-full bg-[#E8753A] hover:bg-[#D45A3A] text-white h-11 font-bold text-lg"
@@ -152,9 +156,7 @@ export default function LoginForm({ onNavigateToSignup, onLoginSuccess }: LoginF
         {/* 회원가입 링크 */}
         <motion.div
           className="mt-6 text-center"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5, delay: 0.9 }}
+          variants={itemVariants}
         >
           <div className="w-full border-t border-gray-200 mt-8 mb-6" />
 
