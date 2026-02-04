@@ -14,13 +14,15 @@ import ViewerPage from "../pages/viewer/ViewerPage";
 import ViewerEntryPage from "../pages/viewer/ViewerEntryPage";
 import SessionLayout from "../layouts/SessionLayout.tsx";
 import SessionProviderLayout from "../layouts/SessionProviderLayout.tsx";
+import IntroPage from "../pages/IntroPage";
 
 const router = createBrowserRouter([
     {
         element: <AppLayout />,
         children: [
             // Public
-            { path: "/", element: <HomePage /> },
+            { path: "/", element: <IntroPage /> },
+            { path: "/start", element: <HomePage /> },
             { path: "/login", element: <LoginPage /> },
             { path: "/signup", element: <SignupPage /> },
 
