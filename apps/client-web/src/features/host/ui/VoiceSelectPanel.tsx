@@ -6,6 +6,7 @@ import voice3 from "./assets/voice-ai-3-BJW.webp";
 import voice4 from "./assets/voice-ai-4-ANYA.webp";
 import voice5 from "./assets/voice-ai-5-trump.webp";
 import voice6 from "./assets/voice-ai-6-criss.webp";
+import voice7 from "./assets/voice-ai-7-actor.webp";
 import VoiceCardItem from "./VoiceCardItem";
 
 // 간단한 아바타 매핑 (서버 imageUrl 키값 -> 로컬 에셋)
@@ -16,6 +17,7 @@ const AVATAR_MAP: Record<string, string> = {
     "avatar_4": voice4,
     "avatar_5": voice5,
     "avatar_6": voice6,
+    "avatar_7": voice7,
 };
 
 function getAvatar(voice: Voice) {
