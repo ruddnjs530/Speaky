@@ -245,7 +245,7 @@ export default function SignupForm({ onNavigateToLogin, onSignupSuccess }: Signu
                     animate={{ opacity: 1 }}
                     transition={{ duration: 0.5, delay: 1.1 }}
                 >
-                    <div className="w-full border-t border-gray-200 mt-2 mb-6" />
+                    <div className="w-full border-t border-gray-200 mt-2 mb-2" />
 
                 </motion.div>
 
