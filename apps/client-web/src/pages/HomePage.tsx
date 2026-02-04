@@ -74,7 +74,7 @@ export default function HomePage() {
           {authed ? (
             <button
               onClick={handleLogout}
-              className="px-4 py-2 rounded-lg text-sm font-bold text-white bg-[#E8753A] hover:bg-[#D45A3A] transition-colors shadow-sm"
+              className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors"
             >
               로그아웃
             </button>
@@ -82,13 +82,13 @@ export default function HomePage() {
             <>
               <Link
                 to="/login"
-                className="px-4 py-2 rounded-lg text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 transition-colors shadow-sm"
+                className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors"
               >
                 로그인
               </Link>
               <Link
                 to="/signup" // 회원가입 페이지 경로
-                className="px-4 py-2 rounded-lg text-sm font-bold text-white bg-[#E8753A] hover:bg-[#D45A3A] transition-colors shadow-sm"
+                className="px-4 py-2 rounded-lg text-sm font-medium text-[#E8753A] hover:bg-[#E8753A]/10 transition-colors"
               >
                 회원가입
               </Link>
@@ -109,15 +109,19 @@ export default function HomePage() {
           >
             {userName ? (
               <>
-                <h2 className="text-3xl font-bold mb-3 text-gray-900">{userName}님, 다시 만나서 반가워요!</h2>
-                <p className="text-lg text-gray-500">
+                <h2 className="text-4xl md:text-5xl font-bold mb-4 text-gray-900 tracking-tight">
+                  {userName}님, 다시 만나서 반가워요!
+                </h2>
+                <p className="text-xl text-gray-500">
                   어떤 페르소나로 방송을 시작해볼까요?
                 </p>
               </>
             ) : (
               <>
-                <h2 className="text-3xl font-bold mb-3 text-gray-900">실시간 음성 변조 스트리밍</h2>
-                <p className="text-lg text-gray-500">
+                <h2 className="text-4xl md:text-5xl font-bold mb-4 text-gray-900 tracking-tight">
+                  실시간 음성 변조 스트리밍
+                </h2>
+                <p className="text-xl text-gray-500">
                   화면공유 영상의 음성을 실시간으로 변조하여 재송출합니다
                 </p>
               </>
