@@ -224,7 +224,7 @@ export default function HostPage() {
                         stream={remoteStream}
                         title="서버 출력 미리보기"
                         muted={false}
-                        className="w-full h-full object-contain"
+                        className="w-full h-full"
                       />
                     </motion.div>
                   ) : (
@@ -343,7 +343,7 @@ export default function HostPage() {
                 stream={remoteStream}
                 title={`ON AIR - ${title}`}
                 muted={false}
-                className="w-full h-full object-contain"
+                className="w-full h-full"
               />
 
               {/* 화면 위 오버레이 정보 (선택사항) */}
