@@ -6,12 +6,12 @@ import { RoleCard } from '../features/home/ui/RoleCard';
 type Role = 'host' | 'viewer';
 
 
-
 const isAuthed = () => Boolean(localStorage.getItem("accessToken"));
 
 export default function HomePage() {
   const navigate = useNavigate();
   const [authed, setAuthed] = useState(isAuthed());
+  const [userName, setUserName] = useState<string | null>(null);
 
   useEffect(() => {
     const sync = () => setAuthed(isAuthed());
@@ -25,10 +25,19 @@ export default function HomePage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (authed) {
+      setUserName("싸피");
+    } else {
+      setUserName(null);
+    }
+  }, [authed]);
+
   const handleLogout = () => {
     localStorage.removeItem("accessToken");
     window.dispatchEvent(new Event("auth-change"));
     setAuthed(false);
+    setUserName(null);
     // 로그아웃 후 홈으로 리다이렉트 (현재 페이지가 홈이므로 불필요할 수 있으나 상태 갱신됨)
   };
 
@@ -52,7 +61,7 @@ export default function HomePage() {
           {authed ? (
             <button
               onClick={handleLogout}
-              className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors"
+              className="px-4 py-2 rounded-lg text-sm font-bold text-white bg-[#E8753A] hover:bg-[#D45A3A] transition-colors shadow-sm"
             >
               로그아웃
             </button>
@@ -65,7 +74,7 @@ export default function HomePage() {
                 로그인
               </Link>
               <Link
-                to="/signup" // 회원가입 페이지 경로 (현재는 미구현일 수 있음)
+                to="/signup" // 회원가입 페이지 경로
                 className="px-4 py-2 rounded-lg text-sm font-bold text-white bg-[#E8753A] hover:bg-[#D45A3A] transition-colors shadow-sm"
               >
                 회원가입
@@ -80,13 +89,23 @@ export default function HomePage() {
         <div className="w-full max-w-6xl">
           {/* Title */}
           <div className="mb-12 text-center">
-            <h2 className="text-3xl font-bold mb-3 text-gray-900">실시간 음성 변조 스트리밍</h2>
-            <p className="text-lg text-gray-500">
-              화면공유 영상의 음성을 실시간으로 변조하여 재송출합니다
-            </p>
+            {userName ? (
+              <>
+                <h2 className="text-3xl font-bold mb-3 text-gray-900">{userName}님, 다시 만나서 반가워요!</h2>
+                <p className="text-lg text-gray-500">
+                  어떤 페르소나로 방송을 시작해볼까요?
+                </p>
+              </>
+            ) : (
+              <>
+                <h2 className="text-3xl font-bold mb-3 text-gray-900">실시간 음성 변조 스트리밍</h2>
+                <p className="text-lg text-gray-500">
+                  화면공유 영상의 음성을 실시간으로 변조하여 재송출합니다
+                </p>
+              </>
+            )}
           </div>
 
-          {/* Role Selection Cards */}
           {/* Role Selection Cards */}
           <div className="grid md:grid-cols-2 gap-6">
             <RoleCard
