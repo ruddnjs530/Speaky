@@ -67,7 +67,7 @@ export default function HostMediaPanel({
             </div>
 
             {/* 하단 컨트롤 바 오버레이 */}
-            <div className={`absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/80 to-transparent transition-opacity duration-300 flex items-center justify-between z-10 ${overlayClass}`}>
+            <div className={`absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/80 to-transparent flex items-center justify-between z-20 ${overlayClass}`}>
                 <AudioControl mediaEl={mediaEl} />
 
                 <button
