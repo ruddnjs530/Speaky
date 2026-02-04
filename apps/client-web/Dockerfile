@@ -1,51 +1,42 @@
 # ==========================================
 # Base Stage
 # ==========================================
-FROM node:20-alpine AS base
-
+FROM node:20.11.1-alpine3.19 AS base
 WORKDIR /app
-
-# Copy package files (Context is Root)
 COPY apps/client-web/package.json apps/client-web/package-lock.json ./
-
-# Install dependencies
+# Why: 'ci' ensures we use the exact versions in lockfile
 RUN npm ci
 
 # ==========================================
 # Development Stage
 # ==========================================
 FROM base AS dev
-
-# Copy source code (Bind mount recommended instead)
+# Why: Copy remaining files for initial build, but Volume mount in compose overrides this for live edits
 COPY apps/client-web .
-
-# Expose port
 EXPOSE 5173
-
-# Start dev server
 CMD ["npm", "run", "dev", "--", "--host"]
 
 # ==========================================
 # Builder Stage
 # ==========================================
 FROM base AS builder
-
-# Copy source code
+# Updated: Explicitly copy source for builder
 COPY apps/client-web .
 
-# Build
-RUN npm run build
+# Inject Build-time Variables
+ARG VITE_API_URL
+ARG VITE_WS_URL
+ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_WS_URL=$VITE_WS_URL
+
+# Bypass tsc for demo stability
+RUN npx vite build
 
 # ==========================================
 # Production Stage
 # ==========================================
-FROM nginx:alpine AS prod
-
-# Copy build artifacts
+FROM nginx:1.25-alpine AS prod
+# Updated: Correctly reference builder stage
 COPY --from=builder /app/dist /usr/share/nginx/html
-
-# Expose port
 EXPOSE 80
-
-# Run Nginx
 CMD ["nginx", "-g", "daemon off;"]

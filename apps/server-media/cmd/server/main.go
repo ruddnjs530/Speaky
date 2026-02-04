@@ -43,6 +43,19 @@ func main() {
 
 	// WebRTC API (Standard settings)
 	settingEngine := webrtc.SettingEngine{}
+	
+	// Configure Ephemeral UDP Port Range (Critical for Docker)
+	if err := settingEngine.SetEphemeralUDPPortRange(cfg.WebRTCMinPort, cfg.WebRTCMaxPort); err != nil {
+		slog.Error("Failed to set UDP port range", "error", err)
+		os.Exit(1)
+	}
+	
+	// Configure Public IP for Docker NAT Traversal
+	if publicIP := os.Getenv("PION_NAT_1_1_HOST"); publicIP != "" {
+		slog.Info("Configuring NAT 1:1 IP", "ip", publicIP)
+		settingEngine.SetNAT1To1IPs([]string{publicIP}, webrtc.ICECandidateTypeHost)
+	}
+
 	// For Docker/NAT traversal, usually strictly host networking or specific Public IP config is needed.
 	// For E2E local verification (host network), default is fine.
 	api := webrtc.NewAPI(webrtc.WithSettingEngine(settingEngine))

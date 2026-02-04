@@ -272,4 +272,5 @@ async def serve(host: str = "[::]", port: int = 50052) -> None:
 
 if __name__ == "__main__":
     _setup_logging()
-    asyncio.run(serve())
+    port = int(os.getenv("PORT", "50051"))
+    asyncio.run(serve(port=port))

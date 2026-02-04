@@ -1,7 +1,7 @@
 models:
   - model_name: "Korone Voice"
     voice_model_id: 1
-    model_path: "/rvc-code/assets/weights/Korone.pth"
+    model_path: "/rvc-code/assets/weights/korone.pth"
     index_path: "/rvc-code/assets/indices/korone.index"
     index_rate: 0.75
     pitch: 0
@@ -56,5 +56,15 @@ models:
     index_rate: 0.85
     pitch: 8
     protect: 0.3
+    rms_mix_rate: 1.0
+    device: "cuda"
+        
+  - model_name: "actor"
+    voice_model_id: 7
+    model_path: "/rvc-code/assets/weights/0203_actor.pth"
+    index_path: "/rvc-code/assets/indices/0203_actor.index"
+    index_rate: 0.9
+    pitch: -7
+    protect: 0.2
     rms_mix_rate: 1.0
     device: "cuda"
