@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 1. Install Python Dependencies (Cached unless requirements.txt changes)
 COPY apps/server-ai/requirements.txt .
 COPY packages/proto /packages/proto
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --default-timeout=1000 --no-cache-dir -r requirements.txt
 
 # 2. Add GPU Check Script
 RUN echo 'import torch; print(f"GPU Available: {torch.cuda.is_available()}")' > check_gpu.py

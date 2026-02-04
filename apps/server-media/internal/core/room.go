@@ -279,7 +279,15 @@ func (r *Room) Join(userID, offerSDP string) (string, error) {
 	}
 
 	// 2. Create PeerConnection using room's WebRTC API
-	pc, err := r.api.NewPeerConnection(webrtc.Configuration{})
+	rtcConfig := webrtc.Configuration{}
+	if r.cfg.STUNServer != "" {
+		rtcConfig.ICEServers = []webrtc.ICEServer{
+			{
+				URLs: []string{r.cfg.STUNServer},
+			},
+		}
+	}
+	pc, err := r.api.NewPeerConnection(rtcConfig)
 	if err != nil {
 		r.mu.Unlock()
 		return "", fmt.Errorf("%w: %v", ErrPeerConnectionFailed, err)

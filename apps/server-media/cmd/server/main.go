@@ -17,6 +17,7 @@ import (
 
 	"time"
 
+	"github.com/pion/ice/v4"
 	"github.com/pion/webrtc/v4"
 	"google.golang.org/grpc"
 
@@ -51,10 +52,31 @@ func main() {
 	}
 	
 	// Configure Public IP for Docker NAT Traversal
+	// Configure NAT 1:1 IP if set
 	if publicIP := os.Getenv("PION_NAT_1_1_HOST"); publicIP != "" {
 		slog.Info("Configuring NAT 1:1 IP", "ip", publicIP)
 		settingEngine.SetNAT1To1IPs([]string{publicIP}, webrtc.ICECandidateTypeHost)
 	}
+
+	// [BROAD FIX] Enable ICE-TCP for resilient connectivity in WSL2/Docker
+	// UDP is often unreliable on localhost in WSL2. TCP is bridged reliably.
+	// We bind to port 50000 (TCP) for ICE Host Candidates.
+	tcpListener, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.WebRTCMinPort))
+	if err != nil {
+		slog.Error("Failed to listen on TCP for ICE", "error", err)
+		os.Exit(1)
+	}
+	
+	tcpMux := ice.NewTCPMuxDefault(ice.TCPMuxParams{
+		Listener:       tcpListener,
+		ReadBufferSize: 8, 
+	})
+	
+	settingEngine.SetICETCPMux(tcpMux)
+	settingEngine.SetNetworkTypes([]webrtc.NetworkType{
+		webrtc.NetworkTypeUDP4,
+		webrtc.NetworkTypeTCP4,
+	})
 
 	// For Docker/NAT traversal, usually strictly host networking or specific Public IP config is needed.
 	// For E2E local verification (host network), default is fine.

@@ -28,6 +28,10 @@ type Session struct {
 	Synchronizer  *media_sync.Synchronizer        // Manages AV sync for this session's ingest
 	Role          string                          // "host" or "guest"
 	dummyTrackIDs map[string]struct{}             // Set of track IDs created as dummies
+	
+	// ICE Candidate Buffering
+	candidateQueue []webrtc.ICECandidateInit
+	remoteDescSet  bool
 }
 
 // NewSession creates a new session for a participant.
@@ -46,6 +50,8 @@ func NewSession(id string, role string, room *Room, pc *webrtc.PeerConnection, o
 		Synchronizer:  media_sync.NewSynchronizer(),
 		onClosed:      onClosed,
 		Role:          role,
+		candidateQueue: make([]webrtc.ICECandidateInit, 0),
+		remoteDescSet:  false,
 	}
 
 	// Register OnTrack handler to forward incoming tracks to the room
@@ -155,6 +161,19 @@ func (s *Session) HandleOffer(offerSDP string) (string, error) {
 		return "", fmt.Errorf("%w: %v", ErrInvalidSDP, err)
 	}
 
+	// Flush buffered ICE candidates now that RemoteDescription is set
+	s.mu.Lock()
+	s.remoteDescSet = true
+	for _, candidate := range s.candidateQueue {
+		if err := s.pc.AddICECandidate(candidate); err != nil {
+			slog.Warn("Failed to add buffered ICE candidate", "error", err)
+		} else {
+			slog.Debug("Added buffered ICE candidate")
+		}
+	}
+	s.candidateQueue = nil // clear buffer
+	s.mu.Unlock()
+
 	// SSRC Allocation Strategy for ALL roles:
 	// Inject "Dummy" (Silent/Black) tracks into the PeerConnection.
 	// This forces Pion to allocate SSRCs and include them in the SDP Answer.
@@ -224,10 +243,21 @@ func (s *Session) HandleOffer(offerSDP string) (string, error) {
 }
 
 // AddICECandidate adds an ICE candidate to the peer connection.
+// Supports buffering if called before RemoteDescription is set.
 func (s *Session) AddICECandidate(candidate webrtc.ICECandidateInit) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.remoteDescSet {
+		slog.Info("Buffering ICE candidate (RemoteDescription not set)", "sessionID", s.ID)
+		s.candidateQueue = append(s.candidateQueue, candidate)
+		return nil
+	}
+
 	if err := s.pc.AddICECandidate(candidate); err != nil {
 		return fmt.Errorf("failed to add ICE candidate: %w", err)
 	}
+	slog.Debug("Added ICE candidate", "sessionID", s.ID)
 	return nil
 }
 

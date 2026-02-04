@@ -26,16 +26,17 @@ services:
       target: prod
     ports:
       - "8090:8090"
-      - "50000-50010:50000-50010/udp"
+      - "50000-50100:50000-50100/udp"
+      - "50000:50000/tcp" # Explicit TCP mapping for ICE-TCP
     volumes:
       # Mount Proto generated files for runtime if needed by legacy code paths
-      # (Though prod build should have compiled them in, we mount for safety if logic reads files)
       - ./packages/proto/generated/go:/app/proto:ro
     environment:
       - PORT=8090
       - AI_SERVER_ADDR=server-ai:50051
-      - PION_NAT_1_1_HOST=127.0.0.1
-      - WEBRTC_MAX_PORT=50010
+      - PION_NAT_1_1_HOST=127.0.0.1 # Essential for Localhost TCP Bridge
+      - WEBRTC_MAX_PORT=50100
+      - AI_BUFFER_DURATION=2400 # Increased from default 400ms
     depends_on:
       server-ai:
         condition: service_healthy
@@ -47,7 +48,7 @@ services:
       dockerfile: apps/server-ai/Dockerfile
       target: prod
     expose:
-      - "50051" # Internal Only
+      - "50051"
     volumes:
       # RVC Paths (Must be valid on host)
       - ${RVC_ASSETS_PATH:-./rvc-models/assets}:/rvc-code/assets:ro
@@ -82,6 +83,6 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - SPRING_PROFILES_ACTIVE=dev # Valid for now, change to prod if profile exists
+      - SPRING_PROFILES_ACTIVE=dev
       - MEDIA_SERVER_HOST=server-media
       - MEDIA_SERVER_PORT=8090
