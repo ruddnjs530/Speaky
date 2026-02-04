@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Monitor } from 'lucide-react'; // Added for floating animation
+import { Monitor } from 'lucide-react'; // 플로팅 애니메이션을 위한 아이콘 추가
 
 import Card from '../../shared/ui/Card';
 import Input from '../../shared/ui/Input';
@@ -202,7 +202,7 @@ export default function HostPage() {
         {step === 'setup' ? (
           // Setup Mode Layout
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 h-full min-h-0">
-            {/* 좌측: 미리보기 (Main) - Animated Entrance */}
+            {/* 좌측: 미리보기 (Main) - 애니메이션 적용된 등장 효과 */}
             <motion.div
               className="lg:col-span-8 h-full min-h-0 flex flex-col order-first justify-center"
               initial={{ x: -30, opacity: 0 }}
@@ -228,7 +228,7 @@ export default function HostPage() {
                       />
                     </motion.div>
                   ) : (
-                    // Placeholder with Floating Monitor Animation
+                    // 플레이스홀더: 모니터 아이콘 둥둥 떠다니는 애니메이션
                     <motion.div
                       key="placeholder"
                       className="w-full h-full flex flex-col items-center justify-center text-white"
@@ -252,7 +252,7 @@ export default function HostPage() {
               </div>
             </motion.div>
 
-            {/* 우측: 설정 (Side) - Animated Entrance */}
+            {/* 우측: 설정 (Side) - 애니메이션 적용된 등장 효과 */}
             <motion.div
               className="lg:col-span-4 flex flex-col h-full min-h-0 overflow-y-auto pr-2 custom-scrollbar justify-center"
               initial={{ x: 30, opacity: 0 }}
