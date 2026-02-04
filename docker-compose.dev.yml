@@ -1,0 +1,48 @@
+services:
+  # 1. React Client (Live Reload)
+  client:
+    build:
+      target: dev
+    volumes:
+      - ./apps/client-web:/app
+      - /app/node_modules
+    command: ["npm", "run", "dev", "--", "--host"]
+
+  # 2. Media Server (Air Hot Reload)
+  server-media:
+    build:
+      target: dev
+    volumes:
+      - ./apps/server-media:/app
+      # Mirror host proto path for go.mod compatibility
+      - ./packages/proto/generated/go:/packages/proto/generated/go:ro
+      - ./packages/proto/generated/go:/app/proto:ro
+    command: ["air", "-c", ".air.toml"]
+
+  # 3. AI Server (Watchdog Reload)
+  server-ai:
+    build:
+      target: dev
+    volumes:
+      - ./apps/server-ai:/app
+      - ./packages/proto/generated/python:/packages/proto/generated/python:ro
+    command: ["watchmedo", "auto-restart", "--directory=./src", "--pattern=*.py", "--recursive", "--", "python", "-m", "src.server", "--port", "50051"]
+
+  # 4. Signaling Server (Gradle BootRun)
+  server-sc:
+    # Use JDK image directly for faster startup/caching in dev
+    image: gradle:8.5.0-jdk17-alpine
+    working_dir: /app
+    volumes:
+      - ./apps/server-sc:/app
+      - ./packages/proto:/packages/proto:ro
+      # Cache Gradle home to avoid downloading every time
+      - gradle-cache:/home/gradle/.gradle
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+    command: gradle bootRun -Pargs=--spring.profiles.active=dev
+
+volumes:
+  gradle-cache:

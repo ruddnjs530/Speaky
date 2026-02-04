@@ -27,11 +27,15 @@ const StreamPreview = forwardRef<HTMLVideoElement, Props>(
             const v = localRef.current;
             if (!v) return;
 
+            console.log('StreamPreview: setting srcObject', stream?.id, stream?.getTracks().length);
             v.srcObject = stream;
             v.playsInline = true;
             v.muted = Boolean(muted);
 
+            v.play().catch(e => console.error('StreamPreview: play() failed', e));
+
             return () => {
+                console.log('StreamPreview: cleanup srcObject');
                 v.srcObject = null;
             };
         }, [stream, muted]);

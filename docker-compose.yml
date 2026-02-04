@@ -1,58 +1,62 @@
+version: '3.8'
+
 services:
-  # 1. React Client
+  # 1. React Client (Production Build)
   client:
     build:
       context: .
       dockerfile: apps/client-web/Dockerfile
-      target: dev
+      target: prod  # Uses Nginx
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8080}
+        VITE_WS_URL: ${VITE_WS_URL:-ws://localhost:8080/ws/signaling}
     ports:
-      - "5173:5173"
-    volumes:
-      - ./apps/client-web:/app
-      - /app/node_modules
-    stdin_open: true # React Hot Reload
-    tty: true
+      - "5173:80"   # Expose Nginx port 80 as 5173 for consistency
     environment:
-      - VITE_API_URL=http://localhost:8081 # Browser accesses API directly
+      - VITE_API_URL=http://localhost:8080
+      - VITE_WS_URL=ws://localhost:8080/ws/signaling
     depends_on:
-      - server-media
+      - server-sc
 
-  # 2. Go Media Server
+  # 2. Media Server (Production Binary)
   server-media:
     build:
       context: .
       dockerfile: apps/server-media/Dockerfile
-      target: dev
+      target: prod
     ports:
-      - "8080:8080" # REST/gRPC
-      - "8081:8081" # HTTP (Test)
-      - "50000-50010:50000-50010/udp" # WebRTC
+      - "8090:8090"
+      - "50000-50100:50000-50100/udp"
+      - "50000:50000/tcp" # Explicit TCP mapping for ICE-TCP
     volumes:
-      - ./apps/server-media:/app
-      - ./packages/proto:/packages/proto # Shared Proto
-      - /app/tmp # Go tmp build artifacts
+      # Mount Proto generated files for runtime if needed by legacy code paths
+      - ./packages/proto/generated/go:/app/proto:ro
     environment:
-      - GRPC_PORT=8080
+      - PORT=8090
       - AI_SERVER_ADDR=server-ai:50051
+      - PION_NAT_1_1_HOST=127.0.0.1 # Essential for Localhost TCP Bridge
+      - WEBRTC_MAX_PORT=50100
+      - AI_BUFFER_DURATION=2400 # Increased from default 400ms
     depends_on:
-      - server-ai
+      server-ai:
+        condition: service_healthy
 
-  # 3. Python AI Server
+  # 3. AI Server (Production Mode)
   server-ai:
     build:
       context: .
       dockerfile: apps/server-ai/Dockerfile
-      target: dev
-    ports:
-      - "50051:50051"
+      target: prod
+    expose:
+      - "50051"
     volumes:
-      - ./apps/server-ai:/app
-      - ./packages/proto:/packages/proto
-      - ${RVC_ASSETS_PATH}:/rvc-code/assets:ro
-      - ${RVC_CODE_INFER_PATH}:/rvc-code/infer:ro
-      - ${RVC_CODE_CONFIGS_PATH}:/rvc-code/configs
+      # RVC Paths (Must be valid on host)
+      - ${RVC_ASSETS_PATH:-./rvc-models/assets}:/rvc-code/assets:ro
+      - ${RVC_CODE_INFER_PATH:-./rvc-models/infer}:/rvc-code/infer:ro
+      - ${RVC_CODE_CONFIGS_PATH:-./rvc-models/configs}:/rvc-code/configs
+      # Mount Python Protos (They are interpreted at runtime)
+      - ./packages/proto/generated/python:/packages/proto/generated/python:ro
     environment:
-      - PYTHONUNBUFFERED=1
       - PYTHONPATH=/app:/packages/proto/generated/python
       - RVC_WEBUI_ROOT=/rvc-code
       - MODELS_CONFIG_PATH=/app/src/config/models.yaml
@@ -62,9 +66,23 @@ services:
           devices:
             - driver: nvidia
               count: all
-              capabilities: [ gpu ]
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c 'import socket; s=socket.socket(); s.connect((\"localhost\",50051)); s.close()'"]
+      interval: 10s
+      timeout: 5s
+      retries: 20    # 20 * 10s = 200s (~3.3 mins)
+      start_period: 30s
 
-  # 4. Spring Signaling Server (Pending)
+  # 4. Signaling Server (Production JAR)
   server-sc:
-    image: eclipse-temurin:17-jdk-alpine
-    command: echo "Spring setup pending..."
+    build:
+      context: .
+      dockerfile: apps/server-sc/Dockerfile
+      target: runner
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - MEDIA_SERVER_HOST=server-media
+      - MEDIA_SERVER_PORT=8090

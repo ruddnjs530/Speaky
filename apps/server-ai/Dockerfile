@@ -1,57 +1,30 @@
-# ==========================================
-# Base Stage
-# ==========================================
-FROM python:3.10-slim AS base
-
+FROM python:3.10.13-slim-bookworm AS base
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && \
-    (apt-get install -y --no-install-recommends \
-        gcc \
-        g++ \
-        make \
-        ffmpeg \
-     || (sleep 3 && apt-get update && apt-get install -y --no-install-recommends --fix-missing \
-         gcc \
-         g++ \
-         make \
-         ffmpeg)) \
+# System dependencies (cached)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc g++ make ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
-# 1. Copy Shared Packages (Proto)
-COPY packages/proto /packages/proto
-
-# 2. Copy Requirements
+# 1. Install Python Dependencies (Cached unless requirements.txt changes)
 COPY apps/server-ai/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY packages/proto /packages/proto
+RUN pip install --default-timeout=1000 --no-cache-dir -r requirements.txt
 
-# Environment variables
+# 2. Add GPU Check Script
+RUN echo 'import torch; print(f"GPU Available: {torch.cuda.is_available()}")' > check_gpu.py
+
 ENV PYTHONUNBUFFERED=1
+# Proto path will be mounted at /packages/proto via Volume
 ENV PYTHONPATH=/app:/packages/proto/generated/python
+ENV PORT=50051
 
-# ==========================================
-# Development Stage
-# ==========================================
 FROM base AS dev
-# Install dev tools if needed (e.g., watchdog for hot reload)
 RUN pip install watchdog
+# Why: Fix port to match architecture
+CMD ["python", "-m", "src.server", "--port", "50051"]
 
-# Copy source code (optional, typically bind mounted in compose)
-COPY apps/server-ai .
-
-CMD ["python", "-m", "src.server"]
-
-# ==========================================
-# Production Stage
-# ==========================================
 FROM base AS prod
-
-# Copy Source Code
 COPY apps/server-ai .
-
-# Expose port
 EXPOSE 50051
-
-# Run
-CMD ["python", "-m", "src.server"]
+CMD ["python", "-m", "src.server", "--port", "50051"]

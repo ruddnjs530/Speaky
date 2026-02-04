@@ -154,18 +154,32 @@ def load_models_from_config(config_path: str) -> list[VoiceModelConfig]:
     with open(config_file, 'r', encoding='utf-8') as f:
         config = yaml.safe_load(f)
     
+    # 환경변수에서 Root 경로 확인 (기본값: /rvc-code)
+    import os
+    rvc_root = os.getenv("RVC_WEBUI_ROOT", "/rvc-code")
+    
     models = []
     for model_config in config.get('models', []):
         # voice_model_id는 필수값
         if 'voice_model_id' not in model_config:
             logger.error(f"Model '{model_config.get('model_name', 'unknown')}' is missing required 'voice_model_id', skipping")
             continue
+            
+        # 경로 처리: /rvc-code 로 시작하면 환경변수 값으로 치환
+        model_path = model_config['model_path']
+        index_path = model_config.get('index_path')
+        
+        if model_path.startswith("/rvc-code"):
+            model_path = model_path.replace("/rvc-code", rvc_root, 1)
+            
+        if index_path and index_path.startswith("/rvc-code"):
+            index_path = index_path.replace("/rvc-code", rvc_root, 1)
         
         model = VoiceModelConfig(
             model_name=model_config['model_name'],
-            model_path=model_config['model_path'],
+            model_path=model_path,
             voice_model_id=model_config['voice_model_id'],
-            index_path=model_config.get('index_path'),
+            index_path=index_path,
             index_rate=model_config.get('index_rate', 0.75),
             pitch=model_config.get('pitch', 0),
             protect=model_config.get('protect', 0.33),

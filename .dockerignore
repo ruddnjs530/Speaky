@@ -1,43 +1,42 @@
-# Root .dockerignore
+# Version Control
 .git
 .gitignore
-.vscode
-.idea
-.DS_Store
-
-# Node
-node_modules
-npm-debug.log
-yarn-error.log
-
-# Go
-bin/
-tmp/
 
 # Python
-__pycache__
-*.pyc
-*.pyo
-*.pyd
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
 .Python
 env/
 venv/
-.venv/
 pip-log.txt
 pip-delete-this-directory.txt
 
-# Java/Gradle
-.gradle
-build/
+# Node
+**/node_modules
+npm-debug.log
+yarn-debug.log
+yarn-error.log
 
-# Docker
-docker-compose.yml
-Dockerfile
-.dockerignore
+# Go
+**/vendor
 
-# Misc
-.env
-*.md
-docs/
-scripts/
-lefthook.yml
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build Artifacts
+**/dist
+**/build
+**/*.jar
+apps/server-media/bin
+packages/proto/generated/go/go.sum
+
+!**/gradle-wrapper.jar

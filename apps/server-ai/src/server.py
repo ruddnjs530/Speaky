@@ -87,20 +87,20 @@ class VoiceService(voice_pb2_grpc.VoiceServiceServicer):
         request_iterator: AsyncIterator[voice_pb2.AudioChunk],
         context: grpc.aio.ServicerContext,
     ) -> AsyncIterator[voice_pb2.AudioChunk]:
-        """
-        오디오 스트림 변환
-        - 첫 번째 청크의 voice_model_id로 모델 선택 (연결당 한 번만)
-        - 이후 청크들은 같은 모델 재사용 (voice_model_id는 변경되지 않음)
-        - voice_model_id가 없으면 pass-through
-        - 모델이 없으면 pass-through
-        """
+        logger.info("AP: ConvertStream RPC called")
         current_converter: Optional[RVCConverter] = None
         model_initialized = False  # 첫 번째 청크에서만 모델 선택
         
+        chunk_count = 0
         async for chunk in request_iterator:
+            chunk_count += 1
+            if chunk_count % 10 == 0:
+                logger.debug(f"AP: Received chunk {chunk_count} (bytes: {len(chunk.pcm)})")
+                
             # 첫 번째 청크에서만 모델 선택 (연결당 한 번만)
             if not model_initialized:
                 voice_model_id = chunk.voice_model_id if chunk.voice_model_id else None
+                logger.info(f"AP: Initializing model for stream. voice_model_id: {voice_model_id}")
                 
                 if voice_model_id is not None:
                     converter, model_name = self.model_manager.get_converter_by_voice_model_id(voice_model_id)
@@ -204,7 +204,7 @@ def _setup_logging() -> None:
     logging.getLogger("asyncio").setLevel(logging.WARNING)
 
 
-async def serve(host: str = "0.0.0.0", port: int = 50051) -> None:
+async def serve(host: str = "[::]", port: int = 50052) -> None:
     # 모델 매니저 초기화
     model_manager = VoiceModelManager()
     
@@ -272,4 +272,5 @@ async def serve(host: str = "0.0.0.0", port: int = 50051) -> None:
 
 if __name__ == "__main__":
     _setup_logging()
-    asyncio.run(serve())
+    port = int(os.getenv("PORT", "50051"))
+    asyncio.run(serve(port=port))

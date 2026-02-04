@@ -159,8 +159,16 @@ public class SignalingService {
         log.info("Received SDP Offer: sessionId={}, clientId={}", sessionId, clientId);
         
         try {
+            // Retrieve session to get hostUserId
+            SessionEntity session = sessionRepository.findById(sessionId)
+                    .orElseThrow(() -> new SessionNotFoundException(sessionId));
+            
+            // CRITICAL: Use hostUserId to match the CreateRoom call
+            // This ensures the Media Server recognizes the host role correctly
+            String userId = String.valueOf(session.getHostUserId());
+            
             // Media Server에 Join 요청 (SDP Offer 전달 및 Answer 수신)
-            String sdpAnswer = mediaServerClient.joinRoom(sessionId, clientId, sdpOffer);
+            String sdpAnswer = mediaServerClient.joinRoom(sessionId, userId, sdpOffer);
             
             // SIG_ANSWER 응답 생성
             Envelope response = Envelope.builder()
@@ -226,10 +234,15 @@ public class SignalingService {
                 sessionId, clientId, sdpMid);
         
         try {
+            // Retrieve session to get hostUserId
+            SessionEntity session = sessionRepository.findById(sessionId)
+                    .orElseThrow(() -> new SessionNotFoundException(sessionId));
+            String userId = String.valueOf(session.getHostUserId());
+            
             if (candidate != null && sdpMLineIndex != null) {
                 mediaServerClient.submitIceCandidate(
                         sessionId, 
-                        clientId, 
+                        userId,  // Use hostUserId instead of clientId
                         candidate, 
                         sdpMid, 
                         sdpMLineIndex

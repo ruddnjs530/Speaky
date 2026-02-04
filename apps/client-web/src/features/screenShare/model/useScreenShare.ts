@@ -105,18 +105,33 @@ export function useScreenShare() {
     const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
     pcRef.current = pc;
 
+    // Configure transceivers based on role
     if (role === 'viewer') {
+      // Viewer only receives
       pc.addTransceiver('video', { direction: 'recvonly' });
       pc.addTransceiver('audio', { direction: 'recvonly' });
+    } else if (role === 'host') {
+      // Host sends AND receives (to get processed media back)
+      pc.addTransceiver('video', { direction: 'sendrecv' });
+      pc.addTransceiver('audio', { direction: 'sendrecv' });
     }
 
     const inbound = new MediaStream();
     setRemoteStream(inbound);
 
     pc.ontrack = (e) => {
+      console.log('ontrack event:', e.track.kind, e.streams.length);
       if (e.streams[0]) {
-        e.streams[0].getTracks().forEach(t => inbound.addTrack(t));
-        setRemoteStream(new MediaStream(inbound.getTracks()));
+        console.log('ontrack stream id:', e.streams[0].id);
+        e.streams[0].getTracks().forEach(t => {
+          // 중복 방지: 이미 추가된 트랙인지 확인
+          if (!inbound.getTracks().find(track => track.id === t.id)) {
+            inbound.addTrack(t);
+            console.log('Track added:', t.kind, 'Total tracks:', inbound.getTracks().length);
+          }
+        });
+        // MediaStream 객체를 재생성하지 않고 기존 inbound 사용
+        // setRemoteStream은 이미 위에서 한 번만 호출됨
       }
     };
 
