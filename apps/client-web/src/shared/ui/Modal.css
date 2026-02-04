@@ -48,6 +48,10 @@
 
 .modal-button.primary {
     border: none;
-    background: #3b82f6;
+    background: #E8753A;
     color: #fff;
+}
+
+.modal-button.primary:hover {
+    background: #D45A3A;
 }

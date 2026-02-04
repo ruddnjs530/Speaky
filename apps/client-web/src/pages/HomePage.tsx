@@ -1,10 +1,12 @@
 import { Monitor, Users } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
 import { RoleCard } from '../features/home/ui/RoleCard';
+import { HostCardPattern } from '../features/home/ui/HostCardPattern';
+import { ViewerCardPattern } from '../features/home/ui/ViewerCardPattern';
 
 type Role = 'host' | 'viewer';
-
 
 
 const isAuthed = () => Boolean(localStorage.getItem("accessToken"));
@@ -12,6 +14,7 @@ const isAuthed = () => Boolean(localStorage.getItem("accessToken"));
 export default function HomePage() {
   const navigate = useNavigate();
   const [authed, setAuthed] = useState(isAuthed());
+  const [userName, setUserName] = useState<string | null>(null);
 
   useEffect(() => {
     const sync = () => setAuthed(isAuthed());
@@ -25,10 +28,19 @@ export default function HomePage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (authed) {
+      setUserName("싸피");
+    } else {
+      setUserName(null);
+    }
+  }, [authed]);
+
   const handleLogout = () => {
     localStorage.removeItem("accessToken");
     window.dispatchEvent(new Event("auth-change"));
     setAuthed(false);
+    setUserName(null);
     // 로그아웃 후 홈으로 리다이렉트 (현재 페이지가 홈이므로 불필요할 수 있으나 상태 갱신됨)
   };
 
@@ -44,15 +56,25 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen flex flex-col font-sans">
-      {/* Header */}
-      <header className="px-8 py-6 flex items-center justify-between">
+      {/* 헤더 */}
+      <motion.header
+        className="px-8 py-6 flex items-center justify-between"
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+      >
         <h1 className="text-2xl font-bold text-[#E8753A]">Speaky</h1>
 
-        <div className="flex items-center gap-4">
+        <motion.div
+          className="flex items-center gap-4"
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.5, delay: 0.2 }}
+        >
           {authed ? (
             <button
               onClick={handleLogout}
-              className="px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors"
+              className="px-4 py-2 rounded-lg text-sm font-bold text-white bg-[#E8753A] hover:bg-[#D45A3A] transition-colors shadow-sm"
             >
               로그아웃
             </button>
@@ -65,29 +87,44 @@ export default function HomePage() {
                 로그인
               </Link>
               <Link
-                to="/signup" // 회원가입 페이지 경로 (현재는 미구현일 수 있음)
+                to="/signup" // 회원가입 페이지 경로
                 className="px-4 py-2 rounded-lg text-sm font-bold text-white bg-[#E8753A] hover:bg-[#D45A3A] transition-colors shadow-sm"
               >
                 회원가입
               </Link>
             </>
           )}
-        </div>
-      </header>
+        </motion.div>
+      </motion.header>
 
-      {/* Main Content */}
+      {/* 메인 콘텐츠 */}
       <main className="flex-1 flex items-center justify-center px-8 pb-20">
         <div className="w-full max-w-6xl">
-          {/* Title */}
-          <div className="mb-12 text-center">
-            <h2 className="text-3xl font-bold mb-3 text-gray-900">실시간 음성 변조 스트리밍</h2>
-            <p className="text-lg text-gray-500">
-              화면공유 영상의 음성을 실시간으로 변조하여 재송출합니다
-            </p>
-          </div>
+          {/* 타이틀 */}
+          <motion.div
+            className="mb-12 text-center"
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.3 }}
+          >
+            {userName ? (
+              <>
+                <h2 className="text-3xl font-bold mb-3 text-gray-900">{userName}님, 다시 만나서 반가워요!</h2>
+                <p className="text-lg text-gray-500">
+                  어떤 페르소나로 방송을 시작해볼까요?
+                </p>
+              </>
+            ) : (
+              <>
+                <h2 className="text-3xl font-bold mb-3 text-gray-900">실시간 음성 변조 스트리밍</h2>
+                <p className="text-lg text-gray-500">
+                  화면공유 영상의 음성을 실시간으로 변조하여 재송출합니다
+                </p>
+              </>
+            )}
+          </motion.div>
 
-          {/* Role Selection Cards */}
-          {/* Role Selection Cards */}
+          {/* 호스트/뷰어 선택 */}
           <div className="grid md:grid-cols-2 gap-6">
             <RoleCard
               role="host"
@@ -97,15 +134,19 @@ export default function HomePage() {
               icon={<Monitor className="h-8 w-8 text-white" />}
               gradient="from-[#D45A3A] to-[#E8753A]"
               onClick={() => handleSelectRole('host')}
-              pattern={
-                <>
-                  <line x1="200" y1="0" x2="280" y2="300" stroke="white" strokeWidth="2" />
-                  <line x1="240" y1="0" x2="320" y2="300" stroke="white" strokeWidth="2" />
-                  <line x1="280" y1="0" x2="360" y2="300" stroke="white" strokeWidth="2" />
-                  <line x1="200" y1="200" x2="350" y2="200" stroke="white" strokeWidth="2" />
-                  <line x1="250" y1="250" x2="280" y2="220" stroke="white" strokeWidth="2" />
-                </>
-              }
+              pattern={<HostCardPattern />}
+              initial={{ opacity: 0, x: -50 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{
+                duration: 0.6,
+                delay: 0.5,
+                ease: [0.25, 0.8, 0.5, 1]
+              }}
+              whileHover={{
+                scale: 1.02,
+                boxShadow: "0 20px 40px rgba(232, 117, 58, 0.3)"
+              }}
+              whileTap={{ scale: 0.98 }}
             />
 
             <RoleCard
@@ -116,16 +157,19 @@ export default function HomePage() {
               icon={<Users className="h-8 w-8 text-white" />}
               gradient="from-[#E8973A] to-[#F0B13A]"
               onClick={() => handleSelectRole('viewer')}
-              pattern={
-                <>
-                  <line x1="80" y1="0" x2="160" y2="300" stroke="white" strokeWidth="2" />
-                  <line x1="150" y1="0" x2="230" y2="300" stroke="white" strokeWidth="2" />
-                  <line x1="220" y1="0" x2="300" y2="300" stroke="white" strokeWidth="2" />
-                  <line x1="290" y1="0" x2="370" y2="300" stroke="white" strokeWidth="2" />
-                  <line x1="50" y1="150" x2="200" y2="150" stroke="white" strokeWidth="2" />
-                  <line x1="250" y1="200" x2="350" y2="200" stroke="white" strokeWidth="2" />
-                </>
-              }
+              pattern={<ViewerCardPattern />}
+              initial={{ opacity: 0, x: 50 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{
+                duration: 0.6,
+                delay: 0.5,
+                ease: [0.25, 0.8, 0.25, 1]
+              }}
+              whileHover={{
+                scale: 1.02,
+                boxShadow: "0 20px 40px rgba(240, 177, 58, 0.3)"
+              }}
+              whileTap={{ scale: 0.98 }}
             />
           </div>
         </div>

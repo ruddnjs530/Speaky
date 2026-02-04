@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState, useEffect } from "react";
 import { voiceApi, type Voice } from "../api/voiceApi";
+import { useDeviceContext } from "../providers/DeviceContext";
 
 export type InputSource = "screen" | "mp4";
 
@@ -53,10 +54,11 @@ export function usePrecheckModel(opts?: { onNext?: (voiceId: number) => void }):
     }, [onNext]);
 
     const [inputSource, setInputSource] = useState<InputSource>("screen");
-    const [voiceId, setVoiceId] = useState<number>(1); // Default to ID 1
+    const [voiceId, setVoiceId] = useState<number>(1);
     const [voices, setVoices] = useState<Voice[]>([]);
 
-
+    // Global Device Context
+    const { permission, selectedDeviceId, devices, lastError, actions: deviceActions } = useDeviceContext();
 
     // Voices Fetching
     useEffect(() => {
@@ -69,6 +71,26 @@ export function usePrecheckModel(opts?: { onNext?: (voiceId: number) => void }):
             })
             .catch(err => console.error("Failed to load voices", err));
     }, []);
+
+    const [micLevel, setMicLevel] = useState(0);
+
+    const [health, setHealth] = useState<HealthState>({
+        mic: "unknown",
+        level: "unknown",
+        network: "unknown",
+        ai: "unknown",
+    });
+
+    // Update health based on global permission state
+    useEffect(() => {
+        if (permission === 'granted') {
+            setHealth(prev => ({ ...prev, mic: "ok" }));
+        } else if (permission === 'denied' || permission === 'error') {
+            setHealth(prev => ({ ...prev, mic: "fail" }));
+        } else {
+            setHealth(prev => ({ ...prev, mic: "unknown" }));
+        }
+    }, [permission]);
 
     // [NEW] Network & AI 상태 체크
     useEffect(() => {
@@ -95,22 +117,6 @@ export function usePrecheckModel(opts?: { onNext?: (voiceId: number) => void }):
         };
     }, [voices]);
 
-    // 초기에는 빈 목록
-    const [devices, setDevices] = useState<AudioDevice[]>([]);
-
-    const [mic, setMic] = useState<MicState>({
-        permission: "idle",
-        selectedDeviceId: null,
-        level: 0,
-        lastError: null,
-    });
-
-    const [health, setHealth] = useState<HealthState>({
-        mic: "unknown",
-        level: "unknown",
-        network: "unknown",
-        ai: "unknown",
-    });
 
     // 실제 오디오 분석을 위한 Refs
     const audioContextRef = useRef<AudioContext | null>(null);
@@ -143,8 +149,62 @@ export function usePrecheckModel(opts?: { onNext?: (voiceId: number) => void }):
                 audioContextRef.current = null;
             }
 
-            setMic((prev) => ({ ...prev, level: 0 }));
+            setMicLevel(0);
             setHealth((prev) => ({ ...prev, level: "unknown" }));
+        };
+
+        const startLevelMonitorImpl = async () => {
+            if (audioContextRef.current?.state === 'running') return;
+            // selectedDeviceId가 없어도 permission이 있으면 default로 시도해볼 수도 있으나,
+            // 여기선 안전하게 selectedDeviceId가 있을 때만 진행
+            if (!selectedDeviceId) return;
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: { deviceId: { exact: selectedDeviceId } }
+                });
+                streamRef.current = stream;
+
+                const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+                audioContextRef.current = audioCtx;
+
+                const analyser = audioCtx.createAnalyser();
+                analyser.fftSize = 256;
+                analyserRef.current = analyser;
+
+                const source = audioCtx.createMediaStreamSource(stream);
+                sourceRef.current = source;
+                source.connect(analyser);
+
+                const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+                const updateLevel = () => {
+                    if (!analyserRef.current) return;
+                    analyserRef.current.getByteFrequencyData(dataArray);
+
+                    let sum = 0;
+                    for (let i = 0; i < dataArray.length; i++) {
+                        sum += dataArray[i];
+                    }
+                    const average = sum / dataArray.length;
+
+                    // 0~100으로 정규화
+                    const normalizedLevel = Math.min(100, Math.floor((average / 128) * 100 * 1.5));
+
+                    setMicLevel(normalizedLevel);
+                    setHealth((prev) => ({
+                        ...prev,
+                        level: normalizedLevel > 10 ? "ok" : normalizedLevel > 0 ? "warn" : "fail"
+                    }));
+
+                    animationFrameRef.current = requestAnimationFrame(updateLevel);
+                };
+
+                updateLevel();
+            } catch (err) {
+                console.error("Failed to start level monitor", err);
+                setHealth((prev) => ({ ...prev, mic: "fail", level: "fail" }));
+            }
         };
 
         return {
@@ -152,97 +212,15 @@ export function usePrecheckModel(opts?: { onNext?: (voiceId: number) => void }):
             selectVoice: (nextVoiceId) => setVoiceId(nextVoiceId),
 
             requestMicPermission: async () => {
-                setMic((prev) => ({ ...prev, permission: "requesting", lastError: null }));
-                try {
-                    // 1. 권한 요청 (스트림 열기)
-                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-                    // 2. 장치 목록 가져오기 (권한이 있어야 레이블이 보임)
-                    const allDevices = await navigator.mediaDevices.enumerateDevices();
-                    const audioInputs = allDevices
-                        .filter(d => d.kind === 'audioinput')
-                        .map(d => ({
-                            deviceId: d.deviceId,
-                            label: d.label || `마이크 ${d.deviceId.slice(0, 5)}...`
-                        }));
-                    setDevices(audioInputs);
-
-                    // 3. 스트림 일단 닫기 (모니터링 시작 시 다시 엶)
-                    stream.getTracks().forEach(t => t.stop());
-
-                    setMic((prev) => ({
-                        ...prev,
-                        permission: "granted",
-                        // 장치가 하나라도 있으면 첫 번째 것을 기본 선택
-                        selectedDeviceId: prev.selectedDeviceId ?? (audioInputs[0]?.deviceId || "default")
-                    }));
-                    setHealth((prev) => ({ ...prev, mic: "ok" }));
-                } catch (err: any) {
-                    console.error("Mic permission error:", err);
-                    setMic((prev) => ({
-                        ...prev,
-                        permission: "denied",
-                        lastError: { code: "PERMISSION_DENIED", message: err.message }
-                    }));
-                    setHealth((prev) => ({ ...prev, mic: "fail" }));
-                }
+                await deviceActions.requestPermission();
+                // 권한 얻으면 자동 시작은 useEffect에서 처리
             },
 
             selectMicDevice: (deviceId) => {
-                setMic((prev) => ({ ...prev, selectedDeviceId: deviceId }));
+                deviceActions.selectDevice(deviceId);
             },
 
-            startLevelMonitor: async () => {
-                if (audioContextRef.current?.state === 'running') return;
-                if (!mic.selectedDeviceId) return;
-
-                try {
-                    const stream = await navigator.mediaDevices.getUserMedia({
-                        audio: { deviceId: { exact: mic.selectedDeviceId } }
-                    });
-                    streamRef.current = stream;
-
-                    const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-                    audioContextRef.current = audioCtx;
-
-                    const analyser = audioCtx.createAnalyser();
-                    analyser.fftSize = 256;
-                    analyserRef.current = analyser;
-
-                    const source = audioCtx.createMediaStreamSource(stream);
-                    sourceRef.current = source;
-                    source.connect(analyser);
-
-                    const dataArray = new Uint8Array(analyser.frequencyBinCount);
-
-                    const updateLevel = () => {
-                        if (!analyserRef.current) return;
-                        analyserRef.current.getByteFrequencyData(dataArray);
-
-                        let sum = 0;
-                        for (let i = 0; i < dataArray.length; i++) {
-                            sum += dataArray[i];
-                        }
-                        const average = sum / dataArray.length;
-
-                        // 0~100으로 정규화
-                        const normalizedLevel = Math.min(100, Math.floor((average / 128) * 100 * 1.5));
-
-                        setMic((prev) => ({ ...prev, level: normalizedLevel }));
-                        setHealth((prev) => ({
-                            ...prev,
-                            level: normalizedLevel > 10 ? "ok" : normalizedLevel > 0 ? "warn" : "fail"
-                        }));
-
-                        animationFrameRef.current = requestAnimationFrame(updateLevel);
-                    };
-
-                    updateLevel();
-                } catch (err) {
-                    console.error("Failed to start level monitor", err);
-                    setHealth((prev) => ({ ...prev, mic: "fail", level: "fail" }));
-                }
-            },
+            startLevelMonitor: startLevelMonitorImpl,
 
             stopLevelMonitor: () => {
                 stopLevelMonitorImpl();
@@ -251,14 +229,8 @@ export function usePrecheckModel(opts?: { onNext?: (voiceId: number) => void }):
             reset: () => {
                 stopLevelMonitorImpl();
                 setInputSource("screen");
-                setVoiceId(1); // Reset to ID 1
-                setDevices([]);
-                setMic({
-                    permission: "idle",
-                    selectedDeviceId: null,
-                    level: 0,
-                    lastError: null,
-                });
+                setVoiceId(1);
+                deviceActions.reset();
                 setHealth({
                     mic: "unknown",
                     level: "unknown",
@@ -272,7 +244,7 @@ export function usePrecheckModel(opts?: { onNext?: (voiceId: number) => void }):
                 onNextRef.current?.(voiceId);
             },
         };
-    }, [mic.selectedDeviceId]);
+    }, [selectedDeviceId, deviceActions, voiceId]); // actions 의존성 갱신
 
     useEffect(() => {
         return () => {
@@ -280,22 +252,32 @@ export function usePrecheckModel(opts?: { onNext?: (voiceId: number) => void }):
         };
     }, [actions]);
 
-    // [NEW] 권한이 승인되면 자동으로 레벨 모니터링 시작
+    // [Refined] 권한이 승인되어 있고, 장치가 선택되면 자동으로 레벨 모니터링 시작
+    // 페이지 진입 시 이미 권한이 있다면 즉시 시작됨
     useEffect(() => {
-        if (mic.permission === "granted" && mic.selectedDeviceId) {
+        if (permission === "granted" && selectedDeviceId) {
+            // 약간의 딜레이를 주어 렌더링 안정화 후 시작
             const timer = setTimeout(() => {
                 actions.startLevelMonitor();
             }, 100);
             return () => clearTimeout(timer);
         }
-    }, [mic.permission, mic.selectedDeviceId, actions]); // actions 의존성 추가
+    }, [permission, selectedDeviceId, actions]);
 
-    const canProceed = mic.permission === "granted";
+    const canProceed = permission === "granted";
+
+    // Re-construct mic object to match interface
+    const mic: MicState = {
+        permission,
+        selectedDeviceId,
+        level: micLevel,
+        lastError
+    };
 
     return {
         inputSource,
         voiceId,
-        voices, // Return voices
+        voices,
         devices,
         mic,
         health,
