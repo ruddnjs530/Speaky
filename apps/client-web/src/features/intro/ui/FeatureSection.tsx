@@ -1,6 +1,5 @@
 import { Mic2, Zap, MonitorPlay } from 'lucide-react';
 import { useIntersectionObserver } from '../../../shared/hooks/useIntersectionObserver';
-import '../intro.css';
 
 const features = [
     {
@@ -24,22 +23,23 @@ export function FeatureSection() {
     const { elementRef, isVisible } = useIntersectionObserver({ threshold: 0.3 });
 
     return (
-        <section ref={elementRef} className="intro-feature-section">
-            <div className={`intro-feature-container fade-in-up ${isVisible ? 'visible' : ''}`}>
-                <div className="intro-section-header">
-                    <h2 className="intro-section-label">Key Features</h2>
-                    <h3 className="intro-section-title">
+        <section ref={elementRef} className="py-24 bg-white text-gray-900 border-t border-gray-100">
+            <div className={`max-w-7xl mx-auto px-6 opacity-0 translate-y-10 transition-all duration-1000 ${isVisible ? 'opacity-100 translate-y-0' : ''}`}>
+                <div className="text-center mb-16">
+                    <h2 className="text-sm font-bold text-[#E8753A] tracking-wider uppercase mb-3">Key Features</h2>
+                    <h3 className="text-3xl md:text-5xl font-bold text-gray-900">
                         왜 Speaky인가요?
                     </h3>
                 </div>
 
-                <div className="intro-feature-grid">
+                <div className="grid md:grid-cols-3 gap-8">
                     {features.map((feature, index) => (
                         <div
                             key={index}
-                            className={`intro-feature-card group ${isVisible ? 'visible' : ''}`}
+                            className={`p-8 rounded-3xl bg-white border border-gray-100 hover:border-[#E8753A]/30 hover:shadow-xl hover:-translate-y-1 transition-all duration-500 shadow-sm opacity-0 translate-y-10 group ${isVisible ? 'opacity-100 translate-y-0' : ''}`}
+                            style={{ transitionDelay: `${index * 200}ms` }}
                         >
-                            <div className="intro-feature-icon-wrapper">
+                            <div className="w-16 h-16 rounded-2xl bg-[#E8753A]/10 flex items-center justify-center mb-6 border border-[#E8753A]/10 group-hover:scale-110 transition-transform duration-300">
                                 {feature.icon}
                             </div>
                             <h4 className="text-xl font-bold mb-4 text-gray-900">{feature.title}</h4>
