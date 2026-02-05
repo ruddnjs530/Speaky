@@ -163,12 +163,16 @@ public class SignalingService {
             SessionEntity session = sessionRepository.findById(sessionId)
                     .orElseThrow(() -> new SessionNotFoundException(sessionId));
             
-            // CRITICAL: Use the actual client's ID so viewers are distinct from the host
-            // If it's the host, it will match hostUserId, otherwise it's a viewer
-            // Assuming clientId holds the user identifying info (or use envelope.getFrom().getClientId() if authenticated)
-            // But here envelope.getFrom().getClientId() is likely the WebSocket clientId.
-            // Ideally, we should use the `clientId` from the envelope which is unique per connection.
-            String userId = clientId;
+            // CRITICAL: 역할에 따라 userId 결정
+            // - HOST: createRoom 시 등록한 hostUserId와 일치해야 함
+            // - GUEST/VIEWER: 고유한 clientId 사용
+            String role = envelope.getFrom().getRole();
+            String userId;
+            if ("HOST".equalsIgnoreCase(role)) {
+                userId = String.valueOf(session.getHostUserId());
+            } else {
+                userId = clientId;  // GUEST/VIEWER는 WebSocket clientId 사용
+            }
             
             // Media Server에 Join 요청 (SDP Offer 전달 및 Answer 수신)
             String sdpAnswer = mediaServerClient.joinRoom(sessionId, userId, sdpOffer);
