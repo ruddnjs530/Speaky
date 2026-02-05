@@ -106,9 +106,11 @@ func (s *Synchronizer) RunVideoPump(ctx context.Context, buffer *VideoBuffer, on
 				drained++
 			}
 
-			// Warn if buffer is getting dangerously full (e.g. > 1500 used out of 2000)
-			if buffer.Len() > 1500 && count%200 == 0 {
-				slog.Warn("Sync: Video Buffer High", "len", buffer.Len())
+			// Warn if buffer is getting dangerously full (e.g. > 75% used)
+			threshold := int(float64(buffer.Cap()) * 0.75)
+			if buffer.Len() > threshold && count%100 == 0 {
+				slog.Warn("Sync: Video Buffer High", "len", buffer.Len(), "cap", buffer.Cap())
+			count++
 			}
 
 			// Poll interval
