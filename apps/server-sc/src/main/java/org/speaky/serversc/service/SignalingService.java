@@ -12,6 +12,7 @@ import org.speaky.serversc.exception.SessionNotFoundException;
 import org.speaky.serversc.repository.SessionRepository;
 import org.springframework.context.event.EventListener;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
+import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.socket.messaging.SessionDisconnectEvent;
@@ -43,6 +44,66 @@ public class SignalingService {
         private final SimpMessagingTemplate messagingTemplate;
         private final MediaServerClient mediaServerClient;
 
+        // Channel ID -> Set of Client IDs
+        private final java.util.Map<String, java.util.Set<String>> channelViewers = new java.util.concurrent.ConcurrentHashMap<>();
+
+        /**
+         * STOMP 구독 이벤트 처리
+         * - 시청자 수 집계 및 브로드캐스트
+         */
+        @EventListener
+        public void handleSubscribeEvent(org.springframework.web.socket.messaging.SessionSubscribeEvent event) {
+                SimpMessageHeaderAccessor accessor = SimpMessageHeaderAccessor.wrap(event.getMessage());
+                String destination = accessor.getDestination();
+
+                // /topic/channel/{channelId} 구독 감지
+                if (destination != null && destination.startsWith("/topic/channel/")) {
+                        String channelId = destination.replace("/topic/channel/", "");
+                        String sessionId = accessor.getSessionId(); // Use WebSocket Session ID
+
+                        if (sessionId != null) {
+                                addViewer(channelId, sessionId);
+                        }
+                }
+        }
+
+        private void addViewer(String channelId, String sessionId) {
+                channelViewers.computeIfAbsent(channelId, k -> java.util.concurrent.ConcurrentHashMap.newKeySet())
+                                .add(sessionId);
+                broadcastViewerCount(channelId);
+        }
+
+        private void removeViewer(String sessionId) {
+                java.util.Set<String> affectedChannels = new java.util.HashSet<>();
+
+                channelViewers.forEach((channelId, viewers) -> {
+                        if (viewers.remove(sessionId)) {
+                                affectedChannels.add(channelId);
+                        }
+                });
+
+                affectedChannels.forEach(this::broadcastViewerCount);
+        }
+
+        private void broadcastViewerCount(String channelId) {
+                java.util.Set<String> viewers = channelViewers.get(channelId);
+                int count = (viewers != null) ? viewers.size() : 0;
+
+                Envelope countMessage = Envelope.builder()
+                                .v(PROTOCOL_VERSION)
+                                .type("SYS_VIEWER_COUNT")
+                                .requestId(java.util.UUID.randomUUID().toString())
+                                .ts(System.currentTimeMillis())
+                                .channelId(channelId)
+                                .sessionId(channelId) // Use channelId as sessionId for system messages
+                                .from(From.builder().role(SERVER_ROLE).clientId(SERVER_CLIENT_ID).build())
+                                .payload(java.util.Map.of("count", count))
+                                .build();
+
+                messagingTemplate.convertAndSend("/topic/channel/" + channelId, countMessage);
+                log.debug("Broadcast viewer count: channel={}, count={}", channelId, count);
+        }
+
         /**
          * WebSocket 연결 해제 이벤트 처리
          * 
@@ -52,9 +113,14 @@ public class SignalingService {
          */
         @EventListener
         public void handleWebSocketDisconnect(SessionDisconnectEvent event) {
-                SimpMessageHeaderAccessor headerAccessor = SimpMessageHeaderAccessor.wrap(event.getMessage());
+                StompHeaderAccessor accessor = StompHeaderAccessor.wrap(event.getMessage());
+                String wsSessionId = accessor.getSessionId(); // Use WebSocket Session ID
 
-                Map<String, Object> sessionAttributes = headerAccessor.getSessionAttributes();
+                if (wsSessionId != null) {
+                        removeViewer(wsSessionId);
+                }
+
+                Map<String, Object> sessionAttributes = accessor.getSessionAttributes();
                 if (sessionAttributes == null) {
                         return;
                 }
@@ -84,6 +150,9 @@ public class SignalingService {
                         // TODO: 주기적인 cleanup 배치 작업에서 처리
                         // - 미디어 서버의 고아 참가자 목록 조회 및 정리
                 }
+
+                // 시청자 목록에서도 제거
+                removeViewer(clientId);
         }
 
         /**

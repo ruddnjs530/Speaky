@@ -46,6 +46,9 @@ function isMsgType(t: unknown): t is MsgType {
         t === "SYS_PING" ||
         t === "SYS_PONG" ||
         t === "SYS_ERROR" ||
+        t === "SYS_SESSION_STARTED" ||
+        t === "SESSION_LIVE_STARTED" ||
+        t === "SYS_VIEWER_COUNT" ||
         t === "SIG_OFFER" ||
         t === "SIG_ANSWER" ||
         t === "SIG_ICE" ||

@@ -14,6 +14,7 @@ type ConnectArgs = {
   sessionId: string;
   clientId?: string;
   isResume?: boolean;
+  onMessage?: (msg: any) => void;
 };
 
 function mapToConnectionStatus(s: InternalStatus): ConnectionStatus {
@@ -154,46 +155,51 @@ export function useScreenShare() {
       onInbound: async (msg) => {
         console.log('[useScreenShare] Received Inbound Message:', msg.type);
 
-        // [수정] SYS_ACK(연결/Attached 확인) 수신 후 Offer 전송
+        // 외부 핸들러 호출
+        if (args.onMessage) {
+          args.onMessage(msg);
+        }
+
+        // [수정] SYS_ACK 수신 시: 이미 연결된 상태(stable)가 아니거나, 아직 Offer를 안 보낸 경우에만 Offer 전송
         if (msg.type === 'SYS_ACK') {
-          console.log('[useScreenShare] SYS_ACK received. Ready to negotiate.');
+          // 이미 연결 수립된 상태라면 추가 Offer 보내지 않음 (Renegotiation 필요한 경우 별도 처리)
+          if (pc.signalingState === 'stable' && pcRef.current?.remoteDescription) {
+            return;
+          }
 
-          // 이미 Offer를 보냈는지 체크하는 로직이 필요할 수 있음 (SignalingState check)
-          if (pc.signalingState === 'stable' && (role === 'host' || role === 'viewer')) {
-            // NOTE: 만약 재연결(resume) 상황에서 stable 상태라면, 
-            // 굳이 Offer를 안 보내도 될 수도 있지만, 
-            // 화면 공유 재개를 위해 renegotiation이 필요할 수 있음.
-            // 여기서는 간단히 ACK 오면 무조건 Offer를 보내도록 함 (중복 방지는 signalingState가 아니라 내부 플래그로 하면 더 좋음)
-
-            // 간단한 중복 방지: 이미 localDescription이 있으면 건너뛰기? 
-            // 아니면 단순히 항상 보냄 (Renegotiation)
-
-            // 만약 role이 viewer라면 receiveonly offer?
-            // -> 위에서 pc.addTransceiver로 설정됨.
-
-            if (!pc.localDescription) { // 아직 Offer 안 보낸 상태일 때만
-              try {
-                console.log('[useScreenShare] Creating Offer...');
-                const offer = await pc.createOffer();
-                await pc.setLocalDescription(offer);
-                console.log('[useScreenShare] Sending SIG_OFFER...');
-                sc.sendTyped('SIG_OFFER', {
-                  sdp: offer.sdp!,
-                  sdpType: offer.type as "offer"
-                });
-              } catch (e) {
-                console.error('[useScreenShare] Offer creation failed', e);
-                setError('Offer 생성 실패');
-              }
+          if (pc.signalingState === 'stable' || pc.signalingState === 'have-local-offer') {
+            // 혹시라도 이미 진행 중이면 스킵
+            if (pc.localDescription) {
+              return;
             }
+          }
+
+          try {
+            console.log('[useScreenShare] Creating Offer...');
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            sc.sendTyped('SIG_OFFER', {
+              sdp: offer.sdp!,
+              sdpType: offer.type as "offer"
+            });
+          } catch (e) {
+            console.error('[useScreenShare] Offer creation failed', e);
+            setError('Offer 생성 실패');
           }
         }
 
         if (msg.type === 'SIG_ANSWER') {
+          if (pc.signalingState === 'stable') {
+            console.warn('[useScreenShare] Received Answer in stable state. Ignoring duplicate answer.');
+            return;
+          }
+          if (pc.signalingState !== 'have-local-offer') {
+            console.warn(`[useScreenShare] Received Answer in wrong state: ${pc.signalingState}. Ignoring.`);
+            return;
+          }
+
           try {
             const sdp = (msg.payload as any).sdp;
-            console.log('[useScreenShare] Received Answer SDP:', sdp);
-            console.log('[useScreenShare] Current Signaling State:', pc.signalingState);
 
             await pc.setRemoteDescription({ type: 'answer', sdp });
 
@@ -205,7 +211,6 @@ export function useScreenShare() {
             setInternalStatus('connected');
           } catch (e) {
             console.error('Remote Desc Error Details:', e);
-            console.error('Failed SDP:', (msg.payload as any).sdp);
             setError('Answer 처리 실패');
             setInternalStatus('error');
           }
