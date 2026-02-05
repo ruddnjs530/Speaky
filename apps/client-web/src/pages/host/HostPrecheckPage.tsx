@@ -17,7 +17,7 @@ export default function HostPrecheckPage() {
     });
 
     const handleBack = () => {
-        navigate('/');
+        navigate('/start');
     };
 
     return (

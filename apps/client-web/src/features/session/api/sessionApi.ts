@@ -45,6 +45,13 @@ export const sessionApi = {
         return (await res.json()) as SessionResponse;
     },
 
+    // 1-1. 세션 조회 (재연결용)
+    async getSession(sessionId: string): Promise<SessionResponse> {
+        const res = await apiFetch(`/api/v1/sessions/${sessionId}`, { method: 'GET' });
+        if (!res.ok) throw await parseError(res);
+        return (await res.json()) as SessionResponse;
+    },
+
     // 세션 시작 (파라미터화)
     async startLive(
         sessionId: string,
