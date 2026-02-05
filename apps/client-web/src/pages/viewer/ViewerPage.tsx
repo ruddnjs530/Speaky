@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Volume2, VolumeX, Users, RefreshCcw, LogOut, Maximize, Minimize } from 'lucide-react';
+import { Users, RefreshCcw, LogOut, Maximize, Minimize } from 'lucide-react';
 import ViewerMediaPanel from '../../features/media/ui/ViewerMediaPanel';
 import AudioControl from '../../features/media/ui/AudioControl';
 import Card from '../../shared/ui/Card';
@@ -12,7 +12,7 @@ import { SignalingClient } from '../../shared/lib/signaling/SignalingClient';
 import { getAccessToken } from '../../shared/lib/authToken';
 import { useAuthRedirect } from '../../features/auth/lib/useAuthRedirect';
 import { WS_URL_DEFAULT } from '../../shared/config';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 
 import './ViewerPage.css';
 
@@ -52,7 +52,7 @@ export default function ViewerPage() {
   const navigate = useNavigate();
   // const location = useLocation(); // 인증 리팩토링 후 미사용
   const channelId = roomId ?? '';
-  const { remoteStream, status, connect } = useScreenShare();
+  const { remoteStream, status, connect, latency } = useScreenShare();
 
   useAuthRedirect();
 
@@ -274,10 +274,12 @@ export default function ViewerPage() {
           <span>{voiceModelId ? `AI 보이스 ${voiceModelId}` : '정보 없음'}</span>
         </div>
 
-        {/* 지연 시간 (더미 데이터) */}
-        <div className="viewerPage__latency">
-          지연 시간: <span className="viewerPage__latencyValue">25ms</span>
-        </div>
+        {/* 지연 시간 */}
+        {latency !== null && (
+          <div className="viewerPage__latency">
+            지연 시간: <span className="viewerPage__latencyValue">{latency}ms</span>
+          </div>
+        )}
       </motion.div>
 
       {/* 2. 메인 비디오 영역 */}
