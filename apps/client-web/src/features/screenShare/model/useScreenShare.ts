@@ -264,11 +264,12 @@ export function useScreenShare() {
         try {
           const stats = await pc.getStats();
           let rtt = null;
-          stats.forEach(report => {
+          for (const report of stats.values()) {
             if (report.type === 'candidate-pair' && report.state === 'succeeded' && report.currentRoundTripTime) {
               rtt = report.currentRoundTripTime * 1000;
+              break; // 찾으면 즉시 루프 종료 (최적화)
             }
-          });
+          }
           if (rtt !== null) setLatency(Math.round(rtt));
         } catch (e) { /* ignore */ }
       }, 2000);
