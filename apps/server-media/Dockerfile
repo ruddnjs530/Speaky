@@ -15,6 +15,7 @@ CMD ["air", "-c", ".air.toml"]
 
 FROM base AS builder
 COPY apps/server-media .
+RUN go mod tidy
 RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o bin/server ./cmd/server/main.go
 
 FROM alpine:3.21 AS prod

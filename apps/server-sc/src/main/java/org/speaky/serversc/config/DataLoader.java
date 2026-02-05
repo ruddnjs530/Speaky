@@ -46,6 +46,36 @@ public class DataLoader implements CommandLineRunner {
                 .build();
         userRepository.save(host);
         log.info("USER 사용자 생성: loginId={}", host.getLoginId());
+
+        User host2 = User.builder()
+                .loginId("st123")
+                .password(passwordEncoder.encode("pd123"))
+                .nickname("중리동버추얼신자")
+                .role(UserRole.USER)
+                .status(UserStatus.ACTIVE)
+                .build();
+        userRepository.save(host2);
+        log.info("USER 사용자 생성: loginId={}", host2.getLoginId());
+
+        User host3 = User.builder()
+                .loginId("st1234")
+                .password(passwordEncoder.encode("pd1234"))
+                .nickname("용문동쌍두마차")
+                .role(UserRole.USER)
+                .status(UserStatus.ACTIVE)
+                .build();
+        userRepository.save(host3);
+        log.info("USER 사용자 생성: loginId={}", host3.getLoginId());
+
+        User host4 = User.builder()
+                .loginId("stream12")
+                .password(passwordEncoder.encode("passw12"))
+                .nickname("행신동섹시허리케인")
+                .role(UserRole.USER)
+                .status(UserStatus.ACTIVE)
+                .build();
+        userRepository.save(host4);
+        log.info("USER 사용자 생성: loginId={}", host4.getLoginId());
         
         // 테스트 ADMIN 사용자
         User admin = User.builder()

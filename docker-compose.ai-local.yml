@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  # AI Server (Local GPU Mode)
+  server-ai:
+    build:
+      context: .
+      dockerfile: apps/server-ai/Dockerfile
+      target: prod
+    ports:
+      - "50051:50051" # Expose gRPC port to Host (Tailscale interface)
+    volumes:
+      # RVC Paths (Must be valid on host)
+      - ${RVC_ASSETS_PATH:-./rvc-models/assets}:/rvc-code/assets:ro
+      - ${RVC_CODE_INFER_PATH:-./rvc-models/infer}:/rvc-code/infer:ro
+      - ${RVC_CODE_CONFIGS_PATH:-./rvc-models/configs}:/rvc-code/configs
+      # Mount Python Protos
+      - ./packages/proto/generated/python:/packages/proto/generated/python:ro
+    environment:
+      - PYTHONPATH=/app:/packages/proto/generated/python
+      - RVC_WEBUI_ROOT=/rvc-code
+      - MODELS_CONFIG_PATH=/app/src/config/models.yaml
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c 'import socket; s=socket.socket(); s.connect((\"localhost\",50051)); s.close()'"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
