@@ -54,7 +54,7 @@ public class DataLoader implements CommandLineRunner {
                 .role(UserRole.USER)
                 .status(UserStatus.ACTIVE)
                 .build();
-        userRepository.save(host);
+        userRepository.save(host2);
         log.info("USER 사용자 생성: loginId={}", host2.getLoginId());
 
         User host3 = User.builder()
@@ -64,7 +64,7 @@ public class DataLoader implements CommandLineRunner {
                 .role(UserRole.USER)
                 .status(UserStatus.ACTIVE)
                 .build();
-        userRepository.save(host);
+        userRepository.save(host3);
         log.info("USER 사용자 생성: loginId={}", host3.getLoginId());
 
         User host4 = User.builder()
@@ -74,7 +74,7 @@ public class DataLoader implements CommandLineRunner {
                 .role(UserRole.USER)
                 .status(UserStatus.ACTIVE)
                 .build();
-        userRepository.save(host);
+        userRepository.save(host4);
         log.info("USER 사용자 생성: loginId={}", host4.getLoginId());
         
         // 테스트 ADMIN 사용자
