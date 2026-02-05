@@ -366,7 +366,7 @@ export default function ViewerPage() {
           </button>
 
           <button
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/start')}
             className="viewerPage__btnExit" // 디자인 일치를 위한 커스텀 클래스
           >
             <LogOut size={16} />

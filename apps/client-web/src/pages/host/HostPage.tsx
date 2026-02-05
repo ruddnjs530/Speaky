@@ -95,7 +95,7 @@ export default function HostPage() {
 
   // [핸들러 3] "종료" 버튼 핸들러 (Refactored)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const handleStop = async () => {
+  const handleStop = async (destination?: string) => {
     if (isEnding) return;
     setIsEnding(true);
 
@@ -116,8 +116,14 @@ export default function HostPage() {
     sessionStorage.removeItem('HOST_SIGNALING_TOKEN');
 
     setSessionId('');
-    setStep('setup');
     setIsEnding(false);
+
+    if (destination) {
+      intendedExitRef.current = true;
+      navigate(destination, { replace: true });
+    } else {
+      setStep('setup');
+    }
   };
 
   // Live 상태에서 연결이 끊기면(예: 브라우저 공유 중지) 자동으로 방송 종료 처리
@@ -468,10 +474,10 @@ export default function HostPage() {
                     </span>
                   )}
 
-                  <Button variant="secondary" onClick={handleStop} className="w-auto px-6">
+                  <Button variant="secondary" onClick={() => handleStop()} className="w-auto px-6">
                     설정으로
                   </Button>
-                  <Button onClick={handleStop} className="w-auto px-6 bg-red-600 hover:bg-red-700 text-white border-transparent whitespace-nowrap">
+                  <Button onClick={() => handleStop('/start')} className="w-auto px-6 bg-red-600 hover:bg-red-700 text-white border-transparent whitespace-nowrap">
                     방송 종료
                   </Button>
                 </div>
