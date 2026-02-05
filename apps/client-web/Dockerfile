@@ -1,7 +1,8 @@
 # ==========================================
 # Base Stage
 # ==========================================
-FROM node:20.11.1-alpine3.19 AS base
+# FROM node:20.11.1-alpine3.19 AS base
+FROM node:22-alpine AS base
 WORKDIR /app
 COPY apps/client-web/package.json apps/client-web/package-lock.json ./
 # Why: 'ci' ensures we use the exact versions in lockfile
