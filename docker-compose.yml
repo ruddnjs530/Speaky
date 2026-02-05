@@ -1,4 +1,4 @@
-version: '3.8'
+# version: '3.8'
 
 services:
   # 1. React Client (Production Build)
@@ -6,12 +6,12 @@ services:
     build:
       context: .
       dockerfile: apps/client-web/Dockerfile
-      target: prod  # Uses Nginx
+      target: prod # Uses Nginx
       args:
         VITE_API_URL: ${VITE_API_URL:-http://localhost:8080}
         VITE_WS_URL: ${VITE_WS_URL:-ws://localhost:8080/ws/signaling}
     ports:
-      - "5173:80"   # Expose Nginx port 80 as 5173 for consistency
+      - "5173:80" # Expose Nginx port 80 as 5173 for consistency
     environment:
       - VITE_API_URL=http://localhost:8080
       - VITE_WS_URL=ws://localhost:8080/ws/signaling
@@ -66,12 +66,12 @@ services:
           devices:
             - driver: nvidia
               count: all
-              capabilities: [gpu]
+              capabilities: [ gpu ]
     healthcheck:
-      test: ["CMD-SHELL", "python3 -c 'import socket; s=socket.socket(); s.connect((\"localhost\",50051)); s.close()'"]
+      test: [ "CMD-SHELL", "python3 -c 'import socket; s=socket.socket(); s.connect((\"localhost\",50051)); s.close()'" ]
       interval: 10s
       timeout: 5s
-      retries: 20    # 20 * 10s = 200s (~3.3 mins)
+      retries: 20 # 20 * 10s = 200s (~3.3 mins)
       start_period: 30s
 
   # 4. Signaling Server (Production JAR)

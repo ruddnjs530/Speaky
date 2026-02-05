@@ -119,43 +119,44 @@ export default function ViewerPage() {
         const code = getErrorCode(e);
         const msg = getErrorMessage(e) ?? '시청 연결 실패';
 
-        // 2. 방송 없음(NOT_ACTIVE) -> WebSocket 대기 모드 진입
-        if (code === 'SESSION_NOT_ACTIVE') {
-          dispatch({ type: 'NOT_ACTIVE' });
-
-          // 이미 대기 중 WS가 연결돼 있다면 패스
-          if (waitingScRef.current) return;
-
-          console.log('[AutoRouting] 방송 대기 모드: WS 연결 시작');
-
-          const wsUrl = WS_URL_DEFAULT;
-
-          const token = getAccessToken() ?? '';
-          const sc = new SignalingClient({
-            channelId,
-            sessionId: 'waiting',
-            role: 'GUEST',
-            clientId: 'waiting-' + Math.random().toString(36).slice(2)
-          }, {
-            onOpen: () => console.log('[AutoRouting] WS Connected (Waiting)'),
-            onInbound: (msg) => {
-              if (msg.type === 'SYS_SESSION_STARTED' || msg.type === 'SESSION_LIVE_STARTED') {
-                console.log('[AutoRouting] 방송 시작 감지! -> Retrying join');
-                // 여기서 닫지 않고, 재시도(attempt++) 시 cleanup 혹은 tryJoin 진입 시점에 처리
-                setAttempt(prev => prev + 1);
-              }
-            }
-          });
-          sc.connect(wsUrl, token);
-
-          waitingScRef.current = sc;
-          mySc = sc; // 내가 만든 소켓임 표시
-
-        } else if (code === 'UNAUTHORIZED') {
+        // [수정] 에러 종류에 따라 분기 처리
+        // 1. 치명적인 에러 (재시도해도 해결되지 않음) -> 에러 화면 표시
+        if (code === 'UNAUTHORIZED' || code === 'FORBIDDEN' || code === 'INVALID_TOKEN') {
+          console.error(`[Viewer] Fatal error: ${code}`);
           dispatch({ type: 'UNAUTHORIZED' });
-        } else {
-          dispatch({ type: 'ERROR', message: msg });
+          return;
         }
+
+        // 2. 그 외 연결 끊김/세션 없음 등 (재시도 가능) -> 대기 모드(NOT_ACTIVE)로 전환하여 재연결 시도
+        console.warn(`[AutoRetry] Connection failed/lost (${code}). Entering waiting mode.`);
+        dispatch({ type: 'NOT_ACTIVE' });
+
+        // 이미 대기 중 WS가 연결돼 있다면 패스
+        if (waitingScRef.current) return;
+
+        console.log('[AutoRouting] 방송 대기 모드: WS 연결 시작');
+
+        const wsUrl = WS_URL_DEFAULT;
+        // ... (이하 대기 로직 동일)
+        const token = getAccessToken() ?? '';
+        const sc = new SignalingClient({
+          channelId,
+          sessionId: 'waiting',
+          role: 'GUEST',
+          clientId: 'waiting-' + Math.random().toString(36).slice(2)
+        }, {
+          onOpen: () => console.log('[AutoRouting] WS Connected (Waiting)'),
+          onInbound: (msg) => {
+            if (msg.type === 'SYS_SESSION_STARTED' || msg.type === 'SESSION_LIVE_STARTED') {
+              console.log('[AutoRouting] 방송 시작 감지! -> Retrying join');
+              setAttempt(prev => prev + 1);
+            }
+          }
+        });
+        sc.connect(wsUrl, token);
+
+        waitingScRef.current = sc;
+        mySc = sc; // 내가 만든 소켓임 표시
       }
     };
 

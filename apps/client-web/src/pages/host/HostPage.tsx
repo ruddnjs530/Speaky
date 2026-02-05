@@ -35,8 +35,24 @@ export default function HostPage() {
   // 세션 ID 관리
   const [sessionId, setSessionId] = useState('');
 
+  // 1. [수정] 안정성을 위해 새로고침 시 세션 복구를 하지 않고 새로운 세션을 생성하도록 변경
+  useEffect(() => {
+    // 기존 세션 정보 삭제 (무조건 새 세션 시작)
+    sessionStorage.removeItem('HOST_SESSION_ID');
+    sessionStorage.removeItem('HOST_SIGNALING_TOKEN');
+
+    // 편의를 위해 제목은 유지
+    const savedTitle = sessionStorage.getItem('HOST_TITLE');
+    if (savedTitle) {
+      setTitle(savedTitle);
+    }
+  }, []);
+
   // 헬스 체크 모델 (마이크 모니터링용)
   const { health, actions, mic, voices } = usePrecheckModel();
+
+  // 종료 진행 상태 (중복 호출 방지)
+  const [isEnding, setIsEnding] = useState(false);
 
   // 초기 voiceModelId 설정
   const [voiceModelId] = useState<number | null>(() => {
@@ -69,12 +85,48 @@ export default function HostPage() {
 
   const { remoteStream, status, error, startCapture, connect, stopAll } = useScreenShare();
 
-  // stopAll이 이제 안정화되었으므로 바로 의존성에 포함 (ref 제거)
+  // 이미 실행된 stopAllEffect 대체 로직:
+  // 컴포넌트 언마운트 시에만 stopAll 호출
   useEffect(() => {
     return () => {
       stopAll();
     };
   }, [stopAll]);
+
+  // [핸들러 3] "종료" 버튼 핸들러 (Refactored)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const handleStop = async () => {
+    if (isEnding) return;
+    setIsEnding(true);
+
+    if (sessionId) {
+      try {
+        await sessionApi.endBroadcast(sessionId);
+      } catch (e) {
+        const msg = getErrorMessage(e) || '알 수 없는 오류';
+        console.error(`방송 종료 실패: ${msg}`, e);
+      }
+    }
+    stopAll();
+
+    // 세션 정보 삭제
+    sessionStorage.removeItem('HOST_SESSION_ID');
+    sessionStorage.removeItem('HOST_TITLE');
+    sessionStorage.removeItem('HOST_VOICE_ID');
+    sessionStorage.removeItem('HOST_SIGNALING_TOKEN');
+
+    setSessionId('');
+    setStep('setup');
+    setIsEnding(false);
+  };
+
+  // Live 상태에서 연결이 끊기면(예: 브라우저 공유 중지) 자동으로 방송 종료 처리
+  useEffect(() => {
+    // 페이지가 종료되는 중이라면(새로고침 등) 자동 종료 로직을 실행하지 않음
+    if (step === 'live' && status === 'idle' && !isEnding && !isUnloadingRef.current) {
+      handleStop();
+    }
+  }, [step, status, isEnding, handleStop]);
 
   // 송출 가능 조건: 타이틀 O, 연결 O, 세션 생성됨
   const canGoLive = title.trim().length > 0 && status === 'connected' && sessionId !== '';
@@ -95,16 +147,52 @@ export default function HostPage() {
   // 블로커가 'blocked' 상태일 때 모달 표시
   const showBlockerModal = blocker.state === 'blocked';
 
+  // 페이지 언마운트(새로고침/닫기) 감지 Ref
+  const isUnloadingRef = useRef(false);
+
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      isUnloadingRef.current = true;
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, []);
+
+  // 연결 진행 중 상태 (중복 클릭 방지)
+  const [isConnectProcessing, setIsConnectProcessing] = useState(false);
+
   // [핸들러 1] "서버 연결" 버튼 핸들러
   const handleConnect = async () => {
+    if (isConnectProcessing || status === 'connected' || status === 'connecting') return;
+    setIsConnectProcessing(true);
+
     try {
+      // 이미 세션 ID가 있다면(복구된 경우) -> 현재 로직상 존재할 수 없음 (mount 시 삭제됨)
+      // 하지만 방어적으로 남겨둔다면:
+      // 무조건 새로운 세션 생성 (새로고침 시 복구 안함)
+      if (sessionId) {
+        console.warn('Unexpected sessionId present. Should be cleared on mount.');
+      }
+
       const session = await sessionApi.createSession(title, voiceModelId);
       console.log('Session Created: ', session);
+
+      // 세션 정보 저장
+      sessionStorage.setItem('HOST_SESSION_ID', session.sessionId);
+      sessionStorage.setItem('HOST_TITLE', title);
+      if (voiceModelId) sessionStorage.setItem('HOST_VOICE_ID', String(voiceModelId));
+      if (session.signalingToken) sessionStorage.setItem('HOST_SIGNALING_TOKEN', session.signalingToken);
+
       setSessionId(session.sessionId);
 
+      // 토큰 우선순위: 1. API 응답 2. 저장된 토큰(복구) 3. 액세스 토큰
+      const savedToken = sessionStorage.getItem('HOST_SIGNALING_TOKEN');
       const userToken = getAccessToken();
-      const finalToken = session.signalingToken || userToken;
+      const finalToken = session.signalingToken || savedToken || userToken;
       const finalWsUrl = session.wsUrl || WS_URL;
+
       if (!finalToken) {
         alert('로그인 후 이용해주세요 (또는 서버 토큰 발급 실패)');
         return;
@@ -115,11 +203,20 @@ export default function HostPage() {
         wsUrl: finalWsUrl,
         token: finalToken,
         channelId: session.channelId || `host-${session.hostUserId}`,
-        sessionId: session.sessionId
+        sessionId: session.sessionId,
+        isResume: false // 새로고침 시 무조건 새 세션이므로 false
       });
     } catch (e) {
       console.error(e);
       alert('세션 생성/연결 실패');
+      // 복구 실패 시 세션 정보 초기화
+      if (sessionId) {
+        sessionStorage.removeItem('HOST_SESSION_ID');
+        sessionStorage.removeItem('HOST_SIGNALING_TOKEN');
+        setSessionId('');
+      }
+    } finally {
+      setIsConnectProcessing(false);
     }
   };
 
@@ -127,33 +224,31 @@ export default function HostPage() {
   const handleGoLive = async () => {
     if (!sessionId) return;
     try {
+      // 세션 상태 확인 (이미 LIVE인지)
+      const currentSession = await sessionApi.getSession(sessionId);
+      if (currentSession.status === 'LIVE' || currentSession.status === 'STARTING') {
+        console.log('Session is already LIVE. Resuming UI state.');
+        setStep('live');
+        return;
+      }
+
       await sessionApi.startLive(sessionId);
       setStep('live');
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      alert('방송 시작 실패');
-    }
-  };
-
-  // [핸들러 3] "종료" 버튼 핸들러
-  const handleStop = async () => {
-    if (sessionId) {
-      try {
-        await sessionApi.endBroadcast(sessionId);
-      } catch (e) {
-        const msg = getErrorMessage(e) || '알 수 없는 오류';
-        console.error(`방송 종료 실패: ${msg}`, e);
+      // 이미 진행 중인 세션이라는 에러 코드(SESSION_ALREADY_ACTIVE 등)가 오면 바로 live로 전환
+      if (e.code === 'SESSION_ALREADY_ACTIVE' || e.message?.includes('already active')) {
+        setStep('live');
+      } else {
+        alert('방송 시작 실패: ' + (e.message || '알 수 없는 오류'));
       }
     }
-    stopAll();
-    setShowEndModal(true);
-    setSessionId('');
   };
 
   const confirmEnd = () => {
     setShowEndModal(false);
     intendedExitRef.current = true; // 정상 종료 플래그 설정
-    navigate('/', { replace: true });
+    navigate('/start', { replace: true });
   };
 
   return (
@@ -173,7 +268,7 @@ export default function HostPage() {
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-1 text-sm font-medium">
             <Link
-              to="/"
+              to="/start"
               className="px-3 py-2 rounded-lg text-gray-600 hover:bg-orange-100 hover:text-orange-600 transition-colors"
             >
               홈으로
@@ -375,7 +470,7 @@ export default function HostPage() {
                   <Button variant="secondary" onClick={handleStop} className="w-auto px-6">
                     설정으로
                   </Button>
-                  <Button onClick={handleStop} className="w-auto px-6 bg-red-600 hover:bg-red-700 text-white border-transparent">
+                  <Button onClick={handleStop} className="w-auto px-6 bg-red-600 hover:bg-red-700 text-white border-transparent whitespace-nowrap">
                     방송 종료
                   </Button>
                 </div>
