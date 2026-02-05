@@ -3,6 +3,7 @@ package core
 import (
 	"fmt"
 	"sync"
+    "github.com/google/uuid"
 )
 
 // VoiceProfile represents a configured voice profile.
@@ -26,17 +27,12 @@ func NewProfileManager() *ProfileManager {
 }
 
 // CreateProfile stores a new voice profile and returns it.
-// Uses UUID for ID generation (simulated here for simplicity or passed in).
-// For now, we will generate a simple ID or expect one. 
-// Let's assume the caller might want to control the ID, or we generate one.
-// To keep it simple and consistent with the plan, we'll generate one if not provided,
-// but the plan implied the server generates it.
 func (pm *ProfileManager) CreateProfile(voiceModelID int64, pitchScale float32) *VoiceProfile {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
-	// Simple ID generation
-	id := fmt.Sprintf("profile-%d-%d", voiceModelID, len(pm.profiles)+1)
+	// Generate UUID
+	id := uuid.New().String()
 	
 	profile := &VoiceProfile{
 		ID:           id,
@@ -58,4 +54,11 @@ func (pm *ProfileManager) GetProfile(id string) (*VoiceProfile, error) {
 		return nil, fmt.Errorf("profile not found: %s", id)
 	}
 	return profile, nil
+}
+
+// DeleteProfile removes a profile by ID.
+func (pm *ProfileManager) DeleteProfile(id string) {
+	pm.mu.Lock()
+	defer pm.mu.Unlock()
+	delete(pm.profiles, id)
 }

@@ -94,6 +94,12 @@ func (m *Manager) DeleteRoom(roomID string) error {
 	defer m.mu.Unlock()
 
 	if room, exists := m.rooms[roomID]; exists {
+		// Cleanup Profile if it exists
+		if room.VoiceProfile != nil {
+			m.profileManager.DeleteProfile(room.VoiceProfile.ID)
+			slog.Info("Deleted associated voice profile", "profileID", room.VoiceProfile.ID)
+		}
+
 		room.Close() // Ensure resources are freed
 		delete(m.rooms, roomID)
 	} else {
