@@ -187,8 +187,18 @@ func (p *AudioProcessor) processInputPacket(stream upstream.VoiceStream, pipePkt
 
         slog.Info("AP: Sending chunk to AI", "bytes", len(pcmBytes), "modelID", modelID, "sampleRate", p.cfg.AudioSampleRate)
 		
-		// Track send time
+		// Track send time with Clean Up
 		p.aiSendMu.Lock()
+		// Lazy cleanup: if map gets too big (e.g. > 100 entries, implying ~2s of unreturned chunks), prune old ones.
+		if len(p.aiSendTimes) > 100 {
+			now := time.Now()
+			expiration := time.Duration(p.cfg.AIBufferDuration)*time.Millisecond + 10*time.Second
+			for ts, t := range p.aiSendTimes {
+				if now.Sub(t) > expiration {
+					delete(p.aiSendTimes, ts)
+				}
+			}
+		}
 		p.aiSendTimes[chunk.Timestamp] = time.Now()
 		p.aiSendMu.Unlock()
 

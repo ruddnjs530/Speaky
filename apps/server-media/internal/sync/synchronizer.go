@@ -30,23 +30,29 @@ func NewSynchronizer() *Synchronizer {
 func (s *Synchronizer) RunAudioPump(ctx context.Context, queue *pipeline.Queue[pipeline.RTPPacket], frameDuration time.Duration, onFrame func([]byte)) {
 	slog.Info("Sync: AudioPump Started", "pacingMs", frameDuration.Milliseconds())
 	go func() {
-		ticker := time.NewTicker(frameDuration)
-		defer ticker.Stop()
 
+		var lastSendTime time.Time
+		
 		for {
-			// 1. Pacing: Wait for tick (Rate Limit)
-			// This ensures we don't dump 5s of audio in 1ms.
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				// Proceed to read
-			}
-
 			packet, err := queue.Pop(ctx)
 			if err != nil {
 				return // Context cancelled or queue closed
 			}
+
+			// Pacing Logic: Sleep-based Rate Limiting
+			// 1. If we just sent a packet, wait until the next slot (frameDuration).
+			// 2. If we were idle (queue empty) for a long time, lastSendTime is old,
+			//    so time.Since > frameDuration, and we send IMMEDIATELY (no sleep).
+			//    This fixes the issue where the first packet of a burst was delayed unnecessarily.
+			
+			elapsed := time.Since(lastSendTime)
+			if elapsed < frameDuration {
+				time.Sleep(frameDuration - elapsed)
+			}
+			
+			// Update lastSendTime to NOW (after the sleep)
+			// This enforces at least 'frameDuration' interval between physical sends.
+			lastSendTime = time.Now()
 
 			// Measure Latency (Simulating Audio Processing Duration)
 			// In real transcoding, this loop runs AFTER transcoding/AI.
