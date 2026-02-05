@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { SignalingClient } from '../../../shared/lib/signaling/SignalingClient';
 import type { ConnectionStatus } from '../../media/model/useConnectionStatus';
 
@@ -107,13 +107,13 @@ export function useScreenShare() {
     const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
     pcRef.current = pc;
 
-    // Configure transceivers based on role
+    // 역할에 따른 트랜시버 구성
     if (role === 'viewer') {
-      // Viewer only receives
+      // 시청자는 수신만 함
       pc.addTransceiver('video', { direction: 'recvonly' });
       pc.addTransceiver('audio', { direction: 'recvonly' });
     } else if (role === 'host') {
-      // Host sends AND receives (to get processed media back)
+      // 호스트는 송수신 모두 수행 (서버에서 처리된 미디어를 다시 받기 위함)
       pc.addTransceiver('video', { direction: 'sendrecv' });
       pc.addTransceiver('audio', { direction: 'sendrecv' });
     }
@@ -254,6 +254,32 @@ export function useScreenShare() {
 
   }, [cleanup]); // localStream 의존성 제거
 
+  // 정리(Clean up)를 위한 Interval Ref
+  const statsIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (internalStatus === 'connected' && pcRef.current) {
+      const pc = pcRef.current;
+      statsIntervalRef.current = setInterval(async () => {
+        try {
+          const stats = await pc.getStats();
+          let rtt = null;
+          for (const report of stats.values()) {
+            if (report.type === 'candidate-pair' && report.state === 'succeeded' && report.currentRoundTripTime) {
+              rtt = report.currentRoundTripTime * 1000;
+              break; // 찾으면 즉시 루프 종료 (최적화)
+            }
+          }
+          if (rtt !== null) setLatency(Math.round(rtt));
+        } catch (e) { /* ignore */ }
+      }, 2000);
+    }
+
+    return () => {
+      if (statsIntervalRef.current) clearInterval(statsIntervalRef.current);
+    };
+  }, [internalStatus]);
+
   const stopAll = useCallback(() => {
     cleanup();
     localStreamRef.current?.getTracks().forEach(t => t.stop());
@@ -262,7 +288,10 @@ export function useScreenShare() {
     setRemoteStream(null);
     setInternalStatus('idle');
     setError('');
+    setLatency(null);
   }, [cleanup]);
 
-  return { localStream, remoteStream, status: mapToConnectionStatus(internalStatus), error, startCapture, connect, stopAll };
+  const [latency, setLatency] = useState<number | null>(null);
+
+  return { localStream, remoteStream, status: mapToConnectionStatus(internalStatus), error, startCapture, connect, stopAll, latency };
 }
