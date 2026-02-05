@@ -38,7 +38,8 @@ RUN npx vite build
 FROM nginx:1.25-alpine AS prod
 # Updated: Correctly reference builder stage
 COPY --from=builder /app/dist /usr/share/nginx/html
-# Fix: Copy custom nginx config for SPA routing
+# Fix: Remove default config and copy custom nginx config
+RUN rm /etc/nginx/conf.d/default.conf
 COPY apps/client-web/nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
