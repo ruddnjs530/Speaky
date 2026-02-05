@@ -36,7 +36,7 @@ services:
       - AI_SERVER_ADDR=server-ai:50051
       - PION_NAT_1_1_HOST=127.0.0.1 # Essential for Localhost TCP Bridge
       - WEBRTC_MAX_PORT=50100
-      - AI_BUFFER_DURATION=2400 # Increased from default 400ms
+      - AI_BUFFER_DURATION=5000 # Increased from default 400ms
     depends_on:
       server-ai:
         condition: service_healthy

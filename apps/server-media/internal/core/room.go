@@ -207,7 +207,23 @@ func (r *Room) BroadcastTrack(fromUserID string, track *webrtc.TrackRemote, ctx 
 	}
 
 	if activeTrack.Kind == webrtc.RTPCodecTypeAudio {
-		activeTrack.audioQueue = pipeline.NewQueue[pipeline.RTPPacket](100)
+		// Audio Queue Capacity
+		// We need to hold the entire burst from AI without dropping packets before the Pacer can send them.
+		// Capacity = packets per chunk + safety margin
+		frameDurationMs := r.cfg.AudioFrameDuration
+		if frameDurationMs <= 0 {
+			frameDurationMs = 20
+		}
+		
+		framesPerChunk := r.cfg.AIBufferDuration / frameDurationMs
+		// safety margin 2x to handle overlap or jitter
+		audioQueueCapacity := framesPerChunk * 2
+		if audioQueueCapacity < 100 { 
+			audioQueueCapacity = 100 
+		}
+
+		slog.Info("Initializing Audio Queue", "capacity", audioQueueCapacity, "aiBufferMs", r.cfg.AIBufferDuration)
+		activeTrack.audioQueue = pipeline.NewQueue[pipeline.RTPPacket](audioQueueCapacity)
 
 		// Initialize AudioProcessor if VoiceProcessor is available
 		if r.voiceProcessor != nil {
@@ -244,14 +260,44 @@ func (r *Room) BroadcastTrack(fromUserID string, track *webrtc.TrackRemote, ctx 
 
 		// Start Audio Pump (Async)
 		if session != nil {
-			session.Synchronizer.RunAudioPump(trackCtx, activeTrack.audioQueue, onFrame)
+			// Get frame duration from config (default 20ms)
+			frameDuration := time.Duration(r.cfg.AudioFrameDuration) * time.Millisecond
+			if frameDuration == 0 {
+				frameDuration = 20 * time.Millisecond
+			}
+
+			session.Synchronizer.RunAudioPump(trackCtx, activeTrack.audioQueue, frameDuration, onFrame)
 		} else {
 			slog.Warn("Session not found for track owner, pipeline disabled", "userID", fromUserID)
 		}
 
 	} else if activeTrack.Kind == webrtc.RTPCodecTypeVideo {
-		// Video Buffer with 2000 packet capacity (~10s @ 200pps) to prevent eviction before 3s delay
-		activeTrack.videoBuffer = media_sync.NewVideoBuffer(2000, 600*time.Millisecond)
+		// Video Buffer Configuration
+		// AI Buffer Duration affects the latency of the entire pipeline.
+		// We must delay video by the same amount to maintain sync.
+		delayMs := r.cfg.AIBufferDuration
+		if delayMs <= 0 {
+			delayMs = 400 // Default fallback
+		}
+		
+		// Capacity Calculation:
+		// We need enough buffer to hold packets for 'delayMs'.
+		// Heuristic: 2 packets per ms (2000 packets/sec) covers 60fps high-bitrate scenarios safely.
+		// Example: 5000ms -> 10,000 packets.
+		capacity := delayMs * 2
+
+		// Clamp minimums
+		if capacity < 100 {
+			capacity = 100
+		}
+
+		slog.Info("Initializing Video Buffer", 
+			"trackID", activeTrack.Remote.ID(),
+			"delayMs", delayMs, 
+			"capacity", capacity,
+		)
+
+		activeTrack.videoBuffer = media_sync.NewVideoBuffer(capacity, time.Duration(delayMs)*time.Millisecond)
 
 		// Start Video Pump (Async)
 		if session != nil {

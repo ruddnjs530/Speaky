@@ -25,10 +25,24 @@ func NewSynchronizer() *Synchronizer {
 // RunAudioPump starts the audio consumer loop.
 // It consumes from the audio queue, measures "Processing Latency" (Time - ArrivalTime),
 // feeds the estimator, and outputs via onFrame.
-func (s *Synchronizer) RunAudioPump(ctx context.Context, queue *pipeline.Queue[pipeline.RTPPacket], onFrame func([]byte)) {
-	slog.Info("Sync: AudioPump Started")
+// CRITICAL: frameDuration controls the Pacing. We MUST send 1 packet per frameDuration
+// to avoid network bursts when AI returns large chunks (e.g. 5s) instantly.
+func (s *Synchronizer) RunAudioPump(ctx context.Context, queue *pipeline.Queue[pipeline.RTPPacket], frameDuration time.Duration, onFrame func([]byte)) {
+	slog.Info("Sync: AudioPump Started", "pacingMs", frameDuration.Milliseconds())
 	go func() {
+		ticker := time.NewTicker(frameDuration)
+		defer ticker.Stop()
+
 		for {
+			// 1. Pacing: Wait for tick (Rate Limit)
+			// This ensures we don't dump 5s of audio in 1ms.
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				// Proceed to read
+			}
+
 			packet, err := queue.Pop(ctx)
 			if err != nil {
 				return // Context cancelled or queue closed
@@ -44,10 +58,6 @@ func (s *Synchronizer) RunAudioPump(ctx context.Context, queue *pipeline.Queue[p
 			// Update the estimator
 			s.estimator.Update(latency)
 
-			// Output payload
-			onFrame(packet.Data)
-
-			// Log occasionally
 			// Output payload
 			onFrame(packet.Data)
 		}
