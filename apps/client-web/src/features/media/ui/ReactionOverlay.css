@@ -20,9 +20,9 @@
 }
 
 .reaction-gif {
-    width: 80px;
+    width: 160px;
     /* Increased size for better visibility */
-    height: 80px;
+    height: 160px;
     object-fit: contain;
     opacity: 1 !important;
     /* Force opacity */
