@@ -1,0 +1,56 @@
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+.reaction-overlay {
+    position: absolute;
+    bottom: 30px;
+    /* Slightly higher */
+    right: 30px;
+    /* Slightly more logic */
+    display: flex;
+    pointer-events: none;
+    z-index: 10;
+}
+
+.reaction-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    /* Fade in animation for switching */
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+.reaction-gif {
+    width: 80px;
+    /* Increased size for better visibility */
+    height: 80px;
+    object-fit: contain;
+    opacity: 1 !important;
+    /* Force opacity */
+    filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.5));
+    /* Make it pop against video */
+
+    /* Subtle bounce */
+    animation: bounce 2s infinite ease-in-out;
+}
+
+@keyframes bounce {
+
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(-5px);
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
