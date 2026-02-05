@@ -226,7 +226,8 @@ export default function HostPage() {
     try {
       // 세션 상태 확인 (이미 LIVE인지)
       const currentSession = await sessionApi.getSession(sessionId);
-      if (currentSession.status === 'LIVE' || currentSession.status === 'STARTING') {
+
+      if (currentSession.status === 'LIVE') {
         console.log('Session is already LIVE. Resuming UI state.');
         setStep('live');
         return;
