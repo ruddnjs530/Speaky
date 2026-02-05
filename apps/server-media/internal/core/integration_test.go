@@ -16,7 +16,7 @@ import (
 func TestIntegration_BroadcastTrack_SubscriberManagement(t *testing.T) {
 	cfg := &config.Config{}
 	api := &webrtc.API{}
-	room := NewRoom("test-room", "host", cfg, api, nil, nil)
+	room := NewRoom("test-room", "host", nil, cfg, api, nil, nil)
 	defer room.Close()
 
 	// Create 2 sessions manually
@@ -50,7 +50,7 @@ func TestIntegration_BroadcastTrack_SubscriberManagement(t *testing.T) {
 func TestIntegration_Leave_SubscriberCleanup(t *testing.T) {
 	cfg := &config.Config{}
 	api := &webrtc.API{}
-	room := NewRoom("test-room", "host", cfg, api, nil, nil)
+	room := NewRoom("test-room", "host", nil, cfg, api, nil, nil)
 	defer room.Close()
 
 	// Create session
@@ -114,7 +114,7 @@ func TestIntegration_Leave_SubscriberCleanup(t *testing.T) {
 func TestIntegration_OwnerLeave_TrackRemoval(t *testing.T) {
 	cfg := &config.Config{}
 	api := &webrtc.API{}
-	room := NewRoom("test-room", "host", cfg, api, nil, nil)
+	room := NewRoom("test-room", "host", nil, cfg, api, nil, nil)
 	defer room.Close()
 
 	// Create host session
@@ -169,7 +169,7 @@ func TestIntegration_OwnerLeave_TrackRemoval(t *testing.T) {
 func TestIntegration_Join_Basic(t *testing.T) {
 	cfg := &config.Config{}
 	api := &webrtc.API{}
-	room := NewRoom("test-room", "host", cfg, api, nil, nil)
+	room := NewRoom("test-room", "host", nil, cfg, api, nil, nil)
 	defer room.Close()
 
 	// Inject one session manually (simulating existing user)

@@ -27,7 +27,7 @@ func TestAudioProcessor_EndToEnd(t *testing.T) {
 		AudioChannels:      1,
 		AIBufferDuration:   20,
 		AudioFrameDuration: 20,
-	}, mockClient, outQueue)
+	}, mockClient, outQueue, 1, 1.0)
 	require.NoError(t, err)
 
 	// 3. Create Input Channel

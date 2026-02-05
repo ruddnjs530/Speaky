@@ -49,7 +49,7 @@ type AudioProcessor struct {
 }
 
 // NewAudioProcessor creates a new AudioProcessor.
-func NewAudioProcessor(cfg *config.Config, aiClient upstream.VoiceProcessor, outQueue *pipeline.Queue[pipeline.RTPPacket]) (*AudioProcessor, error) {
+func NewAudioProcessor(cfg *config.Config, aiClient upstream.VoiceProcessor, outQueue *pipeline.Queue[pipeline.RTPPacket], voiceModelID int64, pitchScale float32) (*AudioProcessor, error) {
     decoder, err := transcode.NewOpusDecoder(cfg.AudioSampleRate, 1)
     if err != nil {
         return nil, err
@@ -71,6 +71,16 @@ func NewAudioProcessor(cfg *config.Config, aiClient upstream.VoiceProcessor, out
     }
     bufferLimit := cfg.AudioSampleRate * bufferMs / 1000
 
+    // Ensure voiceModelID is valid (default to 1)
+    if voiceModelID <= 0 {
+        voiceModelID = 1
+    }
+
+    // Default pitch if invalid
+    if pitchScale <= 0 {
+        pitchScale = 1.0
+    }
+
     return &AudioProcessor{
         decoder:     decoder,
         encoder:     encoder,
@@ -82,8 +92,8 @@ func NewAudioProcessor(cfg *config.Config, aiClient upstream.VoiceProcessor, out
         tsMap:       make(map[uint32]time.Time),
         aiSendTimes: make(map[uint32]time.Time),
 		cfg:         cfg,
-		currentModelID: 1,   // Default
-		currentPitch:   1.0, // Default
+		currentModelID: voiceModelID,
+		currentPitch:   pitchScale,
     }, nil
 }
 
