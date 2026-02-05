@@ -47,7 +47,7 @@ public class DataLoader implements CommandLineRunner {
         userRepository.save(host);
         log.info("USER 사용자 생성: loginId={}", host.getLoginId());
 
-        User host = User.builder()
+        User host2 = User.builder()
                 .loginId("st123")
                 .password(passwordEncoder.encode("pd123"))
                 .nickname("중리동버추얼신자")
@@ -55,9 +55,9 @@ public class DataLoader implements CommandLineRunner {
                 .status(UserStatus.ACTIVE)
                 .build();
         userRepository.save(host);
-        log.info("USER 사용자 생성: loginId={}", host.getLoginId());
+        log.info("USER 사용자 생성: loginId={}", host2.getLoginId());
 
-        User host = User.builder()
+        User host3 = User.builder()
                 .loginId("st1234")
                 .password(passwordEncoder.encode("pd1234"))
                 .nickname("용문동쌍두마차")
@@ -65,9 +65,9 @@ public class DataLoader implements CommandLineRunner {
                 .status(UserStatus.ACTIVE)
                 .build();
         userRepository.save(host);
-        log.info("USER 사용자 생성: loginId={}", host.getLoginId());
+        log.info("USER 사용자 생성: loginId={}", host3.getLoginId());
 
-        User host = User.builder()
+        User host4 = User.builder()
                 .loginId("stream12")
                 .password(passwordEncoder.encode("passw12"))
                 .nickname("행신동섹시허리케인")
@@ -75,7 +75,7 @@ public class DataLoader implements CommandLineRunner {
                 .status(UserStatus.ACTIVE)
                 .build();
         userRepository.save(host);
-        log.info("USER 사용자 생성: loginId={}", host.getLoginId());
+        log.info("USER 사용자 생성: loginId={}", host4.getLoginId());
         
         // 테스트 ADMIN 사용자
         User admin = User.builder()
