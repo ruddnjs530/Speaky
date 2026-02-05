@@ -119,8 +119,15 @@ export default function ViewerPage() {
         const code = getErrorCode(e);
         const msg = getErrorMessage(e) ?? '시청 연결 실패';
 
-        // [수정] 연결 실패/종료 시 무조건 대기 모드(NOT_ACTIVE)로 전환하여 재연결 시도
-        // 기존에는 SESSION_NOT_ACTIVE만 대기했지만, 이제는 WS 연결 끊김 등도 대기로 처리
+        // [수정] 에러 종류에 따라 분기 처리
+        // 1. 치명적인 에러 (재시도해도 해결되지 않음) -> 에러 화면 표시
+        if (code === 'UNAUTHORIZED' || code === 'FORBIDDEN' || code === 'INVALID_TOKEN') {
+          console.error(`[Viewer] Fatal error: ${code}`);
+          dispatch({ type: 'UNAUTHORIZED' });
+          return;
+        }
+
+        // 2. 그 외 연결 끊김/세션 없음 등 (재시도 가능) -> 대기 모드(NOT_ACTIVE)로 전환하여 재연결 시도
         console.warn(`[AutoRetry] Connection failed/lost (${code}). Entering waiting mode.`);
         dispatch({ type: 'NOT_ACTIVE' });
 
@@ -130,7 +137,7 @@ export default function ViewerPage() {
         console.log('[AutoRouting] 방송 대기 모드: WS 연결 시작');
 
         const wsUrl = WS_URL_DEFAULT;
-
+        // ... (이하 대기 로직 동일)
         const token = getAccessToken() ?? '';
         const sc = new SignalingClient({
           channelId,
@@ -142,7 +149,6 @@ export default function ViewerPage() {
           onInbound: (msg) => {
             if (msg.type === 'SYS_SESSION_STARTED' || msg.type === 'SESSION_LIVE_STARTED') {
               console.log('[AutoRouting] 방송 시작 감지! -> Retrying join');
-              // 여기서 닫지 않고, 재시도(attempt++) 시 cleanup 혹은 tryJoin 진입 시점에 처리
               setAttempt(prev => prev + 1);
             }
           }

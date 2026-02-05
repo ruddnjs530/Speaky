@@ -169,29 +169,21 @@ export default function HostPage() {
     setIsConnectProcessing(true);
 
     try {
-      let session;
-      let isResume = false;
-
-      // 이미 세션 ID가 있다면(복구된 경우) 새로 만들지 않고 가져오기
+      // 이미 세션 ID가 있다면(복구된 경우) -> 현재 로직상 존재할 수 없음 (mount 시 삭제됨)
+      // 하지만 방어적으로 남겨둔다면:
+      // 무조건 새로운 세션 생성 (새로고침 시 복구 안함)
       if (sessionId) {
-        console.log('Resuming Session:', sessionId);
-        session = await sessionApi.getSession(sessionId);
-        // isResume = true; // [수정] 새로고침 시에는 미디어 세션이 초기화되므로, 서버에도 새로운 협상(resume: false)을 요청해야 함
-        isResume = false;
-
-        // [중요] 이미 LIVE 상태라면 바로 Live 모드로 진입 준비 (단, 화면 공유는 다시 해야 함)
-      } else {
-        session = await sessionApi.createSession(title, voiceModelId);
-        console.log('Session Created: ', session);
-
-        // 세션 정보 저장
-        sessionStorage.setItem('HOST_SESSION_ID', session.sessionId);
-        sessionStorage.setItem('HOST_TITLE', title);
-        if (voiceModelId) sessionStorage.setItem('HOST_VOICE_ID', String(voiceModelId));
-        if (session.signalingToken) sessionStorage.setItem('HOST_SIGNALING_TOKEN', session.signalingToken);
-
-
+        console.warn('Unexpected sessionId present. Should be cleared on mount.');
       }
+
+      const session = await sessionApi.createSession(title, voiceModelId);
+      console.log('Session Created: ', session);
+
+      // 세션 정보 저장
+      sessionStorage.setItem('HOST_SESSION_ID', session.sessionId);
+      sessionStorage.setItem('HOST_TITLE', title);
+      if (voiceModelId) sessionStorage.setItem('HOST_VOICE_ID', String(voiceModelId));
+      if (session.signalingToken) sessionStorage.setItem('HOST_SIGNALING_TOKEN', session.signalingToken);
 
       setSessionId(session.sessionId);
 
@@ -212,7 +204,7 @@ export default function HostPage() {
         token: finalToken,
         channelId: session.channelId || `host-${session.hostUserId}`,
         sessionId: session.sessionId,
-        isResume
+        isResume: false // 새로고침 시 무조건 새 세션이므로 false
       });
     } catch (e) {
       console.error(e);
