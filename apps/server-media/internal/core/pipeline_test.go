@@ -25,7 +25,7 @@ func TestPhase3_Pipeline_AudioFlow(t *testing.T) {
 	mockAI := &ai.MockClient{}
 
 	// Create Room
-	room := NewRoom("pipeline-test-room", "host", cfg, api, mockAI, nil)
+	room := NewRoom("pipeline-test-room", "host", nil, cfg, api, mockAI, nil)
 	defer room.Close()
 
 	// 2a. Setup Synchronizer (Mock Session context)
@@ -47,7 +47,7 @@ func TestPhase3_Pipeline_AudioFlow(t *testing.T) {
 	onFrame := func(data []byte) {
 		// Mock subscriber write
 	}
-	sync.RunAudioPump(ctx, activeTrack.audioQueue, onFrame)
+	sync.RunAudioPump(ctx, activeTrack.audioQueue, 20*time.Millisecond, onFrame)
 
 	// 4. Inject Data into Queue (Ingress)
 	payload := []byte{0xDE, 0xAD, 0xBE, 0xEF}
@@ -82,7 +82,7 @@ func TestPhase3_Pipeline_VideoConstraint(t *testing.T) {
 	videoOut := make(chan []byte, 10)
 
 	// 2. Start Pumps
-	sync.RunAudioPump(ctx, audioQueue, func(data []byte) {
+	sync.RunAudioPump(ctx, audioQueue, 20*time.Millisecond, func(data []byte) {
 		audioOut <- data
 	})
 	sync.RunVideoPump(ctx, videoBuffer, func(data []byte) {

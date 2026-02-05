@@ -26,24 +26,42 @@ func NewServer(manager *core.Manager) *MediaServiceServer {
 	}
 }
 
-// CreateRoom creates a new media room.
+// CreateRoom creates a new room.
 func (s *MediaServiceServer) CreateRoom(ctx context.Context, req *pb.CreateRoomRequest) (*pb.CreateRoomResponse, error) {
 	roomID := req.RoomId
 	if roomID == "" {
 		return nil, status.Error(codes.InvalidArgument, "room_id is required")
 	}
 	hostID := req.HostId
+	voiceProfileID := req.VoiceProfileId
 
-	room, err := s.manager.GetOrCreateRoom(roomID, hostID)
+	room, err := s.manager.GetOrCreateRoom(roomID, hostID, voiceProfileID)
 	if err != nil {
 		return nil, mapErrorToGRPC(err)
 	}
 
-	slog.Info("CreateRoom called", "roomID", room.ID, "hostID", req.HostId)
-
 	return &pb.CreateRoomResponse{
 		Success: true,
 		RoomId:  room.ID,
+	}, nil
+}
+
+// CreateProfile creates a new voice profile.
+func (s *MediaServiceServer) CreateProfile(ctx context.Context, req *pb.CreateProfileRequest) (*pb.VoiceProfile, error) {
+	voiceModelID := req.VoiceModelId
+	pitchScale := req.PitchScale
+
+	// Basic validation
+	if voiceModelID <= 0 {
+		return nil, status.Error(codes.InvalidArgument, "invalid voice_model_id")
+	}
+
+	profile := s.manager.CreateProfile(voiceModelID, pitchScale)
+
+	return &pb.VoiceProfile{
+		Id:           profile.ID,
+		VoiceModelId: profile.VoiceModelID,
+		PitchScale:   profile.PitchScale,
 	}, nil
 }
 

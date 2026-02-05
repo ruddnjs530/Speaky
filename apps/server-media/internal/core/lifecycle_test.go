@@ -16,7 +16,7 @@ func TestLifecycle_AutoDestruction(t *testing.T) {
 	manager := NewRoomManager(cfg, api, nil, nil)
 
 	// 1. Create Room
-	room, err := manager.CreateRoom("auto-destruct-room", "host-1")
+	room, err := manager.CreateRoom("auto-destruct-room", "host-1", "profile-1")
 	require.NoError(t, err)
 
 	// 2. Join User (Simulate manually to avoid SDP complexity)

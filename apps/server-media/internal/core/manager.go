@@ -13,8 +13,7 @@ import (
 	"speaky-media/internal/upstream"
 )
 
-// Manager is the global registry for all rooms.
-// It manages room lifecycle and provides thread-safe access.
+// Manager manages rooms and their lifecycle.
 type Manager struct {
 	rooms          map[string]*Room
 	mu             sync.RWMutex
@@ -22,9 +21,10 @@ type Manager struct {
 	api            *webrtc.API
 	aiClient       ai.Client
 	voiceProcessor upstream.VoiceProcessor
+	profileManager *ProfileManager // Profile Manager
 }
 
-// NewRoomManager creates a new room manager.
+// NewRoomManager creates a new Manager.
 func NewRoomManager(cfg *config.Config, api *webrtc.API, aiClient ai.Client, voiceProcessor upstream.VoiceProcessor) *Manager {
 	return &Manager{
 		rooms:          make(map[string]*Room),
@@ -32,12 +32,18 @@ func NewRoomManager(cfg *config.Config, api *webrtc.API, aiClient ai.Client, voi
 		api:            api,
 		aiClient:       aiClient,
 		voiceProcessor: voiceProcessor,
+		profileManager: NewProfileManager(),
 	}
+}
+
+// CreateProfile creates a voice profile and returns it.
+func (m *Manager) CreateProfile(voiceModelID int64, pitchScale float32) *VoiceProfile {
+	return m.profileManager.CreateProfile(voiceModelID, pitchScale)
 }
 
 // CreateRoom creates a new room with the given ID.
 // Returns ErrRoomAlreadyExists if a room with this ID already exists.
-func (m *Manager) CreateRoom(roomID, hostID string) (*Room, error) {
+func (m *Manager) CreateRoom(roomID, hostID, profileID string) (*Room, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -45,7 +51,18 @@ func (m *Manager) CreateRoom(roomID, hostID string) (*Room, error) {
 		return nil, fmt.Errorf("%w: %s", ErrRoomAlreadyExists, roomID)
 	}
 
-	room := NewRoom(roomID, hostID, m.cfg, m.api, m.aiClient, m.voiceProcessor)
+	// Resolve Profile
+	var profile *VoiceProfile
+	if profileID != "" {
+		p, err := m.profileManager.GetProfile(profileID)
+		if err != nil {
+			slog.Warn("CreateRoom: Profile not found, using default", "profileID", profileID)
+		} else {
+			profile = p
+		}
+	}
+
+	room := NewRoom(roomID, hostID, profile, m.cfg, m.api, m.aiClient, m.voiceProcessor)
 	// Auto-destruction when empty
 	room.OnEmpty = func() {
 		slog.Info("Room empty, destroying", "roomID", roomID)
@@ -77,6 +94,12 @@ func (m *Manager) DeleteRoom(roomID string) error {
 	defer m.mu.Unlock()
 
 	if room, exists := m.rooms[roomID]; exists {
+		// Cleanup Profile if it exists
+		if room.VoiceProfile != nil {
+			m.profileManager.DeleteProfile(room.VoiceProfile.ID)
+			slog.Info("Deleted associated voice profile", "profileID", room.VoiceProfile.ID)
+		}
+
 		room.Close() // Ensure resources are freed
 		delete(m.rooms, roomID)
 	} else {
@@ -87,7 +110,7 @@ func (m *Manager) DeleteRoom(roomID string) error {
 
 // GetOrCreateRoom retrieves a room if it exists, or creates it if it doesn't.
 // This is a convenience method for common use cases.
-func (m *Manager) GetOrCreateRoom(roomID, hostID string) (*Room, error) {
+func (m *Manager) GetOrCreateRoom(roomID, hostID, profileID string) (*Room, error) {
 	// Fast path: try to get existing room (read lock)
 	m.mu.RLock()
 	room, exists := m.rooms[roomID]
@@ -106,7 +129,18 @@ func (m *Manager) GetOrCreateRoom(roomID, hostID string) (*Room, error) {
 		return room, nil
 	}
 
-	room = NewRoom(roomID, hostID, m.cfg, m.api, m.aiClient, m.voiceProcessor)
+	// Resolve Profile
+	var profile *VoiceProfile
+	if profileID != "" {
+		p, err := m.profileManager.GetProfile(profileID)
+		if err != nil {
+			slog.Warn("GetOrCreateRoom: Profile not found, using default", "profileID", profileID)
+		} else {
+			profile = p
+		}
+	}
+
+	room = NewRoom(roomID, hostID, profile, m.cfg, m.api, m.aiClient, m.voiceProcessor)
 	// Auto-destruction when empty
 	room.OnEmpty = func() {
 		slog.Info("Room empty, destroying", "roomID", roomID)

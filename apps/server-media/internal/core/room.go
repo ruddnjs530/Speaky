@@ -25,6 +25,7 @@ import (
 type Room struct {
 	ID             string
 	HostID         string // ID of the room creator/host
+	VoiceProfile   *VoiceProfile
 	sessions       map[string]*Session
 	activeTracks   map[string]*ActiveTrack // Key is Track ID (not UserID), Value is the track info
 	mu             sync.RWMutex
@@ -68,12 +69,12 @@ type RoomStats struct {
 }
 
 // NewRoom creates a new room with the given ID.
-func NewRoom(id, hostID string, cfg *config.Config, api *webrtc.API, aiClient ai.Client, voiceProcessor upstream.VoiceProcessor) *Room {
+func NewRoom(id, hostID string, profile *VoiceProfile, cfg *config.Config, api *webrtc.API, aiClient ai.Client, voiceProcessor upstream.VoiceProcessor) *Room {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// DEBUG: Check if voiceProcessor was passed
 	if voiceProcessor != nil {
-		slog.Info("NewRoom: voiceProcessor is available", "roomID", id)
+		slog.Info("NewRoom: voiceProcessor is available", "roomID", id, "profileID", profile.ID)
 	} else {
 		slog.Warn("NewRoom: voiceProcessor is NIL - AudioProcessor will NOT start!", "roomID", id)
 	}
@@ -81,6 +82,7 @@ func NewRoom(id, hostID string, cfg *config.Config, api *webrtc.API, aiClient ai
 	return &Room{
 		ID:             id,
 		HostID:         hostID,
+		VoiceProfile:   profile,
 		sessions:       make(map[string]*Session),
 		activeTracks:   make(map[string]*ActiveTrack),
 		cfg:            cfg,
@@ -228,7 +230,16 @@ func (r *Room) BroadcastTrack(fromUserID string, track *webrtc.TrackRemote, ctx 
 		// Initialize AudioProcessor if VoiceProcessor is available
 		if r.voiceProcessor != nil {
 			slog.Info("Audio track received - creating AudioProcessor", "trackID", activeTrack.Remote.ID())
-			processor, err := NewAudioProcessor(r.cfg, r.voiceProcessor, activeTrack.audioQueue)
+			
+			// Use VoiceProfile if available, otherwise defaults
+			modelID := int64(1)
+			pitch := float32(1.0)
+			if r.VoiceProfile != nil {
+				modelID = r.VoiceProfile.VoiceModelID
+				pitch = r.VoiceProfile.PitchScale
+			}
+
+			processor, err := NewAudioProcessor(r.cfg, r.voiceProcessor, activeTrack.audioQueue, modelID, pitch)
 			if err != nil {
 				slog.Error("Failed to create AudioProcessor", "error", err)
 			} else {
