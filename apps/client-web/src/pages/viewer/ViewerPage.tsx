@@ -119,43 +119,38 @@ export default function ViewerPage() {
         const code = getErrorCode(e);
         const msg = getErrorMessage(e) ?? '시청 연결 실패';
 
-        // 2. 방송 없음(NOT_ACTIVE) -> WebSocket 대기 모드 진입
-        if (code === 'SESSION_NOT_ACTIVE') {
-          dispatch({ type: 'NOT_ACTIVE' });
+        // [수정] 연결 실패/종료 시 무조건 대기 모드(NOT_ACTIVE)로 전환하여 재연결 시도
+        // 기존에는 SESSION_NOT_ACTIVE만 대기했지만, 이제는 WS 연결 끊김 등도 대기로 처리
+        console.warn(`[AutoRetry] Connection failed/lost (${code}). Entering waiting mode.`);
+        dispatch({ type: 'NOT_ACTIVE' });
 
-          // 이미 대기 중 WS가 연결돼 있다면 패스
-          if (waitingScRef.current) return;
+        // 이미 대기 중 WS가 연결돼 있다면 패스
+        if (waitingScRef.current) return;
 
-          console.log('[AutoRouting] 방송 대기 모드: WS 연결 시작');
+        console.log('[AutoRouting] 방송 대기 모드: WS 연결 시작');
 
-          const wsUrl = WS_URL_DEFAULT;
+        const wsUrl = WS_URL_DEFAULT;
 
-          const token = getAccessToken() ?? '';
-          const sc = new SignalingClient({
-            channelId,
-            sessionId: 'waiting',
-            role: 'GUEST',
-            clientId: 'waiting-' + Math.random().toString(36).slice(2)
-          }, {
-            onOpen: () => console.log('[AutoRouting] WS Connected (Waiting)'),
-            onInbound: (msg) => {
-              if (msg.type === 'SYS_SESSION_STARTED' || msg.type === 'SESSION_LIVE_STARTED') {
-                console.log('[AutoRouting] 방송 시작 감지! -> Retrying join');
-                // 여기서 닫지 않고, 재시도(attempt++) 시 cleanup 혹은 tryJoin 진입 시점에 처리
-                setAttempt(prev => prev + 1);
-              }
+        const token = getAccessToken() ?? '';
+        const sc = new SignalingClient({
+          channelId,
+          sessionId: 'waiting',
+          role: 'GUEST',
+          clientId: 'waiting-' + Math.random().toString(36).slice(2)
+        }, {
+          onOpen: () => console.log('[AutoRouting] WS Connected (Waiting)'),
+          onInbound: (msg) => {
+            if (msg.type === 'SYS_SESSION_STARTED' || msg.type === 'SESSION_LIVE_STARTED') {
+              console.log('[AutoRouting] 방송 시작 감지! -> Retrying join');
+              // 여기서 닫지 않고, 재시도(attempt++) 시 cleanup 혹은 tryJoin 진입 시점에 처리
+              setAttempt(prev => prev + 1);
             }
-          });
-          sc.connect(wsUrl, token);
+          }
+        });
+        sc.connect(wsUrl, token);
 
-          waitingScRef.current = sc;
-          mySc = sc; // 내가 만든 소켓임 표시
-
-        } else if (code === 'UNAUTHORIZED') {
-          dispatch({ type: 'UNAUTHORIZED' });
-        } else {
-          dispatch({ type: 'ERROR', message: msg });
-        }
+        waitingScRef.current = sc;
+        mySc = sc; // 내가 만든 소켓임 표시
       }
     };
 
