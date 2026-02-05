@@ -13,6 +13,12 @@ export default function ReactionOverlay() {
     const [currentIndex, setCurrentIndex] = useState(0);
 
     useEffect(() => {
+        // Preload images to prevent flickering
+        GIFS.forEach((item) => {
+            const img = new Image();
+            img.src = item.src;
+        });
+
         // Change GIF every 3 seconds (adjust timing as needed)
         const timer = setInterval(() => {
             setCurrentIndex((prev) => (prev + 1) % GIFS.length);
