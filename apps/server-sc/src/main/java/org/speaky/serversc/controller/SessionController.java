@@ -66,7 +66,15 @@ public class SessionController {
 
                 // Response 생성 및 WebSocket 정보 추가
                 SessionResponse response = SessionResponse.from(session);
-                response.setWsUrl("ws://localhost:8080/ws/signaling"); // TODO: 환경 설정에서 읽어오기
+                // 환경 변수 VITE_WS_URL (또는 WS_URL) 읽기, 없으면 localhost 기본값
+                String wsUrl = System.getenv("VITE_WS_URL");
+                if (wsUrl == null || wsUrl.isBlank()) {
+                    wsUrl = System.getenv("WS_URL");
+                }
+                if (wsUrl == null || wsUrl.isBlank()) {
+                    wsUrl = "ws://localhost:8080/ws/signaling";
+                }
+                response.setWsUrl(wsUrl);
                 response.setSignalingToken(jwtToken); // 실제 JWT 토큰 사용
 
                 return ResponseEntity.status(HttpStatus.CREATED)
