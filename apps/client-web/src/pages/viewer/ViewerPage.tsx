@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Volume2, VolumeX, Users, RefreshCcw, LogOut, Maximize, Minimize } from 'lucide-react';
+import { Users, RefreshCcw, LogOut, Maximize, Minimize } from 'lucide-react';
 import ViewerMediaPanel from '../../features/media/ui/ViewerMediaPanel';
+import AudioControl from '../../features/media/ui/AudioControl';
 import Card from '../../shared/ui/Card';
 import Button from '../../shared/ui/Button';
 import { useScreenShare } from '../../features/screenShare/model/useScreenShare';
@@ -11,6 +12,7 @@ import { SignalingClient } from '../../shared/lib/signaling/SignalingClient';
 import { getAccessToken } from '../../shared/lib/authToken';
 import { useAuthRedirect } from '../../features/auth/lib/useAuthRedirect';
 import { WS_URL_DEFAULT } from '../../shared/config';
+import { motion } from 'framer-motion';
 
 import './ViewerPage.css';
 
@@ -50,7 +52,7 @@ export default function ViewerPage() {
   const navigate = useNavigate();
   // const location = useLocation(); // 인증 리팩토링 후 미사용
   const channelId = roomId ?? '';
-  const { remoteStream, status, connect } = useScreenShare();
+  const { remoteStream, status, connect, latency } = useScreenShare();
 
   useAuthRedirect();
 
@@ -63,6 +65,7 @@ export default function ViewerPage() {
   // effect 트리거용 attempt 카운터
   const [attempt, setAttempt] = useState(() => (channelId ? 1 : 0));
   const [voiceModelId, setVoiceModelId] = useState<number | null>(null);
+  const [title, setTitle] = useState<string>('');
   /**
    * 재시도(=reconnect): UI 상태 전환 + attempt 증가
    * - 여기서 상태를 바꾸므로, effect에서는 동기 setState를 하지 않습니다.
@@ -108,6 +111,7 @@ export default function ViewerPage() {
           sessionId: res.sessionId,
         });
         setVoiceModelId(res.voiceModelId);
+        setTitle(res.title);
 
       } catch (e: any) {
         if (!isActive) return;
@@ -150,9 +154,39 @@ export default function ViewerPage() {
 
         } else if (code === 'UNAUTHORIZED') {
           dispatch({ type: 'UNAUTHORIZED' });
-        } else {
-          dispatch({ type: 'ERROR', message: msg });
+          return;
         }
+
+        // 2. 그 외 연결 끊김/세션 없음 등 (재시도 가능) -> 대기 모드(NOT_ACTIVE)로 전환하여 재연결 시도
+        console.warn(`[AutoRetry] Connection failed/lost (${code}). Entering waiting mode.`);
+        dispatch({ type: 'NOT_ACTIVE' });
+
+        // 이미 대기 중 WS가 연결돼 있다면 패스
+        if (waitingScRef.current) return;
+
+        console.log('[AutoRouting] 방송 대기 모드: WS 연결 시작');
+
+        const wsUrl = WS_URL_DEFAULT;
+        // ... (이하 대기 로직 동일)
+        const token = getAccessToken() ?? '';
+        const sc = new SignalingClient({
+          channelId,
+          sessionId: 'waiting',
+          role: 'GUEST',
+          clientId: 'waiting-' + Math.random().toString(36).slice(2)
+        }, {
+          onOpen: () => console.log('[AutoRouting] WS Connected (Waiting)'),
+          onInbound: (msg) => {
+            if (msg.type === 'SYS_SESSION_STARTED' || msg.type === 'SESSION_LIVE_STARTED') {
+              console.log('[AutoRouting] 방송 시작 감지! -> Retrying join');
+              setAttempt(prev => prev + 1);
+            }
+          }
+        });
+        sc.connect(wsUrl, token);
+
+        waitingScRef.current = sc;
+        mySc = sc; // 내가 만든 소켓임 표시
       }
     };
 
@@ -171,18 +205,10 @@ export default function ViewerPage() {
   const reload = useCallback(() => window.location.reload(), []);
   // ---- 오디오 제어 로직 ----
   const [videoEl, setVideoEl] = useState<HTMLVideoElement | null>(null);
-  const [volume, setVolume] = useState(0.5);
-  const [muted, setMuted] = useState(false);
 
   // 전체 화면 로직
   const containerRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-
-  useEffect(() => {
-    if (!videoEl) return;
-    videoEl.volume = volume;
-    videoEl.muted = muted || volume === 0;
-  }, [videoEl, volume, muted]);
 
   useEffect(() => {
     const handleFsChange = () => {
@@ -191,13 +217,6 @@ export default function ViewerPage() {
     document.addEventListener('fullscreenchange', handleFsChange);
     return () => document.removeEventListener('fullscreenchange', handleFsChange);
   }, []);
-
-  const toggleMute = () => setMuted((prev) => !prev);
-  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const v = parseFloat(e.target.value);
-    setVolume(v);
-    if (v > 0) setMuted(false);
-  };
 
   const toggleFullscreen = async () => {
     if (!containerRef.current) return;
@@ -242,19 +261,38 @@ export default function ViewerPage() {
   }
 
   return (
-    <div className="viewerPage">
+    <motion.div
+      className="viewerPage"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.5 }}
+    >
 
       {/* 1. 상단 정보 바 */}
-      <div className="viewerPage__topBar">
+      <motion.div
+        className="viewerPage__topBar"
+        initial={{ y: -20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.5, delay: 0.1 }}
+      >
         <div className="viewerPage__titleGroup">
           <h1 className="viewerPage__title">
-            {/* TODO: 실제 방 제목 연동 필요 */}
-            {channelId}의 방송
+            {title || `${channelId}의 방송`}
           </h1>
           {joinUi.kind === 'joined' ? (
-            <span className="viewerPage__badge viewerPage__badge--live">
+            <motion.span
+              className="viewerPage__badge viewerPage__badge--live"
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ type: "spring", stiffness: 200, damping: 15 }}
+            >
+              <motion.span
+                animate={{ opacity: [1, 0.5, 1] }}
+                transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
+                className="mr-1 inline-block h-2 w-2 rounded-full bg-white"
+              />
               LIVE
-            </span>
+            </motion.span>
           ) : (
             <span className="viewerPage__badge viewerPage__badge--offline">
               OFFLINE
@@ -266,18 +304,26 @@ export default function ViewerPage() {
           <span>{voiceModelId ? `AI 보이스 ${voiceModelId}` : '정보 없음'}</span>
         </div>
 
-        {/* 지연 시간 (더미 데이터) */}
-        <div className="viewerPage__latency">
-          지연 시간: <span className="viewerPage__latencyValue">25ms</span>
-        </div>
-      </div>
+        {/* 지연 시간 */}
+        {latency !== null && (
+          <div className="viewerPage__latency">
+            지연 시간: <span className="viewerPage__latencyValue">{latency}ms</span>
+          </div>
+        )}
+      </motion.div>
 
       {/* 2. 메인 비디오 영역 */}
-      <div className="viewerPage__videoArea" ref={containerRef}>
+      <motion.div
+        className="viewerPage__videoArea"
+        ref={containerRef}
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ duration: 0.5, delay: 0.2 }}
+      >
         <ViewerMediaPanel
           status={status}
           stream={remoteStream}
-          muted={muted} // 단방향 prop (초기값 등)
+          muted={false} // AudioControl에서 직접 제어하므로 여기선 기본값 처리
           onVideoElement={setVideoEl} // 제어권을 위해 element 확보
           showAudioControl={false} // 하단 바에서 제어하므로 숨김
           onRetry={startJoin}
@@ -287,8 +333,14 @@ export default function ViewerPage() {
         {/* 오버레이: 방송 대기 중 */}
         {joinUi.kind === 'notActive' && (
           <div className="viewerPage__overlay viewerPage__overlay--wait">
-            <h2 className="viewerPage__overlayTitle">대기 화면입니다</h2>
-            <p className="viewerPage__overlayText">호스트가 송출을 시작하면 자동으로 갱신 됩니다.</p>
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ duration: 0.5 }}
+            >
+              <h2 className="viewerPage__overlayTitle">대기 화면입니다</h2>
+              <p className="viewerPage__overlayText">호스트가 송출을 시작하면 자동으로 갱신 됩니다.</p>
+            </motion.div>
           </div>
         )}
 
@@ -312,30 +364,19 @@ export default function ViewerPage() {
         >
           {isFullscreen ? <Minimize size={20} /> : <Maximize size={20} />}
         </button>
-      </div>
+      </motion.div>
 
       {/* 3. 하단 컨트롤 바 */}
-      <div className="viewerPage__controlBar">
+      <motion.div
+        className="viewerPage__controlBar"
+        initial={{ y: 20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.5, delay: 0.3 }}
+      >
 
         {/* 좌측하단 볼륨 */}
         <div className="viewerPage__controlSection viewerPage__controlSection--left">
-          <button
-            onClick={toggleMute}
-            className="viewerPage__volumeBtn"
-          >
-            {muted || volume === 0 ? (
-              <VolumeX size={24} />
-            ) : (
-              <Volume2 size={24} />
-            )}
-          </button>
-          <input
-            type="range"
-            min="0" max="1" step="0.01"
-            value={muted ? 0 : volume}
-            onChange={handleVolumeChange}
-            className="viewerPage__volumeSlider"
-          />
+          <AudioControl mediaEl={videoEl} className="text-gray-200" />
         </div>
 
         {/* 중앙: 입장 인원 (더미 데이터) */}
@@ -355,7 +396,7 @@ export default function ViewerPage() {
           </button>
 
           <button
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/start')}
             className="viewerPage__btnExit" // 디자인 일치를 위한 커스텀 클래스
           >
             <LogOut size={16} />
@@ -363,8 +404,8 @@ export default function ViewerPage() {
           </button>
         </div>
 
-      </div>
+      </motion.div>
 
-    </div>
+    </motion.div>
   );
 }

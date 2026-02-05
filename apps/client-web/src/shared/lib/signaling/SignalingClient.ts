@@ -22,6 +22,9 @@ type Handlers = {
   onReconnectAttempt?: (attempt: number, delayMs: number) => void;
   onReconnected?: () => void;
   onError?: (ev: Event) => void;
+
+  // 옵션: 초기 연결 시 resume 플래그 설정
+  initialResume?: boolean;
 };
 
 export class SignalingClient {
@@ -38,6 +41,9 @@ export class SignalingClient {
   ) {
     this.ctx = ctx;
     this.handlers = handlers;
+    // initialResume 옵션이 있다면 hasConnectedOnce를 true로 초기화하여 첫 attach에서 resume: true를 보내도록 유도하거나,
+    // attach 호출 시점에 로직을 수정. 
+    // 여기서는 handlers.initialResume 값을 저장해둠.
   }
 
   connect(baseWsUrl: string, token: string) {
@@ -72,7 +78,8 @@ export class SignalingClient {
 
         // SYS_ATTACH 전송
         // hasConnectedOnce 플래그를 사용하여 resume 여부 결정
-        const resume = this.hasConnectedOnce;
+        // 추가: initialResume 옵션이 있으면 첫 연결 시에도 resume: true 전송
+        const resume = this.hasConnectedOnce || (!!this.handlers.initialResume);
         this.attach(resume);
 
         this.hasConnectedOnce = true;
@@ -202,6 +209,8 @@ export class SignalingClient {
       }
       case "SYS_PING":
       case "SYS_PONG":
+      case "SYS_SESSION_STARTED":
+      case "SESSION_LIVE_STARTED":
         return env as any;
       case "SIG_ANSWER": {
         const sdp = (env.payload as any)?.sdp;

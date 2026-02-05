@@ -11,6 +11,7 @@ service MediaControlService {
   // 1. Resource Management
   rpc CreateRoom (CreateRoomRequest) returns (CreateRoomResponse);
   rpc DeleteRoom (DeleteRoomRequest) returns (DeleteRoomResponse);
+  rpc CreateProfile (CreateProfileRequest) returns (VoiceProfile);
 
   // 2. Signaling & Connectivity
   rpc JoinRoom (JoinRoomRequest) returns (JoinRoomResponse);
@@ -19,7 +20,6 @@ service MediaControlService {
   rpc SubmitIceCandidate (SubmitIceCandidateRequest) returns (SubmitIceCandidateResponse);
 
   // 3. Feature Control
-  // SC 서버에서 권한 확인이 완료된 후, 해당 방의 유일한 송출자의 설정(AI 모델, 피치 등)을 설정합니다.
   rpc UpdateSessionConfig (UpdateSessionConfigRequest) returns (UpdateSessionConfigResponse);
 }
 
@@ -28,6 +28,7 @@ service MediaControlService {
 message CreateRoomRequest {
   string room_id = 1; 
   string host_id = 2; // 방 생성 시 송출 권한을 가진 유저를 지정합니다.
+  string voice_profile_id = 3; // 생성된 보이스 프로필 ID
 }
 
 message CreateRoomResponse {
@@ -93,3 +94,16 @@ message UpdateSessionConfigRequest {
 message UpdateSessionConfigResponse {
   bool success = 1;
 }
+
+message CreateProfileRequest {
+  int64 voice_model_id = 1;
+  float pitch_scale = 2;
+}
+
+message VoiceProfile {
+  string id = 1;
+  int64 voice_model_id = 2;
+  float pitch_scale = 3;
+}
+
+

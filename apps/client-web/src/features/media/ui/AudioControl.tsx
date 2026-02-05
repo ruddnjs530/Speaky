@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { Volume2, VolumeX } from 'lucide-react';
+import VolumeSlider from '../../../shared/ui/VolumeSlider';
 
 type Props = {
     mediaEl: HTMLMediaElement | null;
@@ -21,28 +23,24 @@ export default function AudioControl({ mediaEl, className }: Props) {
     const effectiveMuted = muted || volume === 0;
 
     return (
-        <div className={className ?? ''} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <button type="button" onClick={() => setMuted((v) => !v)}>
-                {effectiveMuted ? '🔇' : '🔊'}
+        <div className={`flex items-center gap-2 ${className ?? ''}`}>
+            <button
+                type="button"
+                onClick={() => setMuted((v) => !v)}
+                className="text-white hover:text-orange-400 transition-colors focus:outline-none flex items-center justify-center"
+                title={effectiveMuted ? "음소거 해제" : "음소거"}
+            >
+                {effectiveMuted ? <VolumeX size={20} /> : <Volume2 size={20} />}
             </button>
 
-            <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.01}
+            <VolumeSlider
                 value={effectiveMuted ? 0 : volume}
-                onChange={(e) => {
-                    const v = Number(e.target.value);
+                onChange={(v) => {
                     setVolume(v);
                     if (v > 0) setMuted(false);
                 }}
-                aria-label="volume"
+                className="w-[120px]"
             />
-
-            <span style={{ width: 44, textAlign: 'right', fontSize: 12 }}>
-        {Math.round(volume * 100)}%
-      </span>
         </div>
     );
 }

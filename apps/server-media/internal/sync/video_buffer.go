@@ -86,6 +86,11 @@ func (vb *VideoBuffer) Len() int {
 	return vb.queue.Len()
 }
 
+// Cap returns the buffer capacity
+func (vb *VideoBuffer) Cap() int {
+	return vb.queue.Cap()
+}
+
 // Close closes the underlying queue
 func (vb *VideoBuffer) Close() error {
 	return vb.queue.Close()

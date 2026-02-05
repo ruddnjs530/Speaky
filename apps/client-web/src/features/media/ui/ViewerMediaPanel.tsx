@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import StreamPreview from '../../screenShare/ui/StreamPreview';
 import AudioControl from './AudioControl';
 import ReconnectBanner from './ReconnectBanner';
+import ReactionOverlay from './ReactionOverlay';
 import type { ConnectionStatus } from '../model/useConnectionStatus';
 
 type Props = {
@@ -149,6 +150,7 @@ export default function ViewerMediaPanel({
           </div>
         )}
       </div>
+      <ReactionOverlay />
 
       {showAudioControl && (
         <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '10px 0' }}>

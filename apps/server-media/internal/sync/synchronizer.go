@@ -25,14 +25,34 @@ func NewSynchronizer() *Synchronizer {
 // RunAudioPump starts the audio consumer loop.
 // It consumes from the audio queue, measures "Processing Latency" (Time - ArrivalTime),
 // feeds the estimator, and outputs via onFrame.
-func (s *Synchronizer) RunAudioPump(ctx context.Context, queue *pipeline.Queue[pipeline.RTPPacket], onFrame func([]byte)) {
-	slog.Info("Sync: AudioPump Started")
+// CRITICAL: frameDuration controls the Pacing. We MUST send 1 packet per frameDuration
+// to avoid network bursts when AI returns large chunks (e.g. 5s) instantly.
+func (s *Synchronizer) RunAudioPump(ctx context.Context, queue *pipeline.Queue[pipeline.RTPPacket], frameDuration time.Duration, onFrame func([]byte)) {
+	slog.Info("Sync: AudioPump Started", "pacingMs", frameDuration.Milliseconds())
 	go func() {
+
+		var lastSendTime time.Time
+		
 		for {
 			packet, err := queue.Pop(ctx)
 			if err != nil {
 				return // Context cancelled or queue closed
 			}
+
+			// Pacing Logic: Sleep-based Rate Limiting
+			// 1. If we just sent a packet, wait until the next slot (frameDuration).
+			// 2. If we were idle (queue empty) for a long time, lastSendTime is old,
+			//    so time.Since > frameDuration, and we send IMMEDIATELY (no sleep).
+			//    This fixes the issue where the first packet of a burst was delayed unnecessarily.
+			
+			elapsed := time.Since(lastSendTime)
+			if elapsed < frameDuration {
+				time.Sleep(frameDuration - elapsed)
+			}
+			
+			// Update lastSendTime to NOW (after the sleep)
+			// This enforces at least 'frameDuration' interval between physical sends.
+			lastSendTime = time.Now()
 
 			// Measure Latency (Simulating Audio Processing Duration)
 			// In real transcoding, this loop runs AFTER transcoding/AI.
@@ -44,10 +64,6 @@ func (s *Synchronizer) RunAudioPump(ctx context.Context, queue *pipeline.Queue[p
 			// Update the estimator
 			s.estimator.Update(latency)
 
-			// Output payload
-			onFrame(packet.Data)
-
-			// Log occasionally
 			// Output payload
 			onFrame(packet.Data)
 		}
@@ -96,9 +112,11 @@ func (s *Synchronizer) RunVideoPump(ctx context.Context, buffer *VideoBuffer, on
 				drained++
 			}
 
-			// Warn if buffer is getting dangerously full (e.g. > 1500 used out of 2000)
-			if buffer.Len() > 1500 && count%200 == 0 {
-				slog.Warn("Sync: Video Buffer High", "len", buffer.Len())
+			// Warn if buffer is getting dangerously full (e.g. > 75% used)
+			threshold := int(float64(buffer.Cap()) * 0.75)
+			if buffer.Len() > threshold && count%100 == 0 {
+				slog.Warn("Sync: Video Buffer High", "len", buffer.Len(), "cap", buffer.Cap())
+			count++
 			}
 
 			// Poll interval

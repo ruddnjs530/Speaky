@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { User, Lock, Eye, EyeOff } from 'lucide-react';
+import { motion } from 'framer-motion';
+
 import Button from '../../../shared/ui/Button';
 import Input from '../../../shared/ui/Input';
-import Label from '../../../shared/ui/Label';
+import { Label } from '../../../shared/ui/Label';
 import Card from '../../../shared/ui/Card';
 import Checkbox from '../../../shared/ui/Checkbox';
 import { login } from '../api/login';
@@ -11,6 +13,28 @@ interface LoginFormProps {
   onNavigateToSignup: () => void;
   onLoginSuccess: () => void;
 }
+
+const containerVariants = {
+  hidden: { opacity: 0, y: 30 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      duration: 0.6,
+      when: 'beforeChildren', // 컨테이너가 먼저 나타나거나 동시에 시작
+      staggerChildren: 0.1, // 자식 요소들 0.1초 간격으로 등장
+    },
+  },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.4 }
+  },
+};
 
 export default function LoginForm({ onNavigateToSignup, onLoginSuccess }: LoginFormProps) {
   const [loginId, setLoginId] = useState('');
@@ -33,101 +57,121 @@ export default function LoginForm({ onNavigateToSignup, onLoginSuccess }: LoginF
   };
 
   return (
-    <Card className="w-full max-w-md p-8 bg-white shadow-xl rounded-2xl">
-      {/* 로고 */}
-      <div className="text-center mb-8">
-        <h1 className="text-[#E8753A] mb-2 text-2xl font-bold">Speaky</h1>
-        <p className="text-gray-500">계정에 로그인하세요</p>
-      </div>
+    <motion.div
+      className="w-full max-w-md"
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+    >
+      <Card className="p-8 bg-white shadow-xl rounded-2xl w-full">
+        {/* 로고 */}
+        <motion.div
+          className="text-center mb-8"
+          variants={itemVariants}
+        >
+          <h1 className="text-[#E8753A] mb-2 text-2xl font-bold">Speaky</h1>
+          <p className="text-gray-500">계정에 로그인하세요</p>
+        </motion.div>
 
-      {/* 로그인 폼 */}
-      <form onSubmit={handleLogin} className="space-y-6">
-        <div className="space-y-2">
-          <Label htmlFor="loginId">아이디</Label>
-          <div className="relative">
-            <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-            <Input
-              id="loginId"
-              type="text"
-              placeholder="아이디를 입력하세요"
-              value={loginId}
-              onChange={(e) => setLoginId(e.target.value)}
-              className="pl-10"
-              required
-            />
-          </div>
-        </div>
+        {/* 로그인 폼 */}
+        <form onSubmit={handleLogin} className="space-y-6">
+          <motion.div className="space-y-2" variants={itemVariants}>
+            <Label htmlFor="loginId">아이디</Label>
+            <div className="relative">
+              <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+              <Input
+                id="loginId"
+                type="text"
+                placeholder="아이디를 입력하세요"
+                value={loginId}
+                onChange={(e) => setLoginId(e.target.value)}
+                className="pl-10"
+                required
+              />
+            </div>
+          </motion.div>
 
-        {/* 비밀번호 입력 */}
-        <div className="space-y-2">
-          <Label htmlFor="password">비밀번호</Label>
-          <div className="relative">
-            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-            <Input
-              id="password"
-              type={showPassword ? 'text' : 'password'}
-              placeholder="비밀번호를 입력하세요"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="pl-10 pr-10"
-              required
-            />
+          {/* 비밀번호 입력 */}
+          <motion.div className="space-y-2" variants={itemVariants}>
+            <Label htmlFor="password">비밀번호</Label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+              <Input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                placeholder="비밀번호를 입력하세요"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="pl-10 pr-10"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                {showPassword ? (
+                  <EyeOff className="h-5 w-5" />
+                ) : (
+                  <Eye className="h-5 w-5" />
+                )}
+              </button>
+            </div>
+          </motion.div>
+
+          {/* 로그인 유지 및 비밀번호 찾기 */}
+          <motion.div
+            className="flex items-center justify-between"
+            variants={itemVariants}
+          >
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="remember"
+                checked={rememberMe}
+                onCheckedChange={(checked) => setRememberMe(checked)}
+              />
+              <Label htmlFor="remember" className="text-sm cursor-pointer text-gray-600">
+                로그인 상태 유지
+              </Label>
+            </div>
             <button
               type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+              className="text-sm text-[#E8753A] hover:underline font-medium"
             >
-              {showPassword ? (
-                <EyeOff className="h-5 w-5" />
-              ) : (
-                <Eye className="h-5 w-5" />
-              )}
+              비밀번호 찾기
             </button>
-          </div>
-        </div>
+          </motion.div>
 
-        {/* 로그인 유지 및 비밀번호 찾기 */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Checkbox
-              id="remember"
-              checked={rememberMe}
-              onCheckedChange={(checked) => setRememberMe(checked)}
-            />
-            <Label htmlFor="remember" className="text-sm cursor-pointer text-gray-600">
-              로그인 상태 유지
-            </Label>
-          </div>
-          <button
-            type="button"
-            className="text-sm text-[#E8753A] hover:underline font-medium"
-          >
-            비밀번호 찾기
-          </button>
-        </div>
+          {/* 로그인 버튼 */}
+          <motion.div variants={itemVariants}>
+            <Button
+              type="submit"
+              className="w-full bg-[#E8753A] hover:bg-[#D45A3A] text-white h-11 font-bold text-lg"
+            >
+              로그인
+            </Button>
+          </motion.div>
+        </form>
 
-        {/* 로그인 버튼 */}
-        <Button
-          type="submit"
-          className="w-full bg-[#E8753A] hover:bg-[#D45A3A] text-white h-11 font-bold text-lg"
+        {/* 회원가입 링크 */}
+        <motion.div
+          className="mt-6 text-center"
+          variants={itemVariants}
         >
-          로그인
-        </Button>
-      </form>
+          <div className="w-full border-t border-gray-200 mt-8 mb-6" />
 
-      {/* 회원가입 링크 */}
-      <div className="mt-6 text-center">
-        <p className="text-sm text-gray-600">
-          계정이 없으신가요?{' '}
-          <button
-            type="button"
-            onClick={onNavigateToSignup}
-            className="text-[#E8753A] hover:underline font-medium"
-          >
-            회원가입
-          </button>
-        </p>
-      </div>
-    </Card>
+          <p className="text-sm text-gray-600">
+            계정이 없으신가요?{' '}
+            <button
+              type="button"
+              onClick={onNavigateToSignup}
+              className="text-[#E8753A] hover:underline font-medium"
+            >
+              회원가입
+            </button>
+          </p>
+        </motion.div>
+      </Card>
+    </motion.div>
   );
 }
