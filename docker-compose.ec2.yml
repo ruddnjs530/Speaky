@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  # 1. React Client (Production Build)
+  client:
+    build:
+      context: .
+      dockerfile: apps/client-web/Dockerfile
+      target: prod  # Uses Nginx
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8080}
+        VITE_WS_URL: ${VITE_WS_URL:-ws://localhost:8080/ws/signaling}
+    ports:
+      - "5173:80"   # Expose Nginx port 80 as 5173 for consistency
+    environment:
+      - VITE_API_URL=${VITE_API_URL:-http://localhost:8080}
+      - VITE_WS_URL=${VITE_WS_URL:-ws://localhost:8080/ws/signaling}
+    depends_on:
+      - server-sc
+
+  # 2. Media Server (Production Binary)
+  server-media:
+    build:
+      context: .
+      dockerfile: apps/server-media/Dockerfile
+      target: prod
+    ports:
+      - "8090:8090"
+      - "50000-50010:50000-50010/udp"
+    volumes:
+      - ./packages/proto/generated/go:/app/proto:ro
+    environment:
+      - PORT=8090
+      # IMPORTANT: Set this to your Local Desktop's Tailscale IP in .env or system env
+      # Example: AI_SERVER_ADDR=100.x.x.x:50051
+      - AI_SERVER_ADDR=${AI_SERVER_ADDR} 
+      - PION_NAT_1_1_HOST=${PION_NAT_1_1_HOST:-127.0.0.1}
+      - WEBRTC_MAX_PORT=50010
+      # Removed depends_on server-ai since it's remote
+
+  # 3. Signaling Server (Production JAR)
+  server-sc:
+    build:
+      context: .
+      dockerfile: apps/server-sc/Dockerfile
+      target: runner
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - MEDIA_SERVER_HOST=server-media
+      - MEDIA_SERVER_PORT=8090
