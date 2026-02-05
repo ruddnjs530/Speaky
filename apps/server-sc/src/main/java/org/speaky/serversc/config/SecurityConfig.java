@@ -81,7 +81,11 @@ public class SecurityConfig {
         // 프론트엔드 출처 허용
         configuration.addAllowedOrigin("http://localhost:5173");
         configuration.addAllowedOrigin("http://127.0.0.1:5173");
-        configuration.addAllowedOrigin("http://i14b103.p.ssafy.io/");
+        // EC2 공인 도메인/IP (포트와 프로토콜 정확히 일치해야 함)
+        configuration.addAllowedOrigin("http://i14b103.p.ssafy.io:5173"); 
+        configuration.addAllowedOrigin("http://i14b103.p.ssafy.io");
+        // 개발 편의를 위해 패턴 허용 (모든 도메인 허용)
+        configuration.addAllowedOriginPattern("*");
 
         // 모든 HTTP 메서드 허용
         configuration.addAllowedMethod("*");
