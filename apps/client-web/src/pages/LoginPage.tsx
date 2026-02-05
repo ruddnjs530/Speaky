@@ -16,8 +16,8 @@ export default function LoginPage() {
   };
 
   const handleLoginSuccess = () => {
-    // 이전 페이지 정보가 있다면 거기로, 없다면 홈으로
-    const from = location.state?.from || '/';
+    // 이전 페이지 정보가 있다면 거기로, 없다면 /start (메인 홈)으로
+    const from = location.state?.from || '/start';
     navigate(from, { replace: true });
   }
 
