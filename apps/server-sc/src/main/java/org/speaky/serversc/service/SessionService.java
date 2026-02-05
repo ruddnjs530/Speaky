@@ -59,19 +59,12 @@ public class SessionService {
         sessionRepository.save(session);
         
         // Media Server에 Room 생성 요청 (화면 공유/캠 미리보기를 위해 세션 생성 시점에 Room 생성)
-        try {
-            // 1. Create Voice Profile
-            var profile = mediaServerClient.createProfile(voiceModelId, 1.0f); // Default pitch
-            log.info("Created Voice Profile: {}", profile.getId());
+        // 1. Create Voice Profile
+        var profile = mediaServerClient.createProfile(voiceModelId, 1.0f); // Default pitch
+        log.info("Created Voice Profile: {}", profile.getId());
 
-            // 2. Create Room using Profile ID
-            mediaServerClient.createRoom(sessionId, String.valueOf(hostUserId), profile.getId());
-        } catch (Exception e) {
-            // Media Server 장애가 세션 생성을 막지는 않도록 로그만 남김 (또는 정책에 따라 실패 처리)
-            log.error("Failed to create room on media server", e);
-            // Room 생성 실패 시 세션도 실패 처리하거나 삭제해야 함 
-            // (여기서는 일단 로그만 남기고, 클라이언트가 재시도하게 둠)
-        }
+        // 2. Create Room using Profile ID
+        mediaServerClient.createRoom(sessionId, String.valueOf(hostUserId), profile.getId());
         
         // WebSocket 이벤트 발행
         eventPublisher.publishSessionEvent(
