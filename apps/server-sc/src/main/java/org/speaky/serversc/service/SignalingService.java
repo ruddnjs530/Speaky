@@ -106,10 +106,10 @@ public class SignalingService {
         SessionEntity session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new SessionNotFoundException(sessionId));
         
-        // 세션 상태 확인 (LIVE만 허용)
-        if (session.getStatus() != SessionStatus.LIVE) {
+        // 세션 상태 확인 (STARTING 또는 LIVE 허용 - 호스트 미리보기를 위해 STARTING도 허용)
+        if (session.getStatus() != SessionStatus.LIVE && session.getStatus() != SessionStatus.STARTING) {
             sendError(envelope, "INVALID_STATE", 
-                    "Session is not LIVE: " + session.getStatus());
+                    "Session is not active: " + session.getStatus());
             return;
         }
         
