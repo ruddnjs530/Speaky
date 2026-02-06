@@ -94,7 +94,7 @@ export const sessionApi = {
         }
 
         return {
-            channelId: state.hostLoginId || channelId, // hostLoginId를 우선
+            channelId: session.channelId || channelId, // DB의 authoritative ID 사용 (fallback: input)
             sessionId: sessionId,
             role: "GUEST",
             wsUrl: session.wsUrl || WS_URL_FALLBACK,

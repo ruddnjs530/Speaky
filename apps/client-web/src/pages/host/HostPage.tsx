@@ -35,6 +35,9 @@ export default function HostPage() {
   // 세션 ID 관리
   const [sessionId, setSessionId] = useState('');
 
+  // 시청자 수 관리
+  const [viewerCount, setViewerCount] = useState(0);
+
   // 1. [수정] 안정성을 위해 새로고침 시 세션 복구를 하지 않고 새로운 세션을 생성하도록 변경
   useEffect(() => {
     // 기존 세션 정보 삭제 (무조건 새 세션 시작)
@@ -210,7 +213,13 @@ export default function HostPage() {
         token: finalToken,
         channelId: session.channelId || `host-${session.hostUserId}`,
         sessionId: session.sessionId,
-        isResume: false // 새로고침 시 무조건 새 세션이므로 false
+        isResume: false, // 새로고침 시 무조건 새 세션이므로 false
+        onMessage: (msg: any) => {
+          if (msg.type === 'SYS_VIEWER_COUNT') {
+            const payload = msg.payload as { count: number };
+            setViewerCount(payload.count);
+          }
+        }
       });
     } catch (e) {
       console.error(e);
@@ -295,7 +304,7 @@ export default function HostPage() {
 
         {/* Live 모드일 때 상단에 상태 배지 표시 */}
         {step === 'live' && (
-          <HealthBadgesPanel viewers="집계 중" health={health} />
+          <HealthBadgesPanel viewers={viewerCount} health={health} />
         )}
       </motion.header>
 

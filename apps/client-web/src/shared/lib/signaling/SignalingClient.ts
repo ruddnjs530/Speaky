@@ -212,6 +212,12 @@ export class SignalingClient {
       case "SYS_SESSION_STARTED":
       case "SESSION_LIVE_STARTED":
         return env as any;
+      case "SYS_VIEWER_COUNT": { // payload: { count: number }
+        const count = (env.payload as any)?.count;
+        if (typeof count === "number") return env as any;
+        this.handlers.onDrop?.("BAD_SYS_VIEWER_COUNT_PAYLOAD");
+        return null;
+      }
       case "SIG_ANSWER": {
         const sdp = (env.payload as any)?.sdp;
         const sdpType = (env.payload as any)?.sdpType;
