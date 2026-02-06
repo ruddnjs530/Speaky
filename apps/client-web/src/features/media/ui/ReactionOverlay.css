@@ -33,6 +33,19 @@
     animation: bounce 2s infinite ease-in-out;
 }
 
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+    .reaction-overlay {
+        bottom: 20px;
+        right: 20px;
+    }
+
+    .reaction-gif {
+        width: 100px;
+        height: 100px;
+    }
+}
+
 @keyframes bounce {
 
     0%,
