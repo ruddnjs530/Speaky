@@ -4,7 +4,29 @@ RUN apk add --no-cache git make gcc musl-dev pkgconfig opus-dev opusfile-dev sox
 WORKDIR /app
 # Why: Cache Go modules layer first
 COPY apps/server-media/go.mod apps/server-media/go.sum ./
-COPY packages/proto/generated/go /packages/proto/generated/go
+# Install protoc and plugins for generation
+RUN apk add --no-cache protobuf-dev
+RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+RUN go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+WORKDIR /app
+# Why: Cache Go modules layer first
+COPY apps/server-media/go.mod apps/server-media/go.sum ./
+
+# Copy raw proto definitions and generate Go code
+COPY packages/proto /packages/proto
+RUN mkdir -p /packages/proto/generated/go
+RUN protoc --proto_path=/packages/proto \
+    --go_out=/packages/proto/generated/go --go_opt=paths=source_relative \
+    --go-grpc_out=/packages/proto/generated/go --go-grpc_opt=paths=source_relative \
+    /packages/proto/*.proto
+
+# Create go.mod for generated proto if missing (required for invalid replace directive resolution)
+RUN if [ ! -f "/packages/proto/generated/go/go.mod" ]; then \
+    echo "module mediaserver/proto" > /packages/proto/generated/go/go.mod && \
+    echo "go 1.25.5" >> /packages/proto/generated/go/go.mod; \
+    fi
+
 RUN go mod download
 
 FROM base AS dev
