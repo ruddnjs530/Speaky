@@ -14,4 +14,11 @@ public class VoiceDto {
     private String name;
     private String status; // "READY", "LOADING", "ERROR"
     private String imageUrl; // Optional
+    private String modelPath;
+    private String indexPath;
+    private Double indexRate;
+    private Integer pitch;
+    private Double protect;
+    private Double rmsMixRate;
+    private String device;
 }
