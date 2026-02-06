@@ -12,6 +12,7 @@ import { SignalingClient } from '../../shared/lib/signaling/SignalingClient';
 import { getAccessToken } from '../../shared/lib/authToken';
 import { useAuthRedirect } from '../../features/auth/lib/useAuthRedirect';
 import { WS_URL_DEFAULT } from '../../shared/config';
+import { voiceApi, type Voice } from '../../features/host/api/voiceApi';
 import { motion } from 'framer-motion';
 
 import './ViewerPage.css';
@@ -66,20 +67,28 @@ export default function ViewerPage() {
   const [attempt, setAttempt] = useState(() => (channelId ? 1 : 0));
   const [voiceModelId, setVoiceModelId] = useState<number | null>(null);
   const [title, setTitle] = useState<string>('');
-  /**
-   * 재시도(=reconnect): UI 상태 전환 + attempt 증가
-   * - 여기서 상태를 바꾸므로, effect에서는 동기 setState를 하지 않습니다.
-   */
+  const [voices, setVoices] = useState<Voice[]>([]);
+  // 시청자 수 상태 추가
+  const [viewerCount, setViewerCount] = useState<number>(0);
+
+  // Voice 목록 조회
+  useEffect(() => {
+    voiceApi.getVoices()
+      .then(setVoices)
+      .catch(err => console.error("Failed to load voices", err));
+  }, []);
+
+  // ID에 해당하는 Voice 이름 찾기
+  const voiceName = voices.find(v => v.id === voiceModelId)?.name;
+
+  // ... (existing code)
+
+
   const startJoin = useCallback(() => {
     if (!channelId) return;
     dispatch({ type: 'JOIN_START' });
     setAttempt((a) => a + 1);
   }, [channelId]);
-  /**
-   * 네트워크 호출은 effect에서 수행하되,
-   * effect 시작 시점에는 setState/dispatch를 동기로 호출하지 않습니다.
-   */
-
 
   // 대기 모드용 WS 클라이언트 참조
   const waitingScRef = useRef<SignalingClient | null>(null);
@@ -109,9 +118,16 @@ export default function ViewerPage() {
           token: res.token,
           channelId: res.channelId,
           sessionId: res.sessionId,
+          onMessage: (msg) => {
+            if (msg.type === 'SYS_VIEWER_COUNT') {
+              const payload = msg.payload as { count: number };
+              setViewerCount(payload.count);
+            }
+          }
         });
         setVoiceModelId(res.voiceModelId);
         setTitle(res.title);
+        // ...
 
       } catch (e: any) {
         if (!isActive) return;
@@ -275,10 +291,8 @@ export default function ViewerPage() {
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.5, delay: 0.1 }}
       >
-        <div className="viewerPage__titleGroup">
-          <h1 className="viewerPage__title">
-            {title || `${channelId}의 방송`}
-          </h1>
+        {/* Left: Badge & Voice */}
+        <div className="viewerPage__headerLeft">
           {joinUi.kind === 'joined' ? (
             <motion.span
               className="viewerPage__badge viewerPage__badge--live"
@@ -298,18 +312,26 @@ export default function ViewerPage() {
               OFFLINE
             </span>
           )}
-        </div>
-        <div className="viewerPage__infoRow">
-          <span className="viewerPage__infoLabel">Voice:</span>
-          <span>{voiceModelId ? `AI 보이스 ${voiceModelId}` : '정보 없음'}</span>
+
+          <div className="viewerPage__infoRow">
+            <span className="viewerPage__infoLabel">Voice : </span>
+            <span>{voiceModelId ? (voices.find(v => v.id === voiceModelId)?.name || `AI 보이스 ${voiceModelId}`) : '정보 없음'}</span>
+          </div>
         </div>
 
-        {/* 지연 시간 */}
-        {latency !== null && (
-          <div className="viewerPage__latency">
-            지연 시간: <span className="viewerPage__latencyValue">{latency}ms</span>
-          </div>
-        )}
+        {/* Center: Title */}
+        <h1 className="viewerPage__title">
+          {title || `${channelId}의 방송`}
+        </h1>
+
+        {/* Right: Latency */}
+        <div className="viewerPage__headerRight">
+          {latency !== null && (
+            <div className="viewerPage__latency">
+              지연 시간: <span className="viewerPage__latencyValue">{latency}ms</span>
+            </div>
+          )}
+        </div>
       </motion.div>
 
       {/* 2. 메인 비디오 영역 */}
@@ -380,9 +402,10 @@ export default function ViewerPage() {
         </div>
 
         {/* 중앙: 입장 인원 (더미 데이터) */}
+        {/* 중앙: 입장 인원 데이터 연동 */}
         <div className="viewerPage__controlSection viewerPage__controlSection--center">
           <Users size={20} />
-          <span>입장 인원 <span className="viewerPage__countHighlight">1,234</span>명</span>
+          <span>입장 인원 <span className="viewerPage__countHighlight">{viewerCount}</span>명</span>
         </div>
 
         {/* 우측하단 액션 버튼 */}
