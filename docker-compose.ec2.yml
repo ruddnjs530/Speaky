@@ -36,6 +36,7 @@ services:
       - AI_SERVER_ADDR=${AI_SERVER_ADDR} 
       - PION_NAT_1_1_HOST=${PION_NAT_1_1_HOST:-127.0.0.1}
       - WEBRTC_MAX_PORT=50010
+      - AI_BUFFER_DURATION=1600
       # Removed depends_on server-ai since it's remote
 
   # 3. Signaling Server (Production JAR)
