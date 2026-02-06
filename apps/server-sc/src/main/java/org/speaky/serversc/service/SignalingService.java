@@ -286,6 +286,8 @@ public class SignalingService {
             log.error("Failed to submit ICE Candidate: {}", e.getMessage());
             // ICE 실패는 치명적이지 않으므로 클라이언트에 에러 리턴하지 않음 (로그만 남김)
         }
+    }
+    
     /**
      * 에러 응답 전송
      * 
