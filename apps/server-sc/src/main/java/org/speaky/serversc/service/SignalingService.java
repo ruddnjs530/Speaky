@@ -144,15 +144,13 @@ public class SignalingService {
     /**
      * SIG_OFFER 처리: SDP Offer 수신 및 Media Server 전달
      * 
-     * TODO: Media Server gRPC 호출
-     * 현재: Mock SIG_ANSWER 응답
-     * 
      * @param envelope SDP Offer 메시지
+     * @param headerAccessor WebSocket 세션 정보 (인증된 사용자 ID 포함)
      */
     @SuppressWarnings("unchecked")
-    public void handleOffer(Envelope envelope) {
+    public void handleOffer(Envelope envelope, SimpMessageHeaderAccessor headerAccessor) {
         String sessionId = envelope.getSessionId();
-        String clientId = envelope.getFrom().getClientId();
+        String clientId = envelope.getFrom().getClientId(); // WebSocket clientId
         Map<String, Object> payload = (Map<String, Object>) envelope.getPayload();
         String sdpOffer = (String) payload.get("sdp");
         
@@ -163,15 +161,15 @@ public class SignalingService {
             SessionEntity session = sessionRepository.findById(sessionId)
                     .orElseThrow(() -> new SessionNotFoundException(sessionId));
             
-            // CRITICAL: 역할에 따라 userId 결정
-            // - HOST: createRoom 시 등록한 hostUserId와 일치해야 함
-            // - GUEST/VIEWER: 고유한 clientId 사용
-            String role = envelope.getFrom().getRole();
+            // SECURITY FIX: JWT 인증된 userId로 권한 검증
+            Long authUserId = (Long) headerAccessor.getSessionAttributes().get("userId");
             String userId;
-            if ("HOST".equalsIgnoreCase(role)) {
-                userId = String.valueOf(session.getHostUserId());
+
+            // 인증된 사용자가 호스트인지 확인
+            if (authUserId != null && authUserId.equals(session.getHostUserId())) {
+                userId = String.valueOf(authUserId); // HOST
             } else {
-                userId = clientId;  // GUEST/VIEWER는 WebSocket clientId 사용
+                userId = clientId; // GUEST/VIEWER (WebSocket clientId 사용)
             }
             
             // Media Server에 Join 요청 (SDP Offer 전달 및 Answer 수신)
@@ -223,14 +221,13 @@ public class SignalingService {
     /**
      * SIG_ICE 처리: ICE Candidate Media Server 전달
      * 
-     * TODO: Media Server gRPC 호출
-     * 
      * @param envelope ICE Candidate 메시지
+     * @param headerAccessor WebSocket 세션 정보 (인증된 사용자 ID 포함)
      */
     @SuppressWarnings("unchecked")
-    public void handleIce(Envelope envelope) {
+    public void handleIce(Envelope envelope, SimpMessageHeaderAccessor headerAccessor) {
         String sessionId = envelope.getSessionId();
-        String clientId = envelope.getFrom().getClientId();
+        String clientId = envelope.getFrom().getClientId(); // WebSocket clientId
         Map<String, Object> payload = (Map<String, Object>) envelope.getPayload();
         
         String candidate = (String) payload.get("candidate");
@@ -244,21 +241,21 @@ public class SignalingService {
             // Retrieve session to get hostUserId
             SessionEntity session = sessionRepository.findById(sessionId)
                     .orElseThrow(() -> new SessionNotFoundException(sessionId));
-            // CRITICAL: JOIN 시 사용한 userId와 동일해야 함
-            // - HOST: hostUserId
-            // - GUEST/VIEWER: clientId
-            String role = envelope.getFrom().getRole();
+            
+            // SECURITY FIX: JWT 인증된 userId로 권한 검증
+            Long authUserId = (Long) headerAccessor.getSessionAttributes().get("userId");
             String userId;
-            if ("HOST".equalsIgnoreCase(role)) {
-                userId = String.valueOf(session.getHostUserId());
+
+            if (authUserId != null && authUserId.equals(session.getHostUserId())) {
+                userId = String.valueOf(authUserId); // HOST
             } else {
-                userId = clientId;
+                userId = clientId; // GUEST/VIEWER
             }
             
             if (candidate != null && sdpMLineIndex != null) {
                 mediaServerClient.submitIceCandidate(
                         sessionId, 
-                        userId,  // Use hostUserId instead of clientId
+                        userId, 
                         candidate, 
                         sdpMid, 
                         sdpMLineIndex
@@ -268,6 +265,7 @@ public class SignalingService {
             }
         } catch (Exception e) {
             log.error("Failed to submit ICE Candidate: {}", e.getMessage());
+            // ICE 실패는 치명적이지 않으므로 클라이언트에 에러 리턴하지 않음 (로그만 남김)
         }
     }
     

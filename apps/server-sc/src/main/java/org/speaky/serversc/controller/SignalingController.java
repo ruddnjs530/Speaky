@@ -56,13 +56,13 @@ public class SignalingController {
                     signalingService.handleAttach(envelope, headerAccessor);
                     break;
                 case "SIG_OFFER":
-                    signalingService.handleOffer(envelope);
+                    signalingService.handleOffer(envelope, headerAccessor);
                     break;
                 case "SIG_ANSWER":
                     signalingService.handleAnswer(envelope);
                     break;
                 case "SIG_ICE":
-                    signalingService.handleIce(envelope);
+                    signalingService.handleIce(envelope, headerAccessor);
                     break;
                 default:
                     signalingService.sendError(envelope, "UNKNOWN_TYPE", 
