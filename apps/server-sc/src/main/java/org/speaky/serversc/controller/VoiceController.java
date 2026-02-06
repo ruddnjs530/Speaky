@@ -23,24 +23,6 @@ public class VoiceController {
 
     private final VoiceModelRepository voiceModelRepository;
 
-    @PostConstruct
-    public void init() {
-        List<VoiceModel> defaultModels = Arrays.asList(
-                VoiceModel.builder().name("Korone").description("Cute doggo voice").isPublic(true).build(),
-                VoiceModel.builder().name("Aru").description("Aru voice").isPublic(true).build(),
-                VoiceModel.builder().name("Baek Jong Won").description("Paik's cuisine voice").isPublic(true).build(),
-                VoiceModel.builder().name("Child").description("Child like voice").isPublic(true).build(),
-                VoiceModel.builder().name("Trump").description("Make voice great again").isPublic(true).build(),
-                VoiceModel.builder().name("Criss").description("Criss voice").isPublic(true).build(),
-                VoiceModel.builder().name("Actor").description("Actor voice").isPublic(true).build());
-
-        for (VoiceModel model : defaultModels) {
-            if (!voiceModelRepository.existsByName(model.getName())) {
-                voiceModelRepository.save(model);
-            }
-        }
-    }
-
     @GetMapping
     public ResponseEntity<ApiResponse<VoiceListResponseDto>> getVoices() {
         List<VoiceModel> models = voiceModelRepository.findAll();
@@ -49,29 +31,19 @@ public class VoiceController {
                 .map(model -> VoiceDto.builder()
                         .id(model.getId())
                         .name(model.getName())
-                        .status("READY") // Default status for now
-                        .imageUrl(mapImageKey(model.getName()))
+                        // .description(model.getDescription())
+                        .status("READY")
+                        .imageUrl(model.getSampleUri()) // Use seeded sampleUri
+                        .modelPath(model.getModelPath())
+                        .indexPath(model.getIndexPath())
+                        .indexRate(model.getIndexRate())
+                        .pitch(model.getPitch())
+                        .protect(model.getProtect())
+                        .rmsMixRate(model.getRmsMixRate())
+                        .device(model.getDevice())
                         .build())
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(ApiResponse.success(new VoiceListResponseDto(dtos)));
-    }
-
-    private String mapImageKey(String name) {
-        if (name.toLowerCase().contains("korone"))
-            return "avatar_1";
-        if (name.toLowerCase().contains("aru"))
-            return "avatar_2";
-        if (name.toLowerCase().contains("baek"))
-            return "avatar_3";
-        if (name.toLowerCase().contains("child"))
-            return "avatar_4";
-        if (name.toLowerCase().contains("trump"))
-            return "avatar_5";
-        if (name.toLowerCase().contains("criss"))
-            return "avatar_6";
-        if (name.toLowerCase().contains("actor"))
-            return "avatar_7";
-        return "avatar_1"; // Default
     }
 }
