@@ -38,7 +38,8 @@ RUN npx vite build
 FROM nginx:1.25-alpine AS prod
 # 빌더 스테이지를 올바르게 참조
 COPY --from=builder /app/dist /usr/share/nginx/html
-# 커스텀 Nginx 설정 복사
+# Fix: Remove default config and copy custom nginx config
+RUN rm /etc/nginx/conf.d/default.conf
 COPY apps/client-web/nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
