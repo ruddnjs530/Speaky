@@ -7,6 +7,13 @@ import voice4 from "/models/assets/voice-ai-4-ANYA.webp";
 import voice5 from "/models/assets/voice-ai-5-trump.webp";
 import voice6 from "/models/assets/voice-ai-6-criss.webp";
 import voice7 from "/models/assets/voice-ai-7-actor.webp";
+import voice8 from "/models/assets/voice-ai-8-woman.webp";
+import voice9 from "/models/assets/voice-ai-9-kane.webp";
+import voice10 from "/models/assets/voice-ai-10-furina.webp";
+import voice11 from "/models/assets/voice-ai-11-tartaglia.webp";
+import voice12 from "/models/assets/voice-ai-12-gawrgura.webp";
+import voice13 from "/models/assets/voice-ai-13-megumin.png";
+import voice14 from "/models/assets/voice-ai-14-kyubey.webp";
 import VoiceCardItem from "./VoiceCardItem";
 
 // 간단한 아바타 매핑 (서버 imageUrl 키값 -> 로컬 에셋)
@@ -18,6 +25,13 @@ const AVATAR_MAP: Record<string, string> = {
     "avatar_5": voice5,
     "avatar_6": voice6,
     "avatar_7": voice7,
+    "avatar_8": voice8,
+    "avatar_9": voice9,
+    "avatar_10": voice10,
+    "avatar_11": voice11,
+    "avatar_12": voice12,
+    "avatar_13": voice13,
+    "avatar_14": voice14,
 };
 
 function getAvatar(voice: Voice) {
