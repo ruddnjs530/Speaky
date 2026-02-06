@@ -244,7 +244,16 @@ public class SignalingService {
             // Retrieve session to get hostUserId
             SessionEntity session = sessionRepository.findById(sessionId)
                     .orElseThrow(() -> new SessionNotFoundException(sessionId));
-            String userId = String.valueOf(session.getHostUserId());
+            // CRITICAL: JOIN 시 사용한 userId와 동일해야 함
+            // - HOST: hostUserId
+            // - GUEST/VIEWER: clientId
+            String role = envelope.getFrom().getRole();
+            String userId;
+            if ("HOST".equalsIgnoreCase(role)) {
+                userId = String.valueOf(session.getHostUserId());
+            } else {
+                userId = clientId;
+            }
             
             if (candidate != null && sdpMLineIndex != null) {
                 mediaServerClient.submitIceCandidate(
