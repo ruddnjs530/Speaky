@@ -87,7 +87,9 @@ public class SignalingService {
 
         private void broadcastViewerCount(String channelId) {
                 java.util.Set<String> viewers = channelViewers.get(channelId);
-                int count = (viewers != null) ? viewers.size() : 0;
+                // Host is included in the set, so subtract 1 to get "viewers only" count
+                int totalConnections = (viewers != null) ? viewers.size() : 0;
+                int count = Math.max(0, totalConnections - 1);
 
                 Envelope countMessage = Envelope.builder()
                                 .v(PROTOCOL_VERSION)

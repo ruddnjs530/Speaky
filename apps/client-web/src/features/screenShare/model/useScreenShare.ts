@@ -285,6 +285,13 @@ export function useScreenShare() {
     };
   }, [internalStatus]);
 
+  // 컴포넌트 언마운트 시에만 실행되는 정리 로직
+  useEffect(() => {
+    return () => {
+      cleanup();
+    };
+  }, [cleanup]);
+
   const stopAll = useCallback(() => {
     cleanup();
     localStreamRef.current?.getTracks().forEach(t => t.stop());
