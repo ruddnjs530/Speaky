@@ -6,4 +6,5 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface VoiceModelRepository extends JpaRepository<VoiceModel, Long> {
+    boolean existsByName(String name);
 }

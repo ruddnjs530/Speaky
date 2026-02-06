@@ -20,7 +20,7 @@ func TestAuthentication_HostOnlyPublishing(t *testing.T) {
 	api := webrtc.NewAPI(webrtc.WithMediaEngine(m))
 
 	hostID := "host-1"
-	room := NewRoom("test-room", hostID, cfg, api, nil, nil)
+	room := NewRoom("test-room", hostID, nil, cfg, api, nil, nil)
 	defer room.Close()
 
 	// Helper to generate a valid SDP offer

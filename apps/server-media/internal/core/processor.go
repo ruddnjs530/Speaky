@@ -42,10 +42,14 @@ type AudioProcessor struct {
 	currentModelID int64
 	currentPitch   float32
 	configMu       sync.RWMutex
+
+	// Latency Tracking (Send -> Recv round trip)
+	aiSendTimes map[uint32]time.Time
+	aiSendMu    sync.Mutex
 }
 
 // NewAudioProcessor creates a new AudioProcessor.
-func NewAudioProcessor(cfg *config.Config, aiClient upstream.VoiceProcessor, outQueue *pipeline.Queue[pipeline.RTPPacket]) (*AudioProcessor, error) {
+func NewAudioProcessor(cfg *config.Config, aiClient upstream.VoiceProcessor, outQueue *pipeline.Queue[pipeline.RTPPacket], voiceModelID int64, pitchScale float32) (*AudioProcessor, error) {
     decoder, err := transcode.NewOpusDecoder(cfg.AudioSampleRate, 1)
     if err != nil {
         return nil, err
@@ -67,6 +71,16 @@ func NewAudioProcessor(cfg *config.Config, aiClient upstream.VoiceProcessor, out
     }
     bufferLimit := cfg.AudioSampleRate * bufferMs / 1000
 
+    // Ensure voiceModelID is valid (default to 1)
+    if voiceModelID <= 0 {
+        voiceModelID = 1
+    }
+
+    // Default pitch if invalid
+    if pitchScale <= 0 {
+        pitchScale = 1.0
+    }
+
     return &AudioProcessor{
         decoder:     decoder,
         encoder:     encoder,
@@ -76,9 +90,10 @@ func NewAudioProcessor(cfg *config.Config, aiClient upstream.VoiceProcessor, out
         pcmBuffer:   make([]int16, 0, bufferLimit), 
         bufferLimit: bufferLimit,                   
         tsMap:       make(map[uint32]time.Time),
+        aiSendTimes: make(map[uint32]time.Time),
 		cfg:         cfg,
-		currentModelID: 1,   // Default
-		currentPitch:   1.0, // Default
+		currentModelID: voiceModelID,
+		currentPitch:   pitchScale,
     }, nil
 }
 
@@ -181,6 +196,22 @@ func (p *AudioProcessor) processInputPacket(stream upstream.VoiceStream, pipePkt
         p.pcmBuffer = p.pcmBuffer[:0] // Keep capacity, reset length
 
         slog.Info("AP: Sending chunk to AI", "bytes", len(pcmBytes), "modelID", modelID, "sampleRate", p.cfg.AudioSampleRate)
+		
+		// Track send time with Clean Up
+		p.aiSendMu.Lock()
+		// Lazy cleanup: if map gets too big (e.g. > 100 entries, implying ~2s of unreturned chunks), prune old ones.
+		if len(p.aiSendTimes) > 100 {
+			now := time.Now()
+			expiration := time.Duration(p.cfg.AIBufferDuration)*time.Millisecond + 10*time.Second
+			for ts, t := range p.aiSendTimes {
+				if now.Sub(t) > expiration {
+					delete(p.aiSendTimes, ts)
+				}
+			}
+		}
+		p.aiSendTimes[chunk.Timestamp] = time.Now()
+		p.aiSendMu.Unlock()
+
         return stream.Send(chunk)
     }
 
@@ -205,6 +236,27 @@ func (p *AudioProcessor) readLoop(ctx context.Context, stream upstream.VoiceStre
 			slog.Error("AP: AI Stream Recv Error", "error", err)
 			errChan <- err
 			return
+		}
+
+		// Calculate AI Processing Latency
+		p.aiSendMu.Lock()
+		sendTime, ok := p.aiSendTimes[chunk.Timestamp]
+		if ok {
+			delete(p.aiSendTimes, chunk.Timestamp)
+		}
+		p.aiSendMu.Unlock()
+
+		if ok {
+			latency := time.Since(sendTime)
+			threshold := time.Duration(p.cfg.AIBufferDuration) * time.Millisecond
+			
+			if latency > threshold {
+				slog.Warn("AP: Slow AI Response", 
+					"latency", latency, 
+					"threshold", threshold,
+					"timestamp", chunk.Timestamp,
+				)
+			}
 		}
 
 		// 2. 바이트 데이터를 int16 슬라이스로 변환

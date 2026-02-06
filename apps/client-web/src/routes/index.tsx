@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from "react-router-dom";
+import { createBrowserRouter, Navigate } from "react-router-dom";
 
 import AppLayout from "../App";
 import HomePage from "../pages/HomePage";
@@ -14,38 +14,47 @@ import ViewerPage from "../pages/viewer/ViewerPage";
 import ViewerEntryPage from "../pages/viewer/ViewerEntryPage";
 import SessionLayout from "../layouts/SessionLayout.tsx";
 import SessionProviderLayout from "../layouts/SessionProviderLayout.tsx";
+import IntroPage from "../pages/IntroPage";
 
-export default function AppRoutes() {
-    return (
-        <Routes>
-            {/* Vue의 App.vue + <router-view> 구조처럼: AppLayout 아래에 페이지를 둡니다 */}
-            <Route element={<AppLayout />}>
-                {/* Public */}
-                <Route path="/" element={<HomePage />} />
-                <Route path="/login" element={<LoginPage />} />
-                <Route path="/signup" element={<SignupPage />} />
+const router = createBrowserRouter([
+    {
+        element: <AppLayout />,
+        children: [
+            // Public
+            { path: "/", element: <IntroPage /> },
+            { path: "/start", element: <HomePage /> },
+            { path: "/login", element: <LoginPage /> },
+            { path: "/signup", element: <SignupPage /> },
 
-                {/* Protected 영역 */}
-                <Route element={<ProtectedRoute />}>
-                    <Route path="/profile" element={<ProfilePage />} />
+            // Protected 영역
+            {
+                element: <ProtectedRoute />,
+                children: [
+                    { path: "/profile", element: <ProfilePage /> },
 
-                    {/* Provider는 precheck 포함: 상태/컨텍스트 공유 */}
-                    <Route element={<SessionProviderLayout />}>
-                        <Route path="/host/precheck" element={<HostPrecheckPage />} />
+                    // Provider는 precheck 포함: 상태/컨텍스트 공유
+                    {
+                        element: <SessionProviderLayout />,
+                        children: [
+                            { path: "/host/precheck", element: <HostPrecheckPage /> },
 
-                        {/* Gate는 studio/viewer만: 단계 안내 UX 적용 */}
-                        <Route element={<SessionLayout />}>
-                            <Route path="/host/studio" element={<HostPage />} />
-                            <Route path="/viewer/entry" element={<ViewerEntryPage />} />
-                            <Route path="/viewer/:roomId" element={<ViewerPage />} />
-                        </Route>
-                    </Route>
+                            // Gate는 studio/viewer만: 단계 안내 UX 적용
+                            {
+                                element: <SessionLayout />,
+                                children: [
+                                    { path: "/host/studio", element: <HostPage /> },
+                                    { path: "/viewer/entry", element: <ViewerEntryPage /> },
+                                    { path: "/viewer/:roomId", element: <ViewerPage /> },
+                                ]
+                            }
+                        ]
+                    },
+                    // fallback
+                    { path: "*", element: <Navigate to="/" replace /> }
+                ]
+            }
+        ]
+    }
+]);
 
-
-                    {/* fallback */}
-                    <Route path="*" element={<Navigate to="/" replace />} />
-                </Route>
-            </Route>
-        </Routes>
-    );
-}
+export default router;

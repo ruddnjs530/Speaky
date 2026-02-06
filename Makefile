@@ -22,7 +22,7 @@ proto:
 	@echo "🏗️ Building Proto Builder..."
 	docker build -t speaky-proto-builder -f packages/proto/Dockerfile.builder .
 	@echo "🧬 Generating Proto Files..."
-	docker run --rm -v $$(pwd):/workspace speaky-proto-builder ./scripts/generate_proto.sh
+	MSYS_NO_PATHCONV=1 docker run --rm -v $$(pwd):/workspace speaky-proto-builder ./scripts/generate_proto.sh
 
 # 2. Launch Stable Demo
 demo:

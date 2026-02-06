@@ -8,6 +8,7 @@ export type MsgType =
     | "SYS_ERROR"
     | "SYS_SESSION_STARTED"  // <-- 추가됨
     | "SESSION_LIVE_STARTED" // <-- 추가됨 (백엔드 스펙 혼용 대비)
+    | "SYS_VIEWER_COUNT"     // <-- 추가됨 (시청자 수)
     | "SIG_OFFER"
     | "SIG_ANSWER"
     | "SIG_ICE"
@@ -30,6 +31,11 @@ export type EnvelopeBase = {
 export type SysSessionStarted = EnvelopeBase & {
     type: "SYS_SESSION_STARTED" | "SESSION_LIVE_STARTED";
     payload: { title?: string; startedAt?: string }; // 필요한 페이로드 정의
+};
+
+export type SysViewerCount = EnvelopeBase & {
+    type: "SYS_VIEWER_COUNT";
+    payload: { count: number };
 };
 
 export type SysAttach = EnvelopeBase & {

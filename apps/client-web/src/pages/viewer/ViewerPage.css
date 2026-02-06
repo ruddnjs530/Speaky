@@ -50,19 +50,49 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    position: relative; /* 제목 절대 위치 기준점 */
 }
 
-.viewerPage__titleGroup {
+/* 좌측 그룹: 뱃지 + Voice */
+.viewerPage__headerLeft {
     display: flex;
     align-items: center;
     gap: 1rem;
+    z-index: 2; /* 제목보다 위에 오도록 */
 }
 
+/* 중앙 제목 */
 .viewerPage__title {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
     font-size: 1.125rem;
     /* text-lg */
     font-weight: 700;
     margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 40%; /* 너무 길면 말줄임 */
+    z-index: 1;
+}
+
+/* 우측 그룹 */
+.viewerPage__headerRight {
+    display: flex;
+    align-items: center;
+    z-index: 2;
+}
+
+/* 기존 titleGroup 제거됨, infoRow 재활용 */
+.viewerPage__infoRow {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    /* text-sm */
+    color: #d1d5db;
+    /* gray-300 */
 }
 
 .viewerPage__badge {

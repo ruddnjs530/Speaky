@@ -1,0 +1,87 @@
+@import "tailwindcss";
+
+@layer components {
+
+    /* --- Home Page Layout --- */
+    .home-container {
+        @apply min-h-screen flex flex-col font-sans;
+    }
+
+    .home-header {
+        @apply px-8 py-6 flex items-center justify-between;
+    }
+
+    .home-header-logo {
+        @apply text-2xl font-bold text-[#E8753A];
+    }
+
+    .home-header-actions {
+        @apply flex items-center gap-4;
+    }
+
+    .home-logout-btn {
+        @apply px-4 py-2 rounded-lg text-sm font-bold text-white bg-[#E8753A] hover:bg-[#D45A3A] transition-colors shadow-sm;
+    }
+
+    .home-login-btn {
+        @apply px-4 py-2 rounded-lg text-sm font-medium text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 transition-colors shadow-sm;
+    }
+
+    .home-signup-btn {
+        @apply px-4 py-2 rounded-lg text-sm font-bold text-white bg-[#E8753A] hover:bg-[#D45A3A] transition-colors shadow-sm;
+    }
+
+    .home-main {
+        @apply flex-1 flex items-center justify-center px-8 pb-20;
+    }
+
+    .home-content-wrapper {
+        @apply w-full max-w-6xl;
+    }
+
+    .home-title-section {
+        @apply mb-12 text-center;
+    }
+
+    .home-welcome-title {
+        @apply text-3xl font-bold mb-3 text-gray-900;
+    }
+
+    .home-welcome-subtitle {
+        @apply text-lg text-gray-500;
+    }
+
+    .home-role-grid {
+        @apply grid md:grid-cols-2 gap-6;
+    }
+
+
+    /* --- Role Card --- */
+    .role-card-button {
+        @apply relative overflow-hidden rounded-2xl p-12 text-left transition-all hover:scale-[1.02] hover:shadow-2xl active:scale-[0.98] w-full;
+    }
+
+    .role-card-pattern-overlay {
+        @apply absolute inset-0 opacity-20 pointer-events-none;
+    }
+
+    .role-card-content {
+        @apply relative;
+    }
+
+    .role-card-icon-wrapper {
+        @apply mb-6 inline-flex h-16 w-16 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm;
+    }
+
+    .role-card-title {
+        @apply text-2xl font-bold mb-2 text-white;
+    }
+
+    .role-card-subtitle {
+        @apply text-lg font-medium text-white;
+    }
+
+    .role-card-description {
+        @apply mt-4 text-white/90;
+    }
+}

@@ -29,12 +29,18 @@ public class MediaServerClient {
     /**
      * Room 생성 (세션 시작 시)
      */
-    public void createRoom(String sessionId, String hostId) {
-        log.info("Call CreateRoom: sessionId={}, hostId={}", sessionId, hostId);
-        CreateRoomRequest request = CreateRoomRequest.newBuilder()
+    public void createRoom(String sessionId, String hostId, String voiceProfileId) {
+        log.info("Call CreateRoom: sessionId={}, hostId={}, voiceProfileId={}", sessionId, hostId, voiceProfileId);
+
+        CreateRoomRequest.Builder builder = CreateRoomRequest.newBuilder()
                 .setRoomId(sessionId)
-                .setHostId(hostId)
-                .build();
+                .setHostId(hostId);
+
+        if (voiceProfileId != null) {
+            builder.setVoiceProfileId(voiceProfileId);
+        }
+
+        CreateRoomRequest request = builder.build();
 
         try {
             CreateRoomResponse response = blockingStub.createRoom(request);
@@ -44,6 +50,26 @@ public class MediaServerClient {
             log.info("CreateRoom success: roomId={}", response.getRoomId());
         } catch (StatusRuntimeException e) {
             log.error("CreateRoom failed: {}", e.getStatus());
+            throw new MediaServerException(e);
+        }
+    }
+
+    /**
+     * Voice Profile 생성
+     */
+    public VoiceProfile createProfile(Long voiceModelId, float pitchScale) {
+        log.info("Call CreateProfile: voiceModelId={}, pitchScale={}", voiceModelId, pitchScale);
+        CreateProfileRequest request = CreateProfileRequest.newBuilder()
+                .setVoiceModelId(voiceModelId)
+                .setPitchScale(pitchScale)
+                .build();
+
+        try {
+            VoiceProfile profile = blockingStub.createProfile(request);
+            log.info("CreateProfile success: profileId={}", profile.getId());
+            return profile;
+        } catch (StatusRuntimeException e) {
+            log.error("CreateProfile failed: {}", e.getStatus());
             throw new MediaServerException(e);
         }
     }

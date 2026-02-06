@@ -45,6 +45,13 @@ export const sessionApi = {
         return (await res.json()) as SessionResponse;
     },
 
+    // 1-1. 세션 조회 (재연결용)
+    async getSession(sessionId: string): Promise<SessionResponse> {
+        const res = await apiFetch(`/api/v1/sessions/${sessionId}`, { method: 'GET' });
+        if (!res.ok) throw await parseError(res);
+        return (await res.json()) as SessionResponse;
+    },
+
     // 세션 시작 (파라미터화)
     async startLive(
         sessionId: string,
@@ -87,12 +94,13 @@ export const sessionApi = {
         }
 
         return {
-            channelId: state.hostLoginId || channelId, // hostLoginId를 우선
+            channelId: session.channelId || channelId, // DB의 authoritative ID 사용 (fallback: input)
             sessionId: sessionId,
             role: "GUEST",
             wsUrl: session.wsUrl || WS_URL_FALLBACK,
             token: session.signalingToken || userToken || "",
-            voiceModelId: session.voiceModelId ?? null
+            voiceModelId: session.voiceModelId ?? null,
+            title: session.title
         };
     },
 

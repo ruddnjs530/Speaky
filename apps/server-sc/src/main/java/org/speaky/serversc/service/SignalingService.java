@@ -12,12 +12,12 @@ import org.speaky.serversc.exception.SessionNotFoundException;
 import org.speaky.serversc.repository.SessionRepository;
 import org.springframework.context.event.EventListener;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
+import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * WebSocket 시그널링 처리 서비스
@@ -34,83 +34,75 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class SignalingService {
-    
-    private static final int PROTOCOL_VERSION = 1;
-    private static final String SERVER_ROLE = "SC";
-    private static final String SERVER_CLIENT_ID = "server";
-    
-    private final SessionRepository sessionRepository;
-    private final SimpMessagingTemplate messagingTemplate;
-    private final MediaServerClient mediaServerClient;
-    
-    /**
-     * WebSocket 연결 해제 이벤트 처리
-     * 
-     * 클라이언트가 연결을 끊을 때 미디어 서버에 leaveRoom 호출
-     * 
-     * @param event SessionDisconnectEvent
-     */
-    @EventListener
-    public void handleWebSocketDisconnect(SessionDisconnectEvent event) {
-        SimpMessageHeaderAccessor headerAccessor = 
-                SimpMessageHeaderAccessor.wrap(event.getMessage());
-        
-        Map<String, Object> sessionAttributes = headerAccessor.getSessionAttributes();
-        if (sessionAttributes == null) {
-            return;
+
+        private static final int PROTOCOL_VERSION = 1;
+        private static final String SERVER_ROLE = "SC";
+        private static final String SERVER_CLIENT_ID = "server";
+
+        private final SessionRepository sessionRepository;
+        private final SimpMessagingTemplate messagingTemplate;
+        private final MediaServerClient mediaServerClient;
+
+        // Channel ID -> Set of Client IDs
+        private final java.util.Map<String, java.util.Set<String>> channelViewers = new java.util.concurrent.ConcurrentHashMap<>();
+
+        /**
+         * STOMP 구독 이벤트 처리
+         * - 시청자 수 집계 및 브로드캐스트
+         */
+        @EventListener
+        public void handleSubscribeEvent(org.springframework.web.socket.messaging.SessionSubscribeEvent event) {
+                SimpMessageHeaderAccessor accessor = SimpMessageHeaderAccessor.wrap(event.getMessage());
+                String destination = accessor.getDestination();
+
+                // /topic/channel/{channelId} 구독 감지
+                if (destination != null && destination.startsWith("/topic/channel/")) {
+                        String channelId = destination.replace("/topic/channel/", "");
+                        String sessionId = accessor.getSessionId(); // Use WebSocket Session ID
+
+                        if (sessionId != null) {
+                                addViewer(channelId, sessionId);
+                        }
+                }
         }
-        
-        String sessionId = (String) sessionAttributes.get("sessionId");
-        String clientId = (String) sessionAttributes.get("clientId");
-        
-        if (sessionId == null || clientId == null) {
-            log.debug("WebSocket disconnect without session binding: sessionAttributes={}", 
-                    sessionAttributes);
-            return;
+
+        private void addViewer(String channelId, String sessionId) {
+                channelViewers.computeIfAbsent(channelId, k -> java.util.concurrent.ConcurrentHashMap.newKeySet())
+                                .add(sessionId);
+                broadcastViewerCount(channelId);
         }
-        
-        log.info("WebSocket disconnected: sessionId={}, clientId={}", sessionId, clientId);
-        
-        // Media Server에 leaveRoom 호출
-        try {
-            mediaServerClient.leaveRoom(sessionId, clientId);
-            log.info("Media server leaveRoom success: sessionId={}, clientId={}", 
-                    sessionId, clientId);
-        } catch (MediaServerException e) {
-            // leaveRoom 실패는 비치명적 - 로깅하고 계속 진행
-            // 클라이언트는 이미 연결이 끊긴 상태이므로 재시도 불가
-            log.warn("Failed to leave media server room: sessionId={}, clientId={}, errorCode={}", 
-                    sessionId, clientId, e.getErrorCode(), e);
-            
-            // TODO: 주기적인 cleanup 배치 작업에서 처리
-            // - 미디어 서버의 고아 참가자 목록 조회 및 정리
+
+        private void removeViewer(String sessionId) {
+                java.util.Set<String> affectedChannels = new java.util.HashSet<>();
+
+                channelViewers.forEach((channelId, viewers) -> {
+                        if (viewers.remove(sessionId)) {
+                                affectedChannels.add(channelId);
+                        }
+                });
+
+                affectedChannels.forEach(this::broadcastViewerCount);
         }
-    }
-    
-    /**
-     * SYS_ATTACH 처리: 세션에 클라이언트 바인딩
-     * 
-     * 검증:
-     * - 세션 존재 여부
-     * - 세션 상태 (LIVE만 허용)
-     * 
-     * 응답: SYS_ACK
-     * 
-     * @param envelope 클라이언트 메시지
-     * @param headerAccessor WebSocket 세션 정보
-     */
-    public void handleAttach(Envelope envelope, SimpMessageHeaderAccessor headerAccessor) {
-        String sessionId = envelope.getSessionId();
-        
-        // 세션 존재 여부 확인
-        SessionEntity session = sessionRepository.findById(sessionId)
-                .orElseThrow(() -> new SessionNotFoundException(sessionId));
-        
-        // 세션 상태 확인 (STARTING 또는 LIVE 허용 - 호스트 미리보기를 위해 STARTING도 허용)
-        if (session.getStatus() != SessionStatus.LIVE && session.getStatus() != SessionStatus.STARTING) {
-            sendError(envelope, "INVALID_STATE", 
-                    "Session is not active: " + session.getStatus());
-            return;
+
+        private void broadcastViewerCount(String channelId) {
+                java.util.Set<String> viewers = channelViewers.get(channelId);
+                // Host is included in the set, so subtract 1 to get "viewers only" count
+                int totalConnections = (viewers != null) ? viewers.size() : 0;
+                int count = Math.max(0, totalConnections - 1);
+
+                Envelope countMessage = Envelope.builder()
+                                .v(PROTOCOL_VERSION)
+                                .type("SYS_VIEWER_COUNT")
+                                .requestId(java.util.UUID.randomUUID().toString())
+                                .ts(System.currentTimeMillis())
+                                .channelId(channelId)
+                                .sessionId(channelId) // Use channelId as sessionId for system messages
+                                .from(From.builder().role(SERVER_ROLE).clientId(SERVER_CLIENT_ID).build())
+                                .payload(java.util.Map.of("count", count))
+                                .build();
+
+                messagingTemplate.convertAndSend("/topic/channel/" + channelId, countMessage);
+                log.debug("Broadcast viewer count: channel={}, count={}", channelId, count);
         }
         
         // WebSocket 세션에 사용자 정보 저장
@@ -267,38 +259,4 @@ public class SignalingService {
             log.error("Failed to submit ICE Candidate: {}", e.getMessage());
             // ICE 실패는 치명적이지 않으므로 클라이언트에 에러 리턴하지 않음 (로그만 남김)
         }
-    }
-    
-    /**
-     * SYS_ERROR 응답 전송
-     * 
-     * 모든 에러는 SYS_ERROR Envelope로 응답
-     * 
-     * @param originalEnvelope 원본 메시지
-     * @param errorCode 에러 코드 (INVALID_STATE, UNKNOWN_TYPE 등)
-     * @param errorMessage 에러 메시지
-     */
-    public void sendError(Envelope originalEnvelope, String errorCode, String errorMessage) {
-        Envelope errorResponse = Envelope.builder()
-                .v(PROTOCOL_VERSION)
-                .type("SYS_ERROR")
-                .requestId(originalEnvelope.getRequestId())
-                .ts(System.currentTimeMillis())
-                .sessionId(originalEnvelope.getSessionId())
-                .from(From.builder()
-                        .role(SERVER_ROLE)
-                        .clientId(SERVER_CLIENT_ID)
-                        .build())
-                .payload(Map.of(
-                        "code", errorCode,
-                        "message", errorMessage
-                ))
-                .build();
-        
-        String destination = "/topic/channel/" + originalEnvelope.getChannelId();
-        messagingTemplate.convertAndSend(destination, errorResponse);
-        
-        log.warn("Sent error: sessionId={}, code={}, message={}", 
-                originalEnvelope.getSessionId(), errorCode, errorMessage);
-    }
 }
