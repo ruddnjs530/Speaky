@@ -18,7 +18,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * WebSocket 시그널링 처리 서비스
@@ -291,132 +290,74 @@ public class SignalingService {
                         sendError(envelope, "SYS_ERROR", "Media Server Error: " + e.getMessage());
                 }
         }
-    }
-    
-    /**
-     * SYS_ATTACH 처리: 세션에 클라이언트 바인딩
-     * 
-     * 검증:
-     * - 세션 존재 여부
-     * - 세션 상태 (LIVE만 허용)
-     * 
-     * 응답: SYS_ACK
-     * 
-     * @param envelope 클라이언트 메시지
-     * @param headerAccessor WebSocket 세션 정보
-     */
-    public void handleAttach(Envelope envelope, SimpMessageHeaderAccessor headerAccessor) {
-        String sessionId = envelope.getSessionId();
-        
-        // 세션 존재 여부 확인
-        SessionEntity session = sessionRepository.findById(sessionId)
-                .orElseThrow(() -> new SessionNotFoundException(sessionId));
-        
-        // 세션 상태 확인 (STARTING 또는 LIVE 허용 - 호스트 미리보기를 위해 STARTING도 허용)
-        if (session.getStatus() != SessionStatus.LIVE && session.getStatus() != SessionStatus.STARTING) {
-            sendError(envelope, "INVALID_STATE", 
-                    "Session is not active: " + session.getStatus());
-            return;
+
+        /**
+         * SIG_ANSWER 처리: SDP Answer Media Server 전달
+         *
+         * TODO: Media Server gRPC 호출
+         *
+         * @param envelope SDP Answer 메시지
+         */
+        public void handleAnswer(Envelope envelope) {
+                // TODO: Media Server gRPC 호출
+                log.info("Received SDP Answer: sessionId={}, payload={}",
+                                envelope.getSessionId(), envelope.getPayload());
         }
-        
-        // WebSocket 세션에 사용자 정보 저장
-        String clientId = envelope.getFrom().getClientId();
-        headerAccessor.getSessionAttributes().put("clientId", clientId);
-        headerAccessor.getSessionAttributes().put("sessionId", sessionId);
-        headerAccessor.getSessionAttributes().put("role", envelope.getFrom().getRole());
-        
-        // SYS_ACK 응답 (프론트엔드 protocol.ts 규격)
-        Envelope response = Envelope.builder()
-                .v(PROTOCOL_VERSION)
-                .type("SYS_ACK")
-                .requestId(envelope.getRequestId())
-                .ts(System.currentTimeMillis())
-                .channelId(envelope.getChannelId())
-                .sessionId(sessionId)
-                .from(From.builder()
-                        .role(SERVER_ROLE)
-                        .clientId(SERVER_CLIENT_ID)
-                        .build())
-                .payload(Map.of("status", "OK"))
-                .build();
-        
-        String destination = "/topic/channel/" + envelope.getChannelId();
-        messagingTemplate.convertAndSend(destination, response);
-        
-        log.info("Client attached: sessionId={}, clientId={}, role={}", 
-                sessionId, clientId, envelope.getFrom().getRole());
-    }
-    
-    /**
-     * SIG_OFFER 처리: SDP Offer 수신 및 Media Server 전달
-     * 
-     * TODO: Media Server gRPC 호출
-     * 현재: Mock SIG_ANSWER 응답
-     * 
-     * @param envelope SDP Offer 메시지
-     */
-    @SuppressWarnings("unchecked")
-    public void handleOffer(Envelope envelope) {
-        String sessionId = envelope.getSessionId();
-        String clientId = envelope.getFrom().getClientId();
-        Map<String, Object> payload = (Map<String, Object>) envelope.getPayload();
-        String sdpOffer = (String) payload.get("sdp");
-        
-        log.info("Received SDP Offer: sessionId={}, clientId={}", sessionId, clientId);
-        
-        try {
-            // Retrieve session to get hostUserId
-            SessionEntity session = sessionRepository.findById(sessionId)
-                    .orElseThrow(() -> new SessionNotFoundException(sessionId));
-            
-            // CRITICAL: 역할에 따라 userId 결정
-            // - HOST: createRoom 시 등록한 hostUserId와 일치해야 함
-            // - GUEST/VIEWER: 고유한 clientId 사용
-            String role = envelope.getFrom().getRole();
-            String userId;
-            if ("HOST".equalsIgnoreCase(role)) {
-                userId = String.valueOf(session.getHostUserId());
-            } else {
-                userId = clientId;  // GUEST/VIEWER는 WebSocket clientId 사용
-            }
-            
-            // Media Server에 Join 요청 (SDP Offer 전달 및 Answer 수신)
-            String sdpAnswer = mediaServerClient.joinRoom(sessionId, userId, sdpOffer);
-            
-            // SIG_ANSWER 응답 생성
-            Envelope response = Envelope.builder()
-                    .v(PROTOCOL_VERSION)
-                    .type("SIG_ANSWER")
-                    .requestId(envelope.getRequestId()) // 요청 ID 유지
-                    .ts(System.currentTimeMillis())
-                    .channelId(envelope.getChannelId())
-                    .sessionId(sessionId)
-                    .from(From.builder()
-                            .role(SERVER_ROLE)
-                            .clientId(SERVER_CLIENT_ID) 
-                            .build())
-                    .payload(Map.of(
-                            "sdpType", "answer",
-                            "sdp", sdpAnswer
-                    ))
-                    .build();
-            
-            // 특정 채널 subscriber에게 전송
-            String destination = "/topic/channel/" + envelope.getChannelId();
-            messagingTemplate.convertAndSend(destination, response);
-            
-            log.info("Sent SIG_ANSWER: sessionId={}", sessionId);
-            
-        } catch (Exception e) {
-            log.error("Failed to handle SDP Offer: {}", e.getMessage(), e);
-            sendError(envelope, "SYS_ERROR", "Media Server Error: " + e.getMessage());
+
+        /**
+         * SIG_ICE 처리: ICE Candidate Media Server 전달
+         *
+         * TODO: Media Server gRPC 호출
+         *
+         * @param envelope ICE Candidate 메시지
+         */
+        @SuppressWarnings("unchecked")
+        public void handleIce(Envelope envelope) {
+                String sessionId = envelope.getSessionId();
+                String clientId = envelope.getFrom().getClientId();
+                Map<String, Object> payload = (Map<String, Object>) envelope.getPayload();
+
+                String candidate = (String) payload.get("candidate");
+                String sdpMid = (String) payload.get("sdpMid");
+                Integer sdpMLineIndex = (Integer) payload.get("sdpMLineIndex");
+
+                log.debug("Received ICE Candidate: sessionId={}, clientId={}, sdpMid={}",
+                                sessionId, clientId, sdpMid);
+
+                try {
+                        // Retrieve session to get hostUserId
+                        SessionEntity session = sessionRepository.findById(sessionId)
+                                        .orElseThrow(() -> new SessionNotFoundException(sessionId));
+
+                        // CRITICAL: 역할에 따라 userId 결정
+                        String role = envelope.getFrom().getRole();
+                        String userId;
+                        if ("HOST".equalsIgnoreCase(role)) {
+                                userId = String.valueOf(session.getHostUserId());
+                        } else {
+                                userId = clientId;
+                        }
+
+                        if (candidate != null && sdpMLineIndex != null) {
+                                mediaServerClient.submitIceCandidate(
+                                                sessionId,
+                                                userId,
+                                                candidate,
+                                                sdpMid,
+                                                sdpMLineIndex);
+                        } else {
+                                log.warn("Invalid ICE Candidate payload: {}", payload);
+                        }
+                } catch (Exception e) {
+                        log.error("Failed to submit ICE Candidate: {}", e.getMessage());
+                }
         }
 
         /**
          * SYS_ERROR 응답 전송
-         * 
+         *
          * 모든 에러는 SYS_ERROR Envelope로 응답
-         * 
+         *
          * @param originalEnvelope 원본 메시지
          * @param errorCode        에러 코드 (INVALID_STATE, UNKNOWN_TYPE 등)
          * @param errorMessage     에러 메시지
