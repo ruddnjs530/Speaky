@@ -105,6 +105,33 @@ public class SignalingService {
                 log.debug("Broadcast viewer count: channel={}, count={}", channelId, count);
         }
         
+    
+    /**
+     * SYS_ATTACH 처리: 세션에 클라이언트 바인딩
+     * 
+     * 검증:
+     * - 세션 존재 여부
+     * - 세션 상태 (LIVE만 허용)
+     * 
+     * 응답: SYS_ACK
+     * 
+     * @param envelope 클라이언트 메시지
+     * @param headerAccessor WebSocket 세션 정보
+     */
+    public void handleAttach(Envelope envelope, SimpMessageHeaderAccessor headerAccessor) {
+        String sessionId = envelope.getSessionId();
+        
+        // 세션 존재 여부 확인
+        SessionEntity session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new SessionNotFoundException(sessionId));
+        
+        // 세션 상태 확인 (STARTING 또는 LIVE 허용 - 호스트 미리보기를 위해 STARTING도 허용)
+        if (session.getStatus() != SessionStatus.LIVE && session.getStatus() != SessionStatus.STARTING) {
+            sendError(envelope, "INVALID_STATE", 
+                    "Session is not active: " + session.getStatus());
+            return;
+        }
+        
         // WebSocket 세션에 사용자 정보 저장
         String clientId = envelope.getFrom().getClientId();
         headerAccessor.getSessionAttributes().put("clientId", clientId);
@@ -259,4 +286,34 @@ public class SignalingService {
             log.error("Failed to submit ICE Candidate: {}", e.getMessage());
             // ICE 실패는 치명적이지 않으므로 클라이언트에 에러 리턴하지 않음 (로그만 남김)
         }
+    /**
+     * 에러 응답 전송
+     * 
+     * @param originalEnvelope 원본 메시지
+     * @param errorCode 에러 코드
+     * @param errorMessage 에러 메시지
+     */
+    public void sendError(Envelope originalEnvelope, String errorCode, String errorMessage) {
+        Envelope errorResponse = Envelope.builder()
+                .v(PROTOCOL_VERSION)
+                .type("SYS_ERROR")
+                .requestId(originalEnvelope.getRequestId())
+                .ts(System.currentTimeMillis())
+                .sessionId(originalEnvelope.getSessionId())
+                .from(From.builder()
+                        .role(SERVER_ROLE)
+                        .clientId(SERVER_CLIENT_ID)
+                        .build())
+                .payload(Map.of(
+                        "code", errorCode,
+                        "message", errorMessage
+                ))
+                .build();
+        
+        String destination = "/topic/channel/" + originalEnvelope.getChannelId();
+        messagingTemplate.convertAndSend(destination, errorResponse);
+        
+        log.warn("Sent error: sessionId={}, code={}, message={}",
+                originalEnvelope.getSessionId(), errorCode, errorMessage);
+    }
 }
