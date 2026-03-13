@@ -8,6 +8,7 @@ import org.speaky.serversc.domain.UserStatus;
 import org.speaky.serversc.repository.UserRepository;
 import org.speaky.serversc.domain.VoiceModel;
 import org.speaky.serversc.repository.VoiceModelRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
@@ -15,10 +16,9 @@ import org.springframework.stereotype.Component;
 /**
  * 테스트 데이터 로더
  * 애플리케이션 시작 시 테스트용 사용자 생성
- * 
- * 테스트 계정:
- * - loginId: streamer123, password: password123 (USER)
- * - loginId: admin_user, password: admin123 (ADMIN)
+ *
+ * 테스트 계정 비밀번호는 환경변수(TEST_USER_PASSWORD, TEST_ADMIN_PASSWORD)로 주입됩니다.
+ * 예: TEST_USER_PASSWORD=<랜덤값>, TEST_ADMIN_PASSWORD=<랜덤값>
  */
 @Slf4j
 @Component
@@ -28,6 +28,14 @@ public class DataLoader implements CommandLineRunner {
         private final UserRepository userRepository;
         private final VoiceModelRepository voiceModelRepository;
         private final PasswordEncoder passwordEncoder;
+
+        /** 테스트 일반 사용자 비밀번호 — 환경변수 TEST_USER_PASSWORD 로 주입 */
+        @Value("${TEST_USER_PASSWORD}")
+        private String testUserPassword;
+
+        /** 테스트 관리자 비밀번호 — 환경변수 TEST_ADMIN_PASSWORD 로 주입 */
+        @Value("${TEST_ADMIN_PASSWORD}")
+        private String testAdminPassword;
 
         @Override
         public void run(String... args) {
@@ -42,7 +50,7 @@ public class DataLoader implements CommandLineRunner {
                 // 테스트 USER 사용자
                 User host = User.builder()
                                 .loginId("streamer123")
-                                .password(passwordEncoder.encode("password123"))
+                                .password(passwordEncoder.encode(testUserPassword))
                                 .nickname("김경원")
                                 .role(UserRole.USER)
                                 .status(UserStatus.ACTIVE)
@@ -52,7 +60,7 @@ public class DataLoader implements CommandLineRunner {
 
                 User host2 = User.builder()
                                 .loginId("st123")
-                                .password(passwordEncoder.encode("pd123"))
+                                .password(passwordEncoder.encode(testUserPassword))
                                 .nickname("중리동버추얼신자")
                                 .role(UserRole.USER)
                                 .status(UserStatus.ACTIVE)
@@ -62,7 +70,7 @@ public class DataLoader implements CommandLineRunner {
 
                 User host3 = User.builder()
                                 .loginId("st1234")
-                                .password(passwordEncoder.encode("pd1234"))
+                                .password(passwordEncoder.encode(testUserPassword))
                                 .nickname("용문동쌍두마차")
                                 .role(UserRole.USER)
                                 .status(UserStatus.ACTIVE)
@@ -72,7 +80,7 @@ public class DataLoader implements CommandLineRunner {
 
                 User host4 = User.builder()
                                 .loginId("stream12")
-                                .password(passwordEncoder.encode("passw12"))
+                                .password(passwordEncoder.encode(testUserPassword))
                                 .nickname("행신동섹시허리케인")
                                 .role(UserRole.USER)
                                 .status(UserStatus.ACTIVE)
@@ -83,7 +91,7 @@ public class DataLoader implements CommandLineRunner {
                 // 테스트 ADMIN 사용자
                 User admin = User.builder()
                                 .loginId("admin_user")
-                                .password(passwordEncoder.encode("admin123"))
+                                .password(passwordEncoder.encode(testAdminPassword))
                                 .nickname("관리자")
                                 .role(UserRole.ADMIN)
                                 .status(UserStatus.ACTIVE)
@@ -94,7 +102,7 @@ public class DataLoader implements CommandLineRunner {
                 // 차단된 사용자 (테스트용)
                 User blocked = User.builder()
                                 .loginId("blocked_user")
-                                .password(passwordEncoder.encode("password123"))
+                                .password(passwordEncoder.encode(testUserPassword))
                                 .nickname("차단된사용자")
                                 .role(UserRole.USER)
                                 .status(UserStatus.BLOCKED)
